@@ -1,4 +1,4 @@
-package client
+package controller
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ const (
 	lowFrequencyStateRefreshPeriod  = 2 * time.Minute
 )
 
-// sender is an interface that defines the Send method for sending messages.
+// sender is an interface that defines message sending.
 type sender interface {
 	Send(dst *net.UDPAddr, msg *protocol.Message) error
 }
@@ -29,6 +29,8 @@ type DeviceSession struct {
 }
 
 // NewDeviceSession creates a new DeviceSession for the given device.
+// It spins up a goroutine to periodically query devices for state updates and
+// a second one to parse devices messages and update Device state.
 func NewDeviceSession(addr *net.UDPAddr, target [8]byte, sender sender) (*DeviceSession, error) {
 	ds := &DeviceSession{
 		sender:  sender,
@@ -69,6 +71,8 @@ func (s *DeviceSession) nextSeq() uint8 {
 	return s.seq
 }
 
+// run periodically query the device for state updates.
+// It uses a ticker for high frequency state changes and one for low frequency ones.
 func (s *DeviceSession) run() {
 	s.Send(DeviceStateMessages()...)
 	hfTicker := time.NewTicker(highFrequencyStateRefreshPeriod)

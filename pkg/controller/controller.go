@@ -1,4 +1,4 @@
-package client
+package controller
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/client"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
@@ -16,22 +17,26 @@ const (
 	defaultDiscoveryPeriod = 500 * time.Millisecond
 )
 
-type DeviceManager struct {
-	client   *Client
+// Controller manages discovery and message routing for multiple
+// devices on the LAN.
+type Controller struct {
+	client   *client.Client
 	recvDone chan struct{}
 
 	mu       sync.RWMutex
 	sessions map[string]*DeviceSession
 }
 
-// NewDeviceManager creates a new DeviceManager that starts listening for devices.
-func NewDeviceManager() (*DeviceManager, error) {
-	client, err := NewClient(nil)
+// New returns a Controller that periodically discovers LIFX devices
+// on the LAN and creates individual sessions for message routing.
+// It currently does not check whether
+func New() (*Controller, error) {
+	client, err := client.NewClient(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
-	dm := &DeviceManager{
+	dm := &Controller{
 		client:   client,
 		recvDone: make(chan struct{}),
 		sessions: make(map[string]*DeviceSession),
@@ -47,10 +52,10 @@ func NewDeviceManager() (*DeviceManager, error) {
 	return dm, nil
 }
 
-// Close closes the DeviceManager, stopping the recv loop and closing all device sessions.
-func (d *DeviceManager) Close() error {
+// Close closes the Controller, stopping the recv loop and closing all device sessions.
+func (d *Controller) Close() error {
 	// Close the client connection and wait for the recv loop to finish.
-	d.client.conn.SetDeadline(time.Now())
+	d.client.SetConnDeadline(time.Now())
 	<-d.recvDone
 	d.client.Close()
 
@@ -64,13 +69,14 @@ func (d *DeviceManager) Close() error {
 	return nil
 }
 
-func (d *DeviceManager) Discover() error {
+// Discover broadcasts a LIFX discover packet.
+func (d *Controller) Discover() error {
 	msg := protocol.NewMessage(&packets.DeviceGetService{})
 	return d.client.SendBroadcast(msg)
 }
 
 // periodicDiscovery periodically looks for new devices on the network.
-func (d *DeviceManager) periodicDiscovery(period time.Duration) {
+func (d *Controller) periodicDiscovery(period time.Duration) {
 	ticker := time.NewTicker(period)
 
 	for {
@@ -84,7 +90,8 @@ func (d *DeviceManager) periodicDiscovery(period time.Duration) {
 	}
 }
 
-func (d *DeviceManager) addSession(addr *net.UDPAddr, target [8]byte) error {
+// addSession adds a new device session.
+func (d *Controller) addSession(addr *net.UDPAddr, target [8]byte) error {
 	session, err := NewDeviceSession(addr, target, d.client)
 	if err != nil {
 		return fmt.Errorf("failed to create device session: %w", err)
@@ -97,7 +104,8 @@ func (d *DeviceManager) addSession(addr *net.UDPAddr, target [8]byte) error {
 	return nil
 }
 
-func (d *DeviceManager) Send(addr *net.UDPAddr, msg *protocol.Message) error {
+// Send sends the given message to the given UDP address, if a session exists.
+func (d *Controller) Send(addr *net.UDPAddr, msg *protocol.Message) error {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	if s, ok := d.sessions[addr.IP.String()]; ok {
@@ -106,7 +114,8 @@ func (d *DeviceManager) Send(addr *net.UDPAddr, msg *protocol.Message) error {
 	return nil
 }
 
-func (d *DeviceManager) GetDevices() []Device {
+// GetDevices returns the list of devices that have a session.
+func (d *Controller) GetDevices() []Device {
 	var devices []Device
 	d.mu.RLock()
 	for _, session := range d.sessions {
@@ -119,27 +128,11 @@ func (d *DeviceManager) GetDevices() []Device {
 }
 
 // recv listens for incoming messages from devices and dispatches them to the appropriate session.
-func (d *DeviceManager) recvloop() {
+func (d *Controller) recvloop() {
 	defer close(d.recvDone)
-	buf := make([]byte, recvBufferSize)
+	defer d.Close()
 
-	for {
-		n, addr, err := d.client.conn.ReadFromUDP(buf)
-		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				break
-			}
-			fmt.Println("failed to read from UDP, terminating session:", err)
-			d.Close()
-			return
-		}
-
-		var msg protocol.Message
-		if err := msg.UnmarshalBinary(buf[:n]); err != nil {
-			// skip malformed
-			continue
-		}
-
+	d.client.Receive(0, false, func(msg *protocol.Message, addr *net.UDPAddr) {
 		d.mu.RLock()
 		session, hasSession := d.sessions[addr.IP.String()]
 		d.mu.RUnlock()
@@ -152,11 +145,11 @@ func (d *DeviceManager) recvloop() {
 			}
 		} else if hasSession {
 			select {
-			case session.inbound <- &msg:
+			case session.inbound <- msg:
 			default:
 				// If the channel is full, we skip the message to avoid blocking.
 				fmt.Println("Channel full, skipping message for", Serial(msg.Header.Target).String(), msg.Payload.PayloadType())
 			}
 		}
-	}
+	})
 }

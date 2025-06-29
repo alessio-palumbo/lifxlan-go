@@ -1,4 +1,4 @@
-package client
+package controller
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
 
+// Color represent a HSBK Color.
 type Color struct {
 	Hue        float64
 	Saturation float64
@@ -14,6 +15,8 @@ type Color struct {
 	Kelvin     uint16
 }
 
+// NewColor parse a lifxprotocol-go LightHsbk into a Color
+// converting device used values into human readable ones.
 func NewColor(hsbk packets.LightHsbk) Color {
 	return Color{
 		Hue:        convertDeviceValueToExternal(hsbk.Hue, 360),
@@ -23,6 +26,7 @@ func NewColor(hsbk packets.LightHsbk) Color {
 	}
 }
 
+// String converts a Color into string for easy logging.
 func (c *Color) String() string {
 	if c.Saturation == 0 {
 		return fmt.Sprintf("Brightness: %f%% Kelvin: %d", c.Brightness, c.Kelvin)
@@ -30,10 +34,14 @@ func (c *Color) String() string {
 	return fmt.Sprintf("Brightness: %f%%, Hue: %f, Saturation: %f%%", c.Brightness, c.Hue, c.Saturation)
 }
 
+// convertDeviceValueToExternal takes a device value in the range 0-65535
+// and converts it into the range defined by the multiplier.
 func convertDeviceValueToExternal(v uint16, multiplier float64) float64 {
 	return math.Round(float64(v) / math.MaxUint16 * multiplier)
 }
 
+// convertExternalToDeviceValue takes an external value and multiplier
+// and converts it into a device value 0-65535.
 func convertExternalToDeviceValue(v float64, multiplier float64) uint16 {
 	return uint16(math.Round(v * math.MaxUint16 / multiplier))
 }

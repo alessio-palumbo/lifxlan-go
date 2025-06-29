@@ -128,6 +128,11 @@ func (c *Client) Receive(timeout time.Duration, recvOne bool, handler HandlerFun
 
 	return nil
 }
+
+func (c *Client) SetConnDeadline(t time.Time) error {
+	return c.conn.SetDeadline(t)
+}
+
 func resolveBroadcastUDPAddress(port int) (*net.UDPAddr, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {

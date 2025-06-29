@@ -1,4 +1,4 @@
-package client
+package controller
 
 import (
 	"fmt"
@@ -11,42 +11,59 @@ import (
 	"github.com/alessio-palumbo/lifxregistry-go/gen/registry"
 )
 
+// deviceType describes the type of LIFX device.
 type deviceType int
 
 const (
+	// DeviceTypeLight is a device of type light
 	DeviceTypeLight deviceType = iota
+	// DeviceTypeSwitch is a device of type switch
 	DeviceTypeSwitch
+	// DeviceTypeHybrid is a device that act both as a light and a switch
 	DeviceTypeHybrid
 )
 
+// String converts a deviceType into a string.
 func (d deviceType) String() string {
 	switch d {
 	case DeviceTypeLight:
 		return "light"
 	case DeviceTypeSwitch:
 		return "switch"
+	case DeviceTypeHybrid:
+		return "hybrid"
 	}
 	return ""
 }
 
+// lightType describe what interface a light implements
+// and what capability it has access to.
 type lightType string
 
 const (
+	// LightTypeSingleZone is a light with a single zone
 	LightTypeSingleZone lightType = "single_zone"
-	LightTypeMultiZone  lightType = "multi_zone"
-	LightTypeMatrix     lightType = "matrix"
+	// LightTypeMultiZone is a light with multi_zone capability
+	LightTypeMultiZone lightType = "multi_zone"
+	// LightTypeMatrix is a light with matrix capability
+	LightTypeMatrix lightType = "matrix"
 )
 
+// Serial is a LIFX device serial as set in the protocol Header,
+// the first 6 bytes contains the serial number and the last 2 bytes are set to 0.
 type Serial [8]byte
 
+// String converts a serial into its hexadecimal equivalent.
 func (s Serial) String() string {
 	return fmt.Sprintf("%x", s[:6])
 }
 
+// IsNil returns whether the serial set.
 func (s Serial) IsNil() bool {
 	return s == [8]byte{}
 }
 
+// Device contains the UDP address and state of a LIFX device on the LAN.
 type Device struct {
 	Address         *net.UDPAddr
 	Serial          Serial
@@ -85,6 +102,7 @@ func (d *Device) SetProductID(pid uint32) {
 
 }
 
+// SortDevices sorts devices by label and if equal, by Serial.
 func SortDevices(devices []Device) {
 	slices.SortFunc(devices, func(a, b Device) int {
 		if n := strings.Compare(a.Label, b.Label); n != 0 {
@@ -95,6 +113,7 @@ func SortDevices(devices []Device) {
 	})
 }
 
+// DeviceStateMessages
 func DeviceStateMessages() []*protocol.Message {
 	return []*protocol.Message{
 		protocol.NewMessage(&packets.DeviceGetLabel{}),
