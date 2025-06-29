@@ -127,6 +127,7 @@ func (s *DeviceSession) recvloop() {
 					WithField("payload", msg.Payload.PayloadType()).
 					Debug("Session: Unhandled message type")
 			}
+			s.device.LastSeenAt = time.Now()
 		case <-s.done:
 			log.WithField("serial", s.device.Serial).Info("Exiting device recv loop")
 			return

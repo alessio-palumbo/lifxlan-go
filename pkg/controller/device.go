@@ -5,6 +5,7 @@ import (
 	"net"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
@@ -77,6 +78,7 @@ type Device struct {
 	Group           string
 	Color           Color
 	PoweredOn       bool
+	LastSeenAt      time.Time
 }
 
 func NewDevice(address *net.UDPAddr, serial [8]byte) *Device {
