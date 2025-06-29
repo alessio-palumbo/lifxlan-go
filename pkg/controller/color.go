@@ -39,9 +39,3 @@ func (c *Color) String() string {
 func convertDeviceValueToExternal(v uint16, multiplier float64) float64 {
 	return math.Round(float64(v) / math.MaxUint16 * multiplier)
 }
-
-// convertExternalToDeviceValue takes an external value and multiplier
-// and converts it into a device value 0-65535.
-func convertExternalToDeviceValue(v float64, multiplier float64) uint16 {
-	return uint16(math.Round(v * math.MaxUint16 / multiplier))
-}
