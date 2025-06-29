@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	highFrequencyStateRefreshPeriod = 10 * time.Second
-	lowFrequencyStateRefreshPeriod  = 2 * time.Minute
+	defaultRecvBufferSize = 10
 )
 
 // sender is an interface that defines message sending.
@@ -27,12 +26,13 @@ type DeviceSession struct {
 	inbound chan *protocol.Message // Map of sequence number to response channel
 	seq     uint8                  // Sequence number for messages
 	done    chan struct{}
+	cfg     *Config
 }
 
 // NewDeviceSession creates a new DeviceSession for the given device.
 // It spins up a goroutine to periodically query devices for state updates and
 // a second one to parse devices messages and update Device state.
-func NewDeviceSession(addr *net.UDPAddr, target [8]byte, sender sender) (*DeviceSession, error) {
+func NewDeviceSession(addr *net.UDPAddr, target [8]byte, sender sender, cfg *Config) (*DeviceSession, error) {
 	ds := &DeviceSession{
 		sender:  sender,
 		device:  NewDevice(addr, target),
@@ -76,8 +76,8 @@ func (s *DeviceSession) nextSeq() uint8 {
 // It uses a ticker for high frequency state changes and one for low frequency ones.
 func (s *DeviceSession) run() {
 	s.Send(DeviceStateMessages()...)
-	hfTicker := time.NewTicker(highFrequencyStateRefreshPeriod)
-	lfTicker := time.NewTicker(lowFrequencyStateRefreshPeriod)
+	hfTicker := time.NewTicker(s.cfg.highFrequencyStateRefreshPeriod)
+	lfTicker := time.NewTicker(s.cfg.lowFrequencyStateRefreshPeriod)
 
 	for {
 		select {
@@ -85,7 +85,7 @@ func (s *DeviceSession) run() {
 			return
 		case <-hfTicker.C:
 			s.Send(protocol.NewMessage(&packets.LightGet{}))
-			hfTicker.Reset(highFrequencyStateRefreshPeriod)
+			hfTicker.Reset(s.cfg.highFrequencyStateRefreshPeriod)
 		case <-lfTicker.C:
 			s.Send(
 				protocol.NewMessage(&packets.DeviceGetLabel{}),
@@ -93,7 +93,7 @@ func (s *DeviceSession) run() {
 				protocol.NewMessage(&packets.DeviceGetLocation{}),
 				protocol.NewMessage(&packets.DeviceGetGroup{}),
 			)
-			lfTicker.Reset(highFrequencyStateRefreshPeriod)
+			lfTicker.Reset(s.cfg.lowFrequencyStateRefreshPeriod)
 		}
 	}
 }

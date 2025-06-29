@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	defaultRecvBufferSize  = 10
-	defaultDiscoveryPeriod = 500 * time.Millisecond
+	defaultDiscoveryPeriod                 = 500 * time.Millisecond
+	defaulthighFrequencyStateRefreshPeriod = 10 * time.Second
+	defaultlowFrequencyStateRefreshPeriod  = 2 * time.Minute
 )
 
 // Controller manages discovery and message routing for multiple
@@ -24,15 +25,22 @@ const (
 type Controller struct {
 	client   *client.Client
 	recvDone chan struct{}
+	cfg      *Config
 
 	mu       sync.RWMutex
 	sessions map[string]*DeviceSession
 }
 
+// Config contains configurable options for discovery and state updates.
+type Config struct {
+	discoveryPeriod                 time.Duration
+	highFrequencyStateRefreshPeriod time.Duration
+	lowFrequencyStateRefreshPeriod  time.Duration
+}
+
 // New returns a Controller that periodically discovers LIFX devices
 // on the LAN and creates individual sessions for message routing.
-// It currently does not check whether
-func New() (*Controller, error) {
+func New(cfg *Config) (*Controller, error) {
 	logutil.Init()
 
 	client, err := client.NewClient(nil)
@@ -44,14 +52,16 @@ func New() (*Controller, error) {
 		client:   client,
 		recvDone: make(chan struct{}),
 		sessions: make(map[string]*DeviceSession),
+		cfg:      parseConfig(cfg),
 	}
+
 	go dm.recvloop()
 
 	// Perform an intial discovery and exit early, if needed.
 	if err := dm.Discover(); err != nil {
 		return nil, fmt.Errorf("failed to discover devices: %w", err)
 	}
-	go dm.periodicDiscovery(defaultDiscoveryPeriod)
+	go dm.periodicDiscovery()
 
 	return dm, nil
 }
@@ -81,8 +91,8 @@ func (d *Controller) Discover() error {
 }
 
 // periodicDiscovery periodically looks for new devices on the network.
-func (d *Controller) periodicDiscovery(period time.Duration) {
-	ticker := time.NewTicker(period)
+func (d *Controller) periodicDiscovery() {
+	ticker := time.NewTicker(d.cfg.discoveryPeriod)
 
 	for {
 		select {
@@ -90,14 +100,14 @@ func (d *Controller) periodicDiscovery(period time.Duration) {
 			return
 		case <-ticker.C:
 			_ = d.Discover()
-			ticker.Reset(period)
+			ticker.Reset(d.cfg.discoveryPeriod)
 		}
 	}
 }
 
 // addSession adds a new device session.
 func (d *Controller) addSession(addr *net.UDPAddr, target [8]byte) error {
-	session, err := NewDeviceSession(addr, target, d.client)
+	session, err := NewDeviceSession(addr, target, d.client, d.cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create device session: %w", err)
 	}
@@ -159,4 +169,21 @@ func (d *Controller) recvloop() {
 			}
 		}
 	})
+}
+
+// parseConfig returns a Config with any missing property set to its default.
+func parseConfig(cfg *Config) *Config {
+	if cfg == nil {
+		cfg = new(Config)
+	}
+	if cfg.discoveryPeriod == 0 {
+		cfg.discoveryPeriod = defaultDiscoveryPeriod
+	}
+	if cfg.highFrequencyStateRefreshPeriod == 0 {
+		cfg.highFrequencyStateRefreshPeriod = defaulthighFrequencyStateRefreshPeriod
+	}
+	if cfg.lowFrequencyStateRefreshPeriod == 0 {
+		cfg.lowFrequencyStateRefreshPeriod = defaultlowFrequencyStateRefreshPeriod
+	}
+	return cfg
 }
