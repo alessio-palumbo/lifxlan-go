@@ -6,10 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alessio-palumbo/lifxlan-go/internal/logutil"
 	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/client"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -31,6 +33,8 @@ type Controller struct {
 // on the LAN and creates individual sessions for message routing.
 // It currently does not check whether
 func New() (*Controller, error) {
+	logutil.Init()
+
 	client, err := client.NewClient(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
@@ -65,7 +69,8 @@ func (d *Controller) Close() error {
 		}
 	}
 	clear(d.sessions)
-	fmt.Println("Device manager closed")
+
+	log.Info("Device manager closed")
 	return nil
 }
 
@@ -140,7 +145,7 @@ func (d *Controller) recvloop() {
 		if state, ok := msg.Payload.(*packets.DeviceStateService); ok {
 			if !hasSession && state.Service == enums.DeviceServiceDEVICESERVICEUDP {
 				if err := d.addSession(addr, msg.Header.Target); err != nil {
-					fmt.Println("Failed to spin device worker:", err)
+					log.WithError(err).WithField("serial", Serial(msg.Header.Target)).Error("Failed to spin device worker")
 				}
 			}
 		} else if hasSession {
@@ -148,7 +153,9 @@ func (d *Controller) recvloop() {
 			case session.inbound <- msg:
 			default:
 				// If the channel is full, we skip the message to avoid blocking.
-				fmt.Println("Channel full, skipping message for", Serial(msg.Header.Target).String(), msg.Payload.PayloadType())
+				log.WithField("serial", Serial(msg.Header.Target)).
+					WithField("payload", msg.Payload.PayloadType()).
+					Warning("Channel full, skipping message")
 			}
 		}
 	})

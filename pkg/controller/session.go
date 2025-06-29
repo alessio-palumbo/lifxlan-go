@@ -7,6 +7,7 @@ import (
 
 	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -122,10 +123,12 @@ func (s *DeviceSession) recvloop() {
 				s.device.Group = ParseLabel(p.Label)
 			case *packets.DeviceStateService, *packets.DeviceStateUnhandled: // Ignore these messages
 			default:
-				fmt.Println("Unhandled message type:", p.PayloadType())
+				log.WithField("serial", s.device.Serial).
+					WithField("payload", msg.Payload.PayloadType()).
+					Debug("Session: Unhandled message type")
 			}
 		case <-s.done:
-			fmt.Println("Exiting recv loop for device:", s.device.Serial)
+			log.WithField("serial", s.device.Serial).Info("Exiting device recv loop")
 			return
 		}
 	}
