@@ -157,7 +157,7 @@ func (c *Controller) GetDevices() []Device {
 	var devices []Device
 	c.mu.RLock()
 	for _, session := range c.sessions {
-		devices = append(devices, *session.device)
+		devices = append(devices, session.DeviceSnapshot())
 	}
 	c.mu.RUnlock()
 

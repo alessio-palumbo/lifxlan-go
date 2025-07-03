@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,11 +24,14 @@ type sender interface {
 // DeviceSession represents a session for a specific device.
 type DeviceSession struct {
 	sender  sender
-	device  *Device
 	inbound chan *protocol.Message
 	seq     atomic.Uint32
 	done    chan struct{}
 	cfg     *Config
+
+	// mu protects read/write access of DeviceState
+	mu     sync.RWMutex
+	device *Device
 }
 
 // NewDeviceSession creates a new DeviceSession for the given device.
@@ -64,6 +68,12 @@ func (s *DeviceSession) Send(msgs ...*protocol.Message) error {
 		}
 	}
 	return nil
+}
+
+func (s *DeviceSession) DeviceSnapshot() Device {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return *s.device
 }
 
 // nextSeq increments the sequence number and returns the new value.
@@ -107,6 +117,7 @@ func (s *DeviceSession) recvloop() {
 				continue
 			}
 
+			s.mu.Lock()
 			switch p := msg.Payload.(type) {
 			case *packets.DeviceStateLabel:
 				s.device.Label = ParseLabel(p.Label)
@@ -128,6 +139,7 @@ func (s *DeviceSession) recvloop() {
 					Debug("Session: Unhandled message type")
 			}
 			s.device.LastSeenAt = time.Now()
+			s.mu.Unlock()
 		case <-s.done:
 			log.WithField("serial", s.device.Serial).Info("Exiting device recv loop")
 			return

@@ -64,10 +64,19 @@ func (s Serial) IsNil() bool {
 	return s == [8]byte{}
 }
 
-// Device contains the UDP address and state of a LIFX device on the LAN.
+// Device is the representation of a LIFX device on the LAN.
+// Address and Serial are immutable fields while DeviceState
+// fields are periodically updated.
 type Device struct {
-	Address         *net.UDPAddr
-	Serial          Serial
+	Address *net.UDPAddr
+	Serial  Serial
+	DeviceState
+}
+
+// DeviceState contains the state of a device.
+// It is not thread safe.
+type DeviceState struct {
+	// Low Frequency updated fields.
 	Label           string
 	RegistryName    string
 	ProductID       uint32
@@ -76,9 +85,11 @@ type Device struct {
 	LightType       lightType
 	Location        string
 	Group           string
-	Color           Color
-	PoweredOn       bool
-	LastSeenAt      time.Time
+
+	// High Frequency updated fields.
+	Color      Color
+	PoweredOn  bool
+	LastSeenAt time.Time
 }
 
 func NewDevice(address *net.UDPAddr, serial [8]byte) *Device {
