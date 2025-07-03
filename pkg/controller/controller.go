@@ -23,12 +23,20 @@ const (
 // Controller manages discovery and message routing for multiple
 // devices on the LAN.
 type Controller struct {
-	client   *client.Client
+	client   Client
 	recvDone chan struct{}
 	cfg      *Config
 
 	mu       sync.RWMutex
 	sessions map[string]*DeviceSession
+}
+
+type Client interface {
+	Send(dst *net.UDPAddr, msg *protocol.Message) error
+	SendBroadcast(msg *protocol.Message) error
+	Receive(timeout time.Duration, recvOne bool, handler client.HandlerFunc) error
+	SetConnDeadline(t time.Time) error
+	Close() error
 }
 
 // Config contains configurable options for discovery and state updates.
@@ -40,121 +48,131 @@ type Config struct {
 
 // New returns a Controller that periodically discovers LIFX devices
 // on the LAN and creates individual sessions for message routing.
-func New(cfg *Config) (*Controller, error) {
+func New(opts ...Option) (*Controller, error) {
 	logutil.Init()
 
-	client, err := client.NewClient(nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
-	}
-
-	dm := &Controller{
-		client:   client,
+	ctrl := &Controller{
 		recvDone: make(chan struct{}),
 		sessions: make(map[string]*DeviceSession),
-		cfg:      parseConfig(cfg),
+		cfg: &Config{
+			discoveryPeriod:                 defaultDiscoveryPeriod,
+			highFrequencyStateRefreshPeriod: defaulthighFrequencyStateRefreshPeriod,
+			lowFrequencyStateRefreshPeriod:  defaultlowFrequencyStateRefreshPeriod,
+		},
+	}
+	for _, opt := range opts {
+		if err := opt(ctrl); err != nil {
+			return nil, err
+		}
 	}
 
-	go dm.recvloop()
+	if ctrl.client == nil {
+		c, err := client.NewClient(nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create client: %w", err)
+		}
+		ctrl.client = c
+	}
+
+	go ctrl.recvloop()
 
 	// Perform an intial discovery and exit early, if needed.
-	if err := dm.Discover(); err != nil {
+	if err := ctrl.Discover(); err != nil {
 		return nil, fmt.Errorf("failed to discover devices: %w", err)
 	}
-	go dm.periodicDiscovery()
+	go ctrl.periodicDiscovery()
 
-	return dm, nil
+	return ctrl, nil
 }
 
 // Close closes the Controller, stopping the recv loop and closing all device sessions.
-func (d *Controller) Close() error {
+func (c *Controller) Close() error {
 	// Close the client connection and wait for the recv loop to finish.
-	d.client.SetConnDeadline(time.Now())
-	<-d.recvDone
-	d.client.Close()
+	c.client.SetConnDeadline(time.Now())
+	<-c.recvDone
+	c.client.Close()
 
-	for _, session := range d.sessions {
+	for _, session := range c.sessions {
 		if err := session.Close(); err != nil {
 			return fmt.Errorf("failed to close device session: %w", err)
 		}
 	}
-	clear(d.sessions)
+	clear(c.sessions)
 
 	log.Info("Device manager closed")
 	return nil
 }
 
 // Discover broadcasts a LIFX discover packet.
-func (d *Controller) Discover() error {
+func (c *Controller) Discover() error {
 	msg := protocol.NewMessage(&packets.DeviceGetService{})
-	return d.client.SendBroadcast(msg)
+	return c.client.SendBroadcast(msg)
 }
 
 // periodicDiscovery periodically looks for new devices on the network.
-func (d *Controller) periodicDiscovery() {
-	ticker := time.NewTicker(d.cfg.discoveryPeriod)
+func (c *Controller) periodicDiscovery() {
+	ticker := time.NewTicker(c.cfg.discoveryPeriod)
 
 	for {
 		select {
-		case <-d.recvDone:
+		case <-c.recvDone:
 			return
 		case <-ticker.C:
-			_ = d.Discover()
-			ticker.Reset(d.cfg.discoveryPeriod)
+			_ = c.Discover()
+			ticker.Reset(c.cfg.discoveryPeriod)
 		}
 	}
 }
 
 // addSession adds a new device session.
-func (d *Controller) addSession(addr *net.UDPAddr, target [8]byte) error {
-	session, err := NewDeviceSession(addr, target, d.client, d.cfg)
+func (c *Controller) addSession(addr *net.UDPAddr, target [8]byte) error {
+	session, err := NewDeviceSession(addr, target, c.client, c.cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create device session: %w", err)
 	}
 
-	d.mu.Lock()
-	d.sessions[addr.IP.String()] = session
-	d.mu.Unlock()
+	c.mu.Lock()
+	c.sessions[addr.IP.String()] = session
+	c.mu.Unlock()
 
 	return nil
 }
 
 // Send sends the given message to the given UDP address, if a session exists.
-func (d *Controller) Send(addr *net.UDPAddr, msg *protocol.Message) error {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	if s, ok := d.sessions[addr.IP.String()]; ok {
+func (c *Controller) Send(addr *net.UDPAddr, msg *protocol.Message) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if s, ok := c.sessions[addr.IP.String()]; ok {
 		return s.Send(msg)
 	}
 	return nil
 }
 
 // GetDevices returns the list of devices that have a session.
-func (d *Controller) GetDevices() []Device {
+func (c *Controller) GetDevices() []Device {
 	var devices []Device
-	d.mu.RLock()
-	for _, session := range d.sessions {
+	c.mu.RLock()
+	for _, session := range c.sessions {
 		devices = append(devices, *session.device)
 	}
-	d.mu.RUnlock()
+	c.mu.RUnlock()
 
 	SortDevices(devices)
 	return devices
 }
 
 // recv listens for incoming messages from devices and dispatches them to the appropriate session.
-func (d *Controller) recvloop() {
-	defer close(d.recvDone)
-	defer d.Close()
+func (c *Controller) recvloop() {
+	defer close(c.recvDone)
 
-	d.client.Receive(0, false, func(msg *protocol.Message, addr *net.UDPAddr) {
-		d.mu.RLock()
-		session, hasSession := d.sessions[addr.IP.String()]
-		d.mu.RUnlock()
+	if err := c.client.Receive(0, false, func(msg *protocol.Message, addr *net.UDPAddr) {
+		c.mu.RLock()
+		session, hasSession := c.sessions[addr.IP.String()]
+		c.mu.RUnlock()
 
 		if state, ok := msg.Payload.(*packets.DeviceStateService); ok {
 			if !hasSession && state.Service == enums.DeviceServiceDEVICESERVICEUDP {
-				if err := d.addSession(addr, msg.Header.Target); err != nil {
+				if err := c.addSession(addr, msg.Header.Target); err != nil {
 					log.WithError(err).WithField("serial", Serial(msg.Header.Target)).Error("Failed to spin device worker")
 				}
 			}
@@ -168,22 +186,8 @@ func (d *Controller) recvloop() {
 					Warning("Channel full, skipping message")
 			}
 		}
-	})
-}
-
-// parseConfig returns a Config with any missing property set to its default.
-func parseConfig(cfg *Config) *Config {
-	if cfg == nil {
-		cfg = new(Config)
+	}); err != nil {
+		// If Receive exits due to an error make sure the Controller shuts down gracefully.
+		c.Close()
 	}
-	if cfg.discoveryPeriod == 0 {
-		cfg.discoveryPeriod = defaultDiscoveryPeriod
-	}
-	if cfg.highFrequencyStateRefreshPeriod == 0 {
-		cfg.highFrequencyStateRefreshPeriod = defaulthighFrequencyStateRefreshPeriod
-	}
-	if cfg.lowFrequencyStateRefreshPeriod == 0 {
-		cfg.lowFrequencyStateRefreshPeriod = defaultlowFrequencyStateRefreshPeriod
-	}
-	return cfg
 }
