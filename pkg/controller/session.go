@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
@@ -23,8 +24,8 @@ type sender interface {
 type DeviceSession struct {
 	sender  sender
 	device  *Device
-	inbound chan *protocol.Message // Map of sequence number to response channel
-	seq     uint8                  // Sequence number for messages
+	inbound chan *protocol.Message
+	seq     atomic.Uint32
 	done    chan struct{}
 	cfg     *Config
 }
@@ -38,6 +39,7 @@ func NewDeviceSession(addr *net.UDPAddr, target [8]byte, sender sender, cfg *Con
 		device:  NewDevice(addr, target),
 		inbound: make(chan *protocol.Message, defaultRecvBufferSize),
 		done:    make(chan struct{}),
+		cfg:     cfg,
 	}
 
 	go ds.recvloop()
@@ -66,10 +68,8 @@ func (s *DeviceSession) Send(msgs ...*protocol.Message) error {
 
 // nextSeq increments the sequence number and returns the new value.
 // It wraps around after reaching 255.
-// nextSeq is not thread-safe and should be called with care in concurrent contexts.
 func (s *DeviceSession) nextSeq() uint8 {
-	s.seq++
-	return s.seq
+	return uint8(s.seq.Add(1))
 }
 
 // run periodically query the device for state updates.
