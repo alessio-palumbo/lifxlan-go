@@ -27,8 +27,9 @@ type Controller struct {
 	recvDone chan struct{}
 	cfg      *Config
 
-	mu       sync.RWMutex
-	sessions map[string]*DeviceSession
+	closeOnce sync.Once
+	mu        sync.RWMutex
+	sessions  map[string]*DeviceSession
 }
 
 type Client interface {
@@ -85,21 +86,24 @@ func New(opts ...Option) (*Controller, error) {
 	return ctrl, nil
 }
 
-// Close closes the Controller, stopping the recv loop and closing all device sessions.
+// Close closes the Controller, stopping the recv loop and terminating all device sessions.
+// Close is idempotent.
 func (c *Controller) Close() error {
 	// Close the client connection and wait for the recv loop to finish.
-	c.client.SetConnDeadline(time.Now())
-	<-c.recvDone
-	c.client.Close()
+	c.closeOnce.Do(func() {
+		c.client.SetConnDeadline(time.Now())
+		<-c.recvDone
+		c.client.Close()
 
-	for _, session := range c.sessions {
-		if err := session.Close(); err != nil {
-			return fmt.Errorf("failed to close device session: %w", err)
+		for ip, session := range c.sessions {
+			if err := session.Close(); err != nil {
+				log.WithError(err).WithField("IP Address", ip).Error("Failed to close device session")
+			}
 		}
-	}
-	clear(c.sessions)
+		clear(c.sessions)
+		log.Info("Controller closed")
+	})
 
-	log.Info("Device manager closed")
 	return nil
 }
 
