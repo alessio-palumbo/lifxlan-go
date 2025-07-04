@@ -125,7 +125,7 @@ func (s *DeviceSession) recvloop() {
 				s.device.Color = NewColor(p.Color)
 				s.device.PoweredOn = p.Power > 0
 			case *packets.DeviceStateVersion:
-				s.device.SetProductID(p.Product)
+				s.device.SetProductInfo(p.Product)
 			case *packets.DeviceStateHostFirmware:
 				s.device.FirmwareVersion = fmt.Sprintf("%d.%d", p.VersionMajor, p.VersionMinor)
 			case *packets.DeviceStateLocation:

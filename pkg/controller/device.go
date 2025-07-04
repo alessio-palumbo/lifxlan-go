@@ -96,7 +96,7 @@ func NewDevice(address *net.UDPAddr, serial [8]byte) *Device {
 	return &Device{Address: address, Serial: Serial(serial)}
 }
 
-func (d *Device) SetProductID(pid uint32) {
+func (d *Device) SetProductInfo(pid uint32) {
 	p := registry.ProductsByPID[int(pid)]
 	d.ProductID = pid
 	d.RegistryName = p.Name

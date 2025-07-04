@@ -215,7 +215,7 @@ type recvMsg struct {
 
 func newMockClient() *mockClient {
 	return &mockClient{
-		sends:      make(chan *protocol.Message, 10),
+		sends:      make(chan *protocol.Message, 100),
 		broadcasts: make(chan struct{}, 100),
 		inbound:    make(chan recvMsg, 10),
 		done:       make(chan struct{}),
