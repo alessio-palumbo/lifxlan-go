@@ -39,16 +39,29 @@ func (d deviceType) String() string {
 
 // lightType describe what interface a light implements
 // and what capability it has access to.
-type lightType string
+type lightType int
 
 const (
 	// LightTypeSingleZone is a light with a single zone
-	LightTypeSingleZone lightType = "single_zone"
+	LightTypeSingleZone lightType = iota
 	// LightTypeMultiZone is a light with multi_zone capability
-	LightTypeMultiZone lightType = "multi_zone"
+	LightTypeMultiZone
 	// LightTypeMatrix is a light with matrix capability
-	LightTypeMatrix lightType = "matrix"
+	LightTypeMatrix
 )
+
+// String converts a lightType into a string.
+func (l lightType) String() string {
+	switch l {
+	case LightTypeSingleZone:
+		return "single_zone"
+	case LightTypeMultiZone:
+		return "multi_zone"
+	case LightTypeMatrix:
+		return "matrix"
+	}
+	return ""
+}
 
 // Serial is a LIFX device serial as set in the protocol Header,
 // the first 6 bytes contains the serial number and the last 2 bytes are set to 0.
@@ -68,14 +81,12 @@ func (s Serial) IsNil() bool {
 // Address and Serial are immutable fields while DeviceState
 // fields are periodically updated.
 type Device struct {
+	// Immutable
 	Address *net.UDPAddr
 	Serial  Serial
-	DeviceState
-}
 
-// DeviceState contains the state of a device.
-// It is not thread safe.
-type DeviceState struct {
+	// Mutable
+
 	// Low Frequency updated fields.
 	Label           string
 	RegistryName    string
