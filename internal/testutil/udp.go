@@ -4,7 +4,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/stretchr/testify/require"
 )
 

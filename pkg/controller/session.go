@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	log "github.com/sirupsen/logrus"
 )

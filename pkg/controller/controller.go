@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/internal/logutil"
-	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/client"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	log "github.com/sirupsen/logrus"
@@ -176,8 +176,8 @@ func (c *Controller) recvloop() {
 
 		if state, ok := msg.Payload.(*packets.DeviceStateService); ok {
 			if !hasSession && state.Service == enums.DeviceServiceDEVICESERVICEUDP {
-				if err := c.addSession(addr, msg.Header.Target); err != nil {
-					log.WithError(err).WithField("serial", Serial(msg.Header.Target)).Error("Failed to spin device worker")
+				if err := c.addSession(addr, msg.Target()); err != nil {
+					log.WithError(err).WithField("serial", Serial(msg.Target())).Error("Failed to spin device worker")
 				}
 			}
 		} else if hasSession {
@@ -185,7 +185,7 @@ func (c *Controller) recvloop() {
 			case session.inbound <- msg:
 			default:
 				// If the channel is full, we skip the message to avoid blocking.
-				log.WithField("serial", Serial(msg.Header.Target)).
+				log.WithField("serial", Serial(msg.Target())).
 					WithField("payload", msg.Payload.PayloadType()).
 					Warning("Channel full, skipping message")
 			}

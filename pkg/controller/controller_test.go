@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/client"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/stretchr/testify/assert"
@@ -47,9 +47,7 @@ func TestController(t *testing.T) {
 		ctrl, err := New(WithClient(mockClient))
 		require.NoError(t, err)
 
-		payload := &packets.LightGet{}
-		msg := protocol.NewMessage(payload)
-		err = ctrl.Send(addr0, msg)
+		err = ctrl.Send(addr0, protocol.NewMessage(&packets.LightGet{}))
 		require.NoError(t, err)
 
 		ctrl.Close()
@@ -84,7 +82,7 @@ func TestController(t *testing.T) {
 		payload := &packets.LightGet{}
 		msg := protocol.NewMessage(payload)
 
-		err = ctrl.Send(addr0, msg)
+		err = ctrl.Send(addr0, protocol.NewMessage(&packets.LightGet{}))
 		require.NoError(t, err)
 		ctrl.Close()
 		assert.Equal(t, 1, len(mockClient.sends))

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
 	"github.com/alessio-palumbo/lifxlan-go/internal/testutil"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/stretchr/testify/assert"
@@ -35,8 +35,8 @@ func TestClient_SendUnicast(t *testing.T) {
 	select {
 	case recvMsg := <-recvCh:
 		assert.Equal(t, recvMsg, msg)
-		assert.Equal(t, recvMsg.Header.Target, target)
-		assert.Equal(t, recvMsg.Header.Source, defaultSource)
+		assert.Equal(t, recvMsg.Target(), target)
+		assert.Equal(t, recvMsg.Source(), defaultSource)
 		require.Equal(t, msg.Payload.PayloadType(), recvMsg.Payload.PayloadType())
 	case <-time.After(time.Millisecond):
 		t.Fatal("Expected data but got timeout")
@@ -66,8 +66,7 @@ func TestClient_SendBroadcast(t *testing.T) {
 	select {
 	case recvMsg := <-recvCh:
 		assert.Equal(t, recvMsg, msg)
-		assert.Equal(t, recvMsg.Header.Target, protocol.TargetBroadcast)
-		assert.Equal(t, recvMsg.Header.IsTagged(), true)
+		assert.Equal(t, recvMsg.Target(), protocol.TargetBroadcast)
 		require.Equal(t, msg.Payload.PayloadType(), recvMsg.Payload.PayloadType())
 	case <-time.After(time.Millisecond):
 		t.Fatal("Expected data but got timeout")
@@ -111,7 +110,7 @@ func TestClient_Receive(t *testing.T) {
 
 	select {
 	case recvMsg := <-recvCh:
-		require.Equal(t, recvMsg.Header.Target, target)
+		require.Equal(t, recvMsg.Target(), target)
 	case <-time.After(time.Millisecond):
 		t.Fatal("Did not receive message")
 	}

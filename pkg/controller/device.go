@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alessio-palumbo/lifxlan-go/internal/protocol"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/alessio-palumbo/lifxregistry-go/gen/registry"
 )

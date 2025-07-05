@@ -32,10 +32,10 @@ func TestMessage_MarshalUnmarshal(t *testing.T) {
 	}
 
 	// Assert header round-trip
-	if original.Header.Type != decoded.Header.Type ||
-		original.Header.Source != decoded.Header.Source ||
-		original.Header.Sequence != decoded.Header.Sequence {
-		t.Errorf("Header mismatch: got %+v, want %+v", decoded.Header, original.Header)
+	if original.Type() != decoded.Type() ||
+		original.Source() != decoded.Source() ||
+		original.Sequence() != decoded.Sequence() {
+		t.Errorf("Header mismatch: got %+v, want %+v", decoded, original)
 	}
 
 	// Assert payload type and values

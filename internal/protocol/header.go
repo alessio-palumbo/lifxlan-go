@@ -5,11 +5,10 @@ import (
 	"errors"
 )
 
-const (
-	HeaderSize   = 36
-	lifxProtocol = 1024
-)
+// HeaderSize is the size of a LIFX Header.
+const HeaderSize = 36
 
+// ErrInvalidHeaderLength indicates a malformed Header.
 var ErrInvalidHeaderLength = errors.New("invalid LIFX header length")
 
 // Header represents a full 36-byte LIFX message header.
@@ -57,7 +56,8 @@ func (h *Header) SetAddressable(v bool) {
 	}
 }
 
-// IsTagged returns true if the tagged bit (bit 13) is set in FrameFlags.
+// IsTagged returns whether the tagged bit (bit 13) is set in FrameFlags.
+// If true, the message is a broadcast message otherwise it is unicast.
 func (h *Header) IsTagged() bool {
 	return (h.FrameFlags>>13)&0x1 == 1
 }
@@ -129,7 +129,7 @@ func (h *Header) MarshalBinary() ([]byte, error) {
 }
 
 func (h *Header) UnmarshalBinary(data []byte) error {
-	if len(data) < 36 {
+	if len(data) < HeaderSize {
 		return ErrInvalidHeaderLength
 	}
 	h.Size = binary.LittleEndian.Uint16(data[0:])
