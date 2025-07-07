@@ -14,10 +14,8 @@ import (
 
 func TestSession(t *testing.T) {
 	var (
-		addr0 = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
-		// addr1   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 11)}
-		target0 = [8]byte{1, 0, 0, 0, 0, 0, 0, 0}
-		// target1 = [8]byte{2, 0, 0, 0, 0, 0, 0, 0}
+		addr0   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
+		serial0 = Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
 
 		cfg0 = &Config{
 			discoveryPeriod:                 defaultDiscoveryPeriod,
@@ -28,7 +26,7 @@ func TestSession(t *testing.T) {
 
 	t.Run("Sends initial state messages", func(t *testing.T) {
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, target0, mockClient, cfg0)
+		session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0)
 		require.NoError(t, err)
 
 		var gotMsgs []packets.Payload
@@ -54,7 +52,7 @@ func TestSession(t *testing.T) {
 		cfg := *cfg0
 		cfg.highFrequencyStateRefreshPeriod = time.Millisecond
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, target0, mockClient, &cfg)
+		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg)
 		require.NoError(t, err)
 
 		var gotMsgs int
@@ -79,7 +77,7 @@ func TestSession(t *testing.T) {
 		cfg := *cfg0
 		cfg.lowFrequencyStateRefreshPeriod = time.Millisecond
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, target0, mockClient, &cfg)
+		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg)
 		require.NoError(t, err)
 
 		gotMsgs := make(map[uint16]int)
@@ -106,11 +104,11 @@ func TestSession(t *testing.T) {
 
 	t.Run("Updates state", func(t *testing.T) {
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, target0, mockClient, cfg0)
+		session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0)
 		require.NoError(t, err)
 
 		wantDevice := Device{
-			Serial: Serial(target0), Address: addr0,
+			Serial: Serial(serial0), Address: addr0,
 		}
 		deviceSnapshot := session.DeviceSnapshot()
 		assert.Equal(t, wantDevice, deviceSnapshot)

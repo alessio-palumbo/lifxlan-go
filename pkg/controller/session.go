@@ -37,10 +37,10 @@ type DeviceSession struct {
 // NewDeviceSession creates a new DeviceSession for the given device.
 // It spins up a goroutine to periodically query devices for state updates and
 // a second one to parse devices messages and update Device state.
-func NewDeviceSession(addr *net.UDPAddr, target [8]byte, sender sender, cfg *Config) (*DeviceSession, error) {
+func NewDeviceSession(addr *net.UDPAddr, serial Serial, sender sender, cfg *Config) (*DeviceSession, error) {
 	ds := &DeviceSession{
 		sender:  sender,
-		device:  NewDevice(addr, target),
+		device:  NewDevice(addr, serial),
 		inbound: make(chan *protocol.Message, defaultRecvBufferSize),
 		done:    make(chan struct{}),
 		cfg:     cfg,

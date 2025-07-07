@@ -29,7 +29,7 @@ type Controller struct {
 
 	closeOnce sync.Once
 	mu        sync.RWMutex
-	sessions  map[string]*DeviceSession
+	sessions  map[Serial]*DeviceSession
 }
 
 type Client interface {
@@ -54,7 +54,7 @@ func New(opts ...Option) (*Controller, error) {
 
 	ctrl := &Controller{
 		recvDone: make(chan struct{}),
-		sessions: make(map[string]*DeviceSession),
+		sessions: make(map[Serial]*DeviceSession),
 		cfg: &Config{
 			discoveryPeriod:                 defaultDiscoveryPeriod,
 			highFrequencyStateRefreshPeriod: defaulthighFrequencyStateRefreshPeriod,
@@ -95,9 +95,9 @@ func (c *Controller) Close() error {
 		<-c.recvDone
 		c.client.Close()
 
-		for ip, session := range c.sessions {
+		for serial, session := range c.sessions {
 			if err := session.Close(); err != nil {
-				log.WithError(err).WithField("IP Address", ip).Error("Failed to close device session")
+				log.WithError(err).WithField("serial", serial).Error("Failed to close device session")
 			}
 		}
 		clear(c.sessions)
@@ -129,24 +129,24 @@ func (c *Controller) periodicDiscovery() {
 }
 
 // addSession adds a new device session.
-func (c *Controller) addSession(addr *net.UDPAddr, target [8]byte) error {
-	session, err := NewDeviceSession(addr, target, c.client, c.cfg)
+func (c *Controller) addSession(addr *net.UDPAddr, serial Serial) error {
+	session, err := NewDeviceSession(addr, serial, c.client, c.cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create device session: %w", err)
 	}
 
 	c.mu.Lock()
-	c.sessions[addr.IP.String()] = session
+	c.sessions[serial] = session
 	c.mu.Unlock()
 
 	return nil
 }
 
 // Send sends the given message to the given UDP address, if a session exists.
-func (c *Controller) Send(addr *net.UDPAddr, msg *protocol.Message) error {
+func (c *Controller) Send(serial Serial, msg *protocol.Message) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if s, ok := c.sessions[addr.IP.String()]; ok {
+	if s, ok := c.sessions[serial]; ok {
 		return s.Send(msg)
 	}
 	return nil
@@ -170,14 +170,16 @@ func (c *Controller) recvloop() {
 	defer close(c.recvDone)
 
 	if err := c.client.Receive(0, false, func(msg *protocol.Message, addr *net.UDPAddr) {
+		serial := Serial(msg.Target())
+
 		c.mu.RLock()
-		session, hasSession := c.sessions[addr.IP.String()]
+		session, hasSession := c.sessions[serial]
 		c.mu.RUnlock()
 
 		if state, ok := msg.Payload.(*packets.DeviceStateService); ok {
 			if !hasSession && state.Service == enums.DeviceServiceDEVICESERVICEUDP {
-				if err := c.addSession(addr, msg.Target()); err != nil {
-					log.WithError(err).WithField("serial", Serial(msg.Target())).Error("Failed to spin device worker")
+				if err := c.addSession(addr, serial); err != nil {
+					log.WithError(err).WithField("serial", serial).Error("Failed to spin device worker")
 				}
 			}
 		} else if hasSession {
@@ -185,7 +187,7 @@ func (c *Controller) recvloop() {
 			case session.inbound <- msg:
 			default:
 				// If the channel is full, we skip the message to avoid blocking.
-				log.WithField("serial", Serial(msg.Target())).
+				log.WithField("serial", serial).
 					WithField("payload", msg.Payload.PayloadType()).
 					Warning("Channel full, skipping message")
 			}

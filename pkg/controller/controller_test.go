@@ -18,8 +18,8 @@ func TestController(t *testing.T) {
 	var (
 		addr0   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
 		addr1   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 11)}
-		target0 = [8]byte{1, 0, 0, 0, 0, 0, 0, 0}
-		target1 = [8]byte{2, 0, 0, 0, 0, 0, 0, 0}
+		serial0 = Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
+		serial1 = Serial([8]byte{2, 0, 0, 0, 0, 0, 0, 0})
 	)
 	t.Run("Sets up default configuration", func(t *testing.T) {
 		mockClient := newMockClient()
@@ -47,7 +47,7 @@ func TestController(t *testing.T) {
 		ctrl, err := New(WithClient(mockClient))
 		require.NoError(t, err)
 
-		err = ctrl.Send(addr0, protocol.NewMessage(&packets.LightGet{}))
+		err = ctrl.Send(serial0, protocol.NewMessage(&packets.LightGet{}))
 		require.NoError(t, err)
 
 		ctrl.Close()
@@ -60,14 +60,14 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 		defer ctrl.Close()
 
-		err = ctrl.addSession(addr0, target0)
+		err = ctrl.addSession(addr0, serial0)
 		require.NoError(t, err)
 		assert.Equal(t, len(ctrl.sessions), 1)
 
-		s0 := ctrl.sessions[addr0.IP.String()]
+		s0 := ctrl.sessions[serial0]
 		assert.NotNil(t, s0)
 		assert.NotNil(t, s0.device)
-		assert.Equal(t, Serial(target0), s0.device.Serial)
+		assert.Equal(t, serial0, s0.device.Serial)
 	})
 
 	t.Run("Sends to an addr with session", func(t *testing.T) {
@@ -76,13 +76,13 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 
 		// Do not use NewDeviceSession to prevent runninng state update goroutine
-		session := &DeviceSession{sender: mockClient, device: NewDevice(addr0, target0), done: make(chan struct{})}
-		ctrl.sessions[addr0.IP.String()] = session
+		session := &DeviceSession{sender: mockClient, device: NewDevice(addr0, serial0), done: make(chan struct{})}
+		ctrl.sessions[serial0] = session
 
 		payload := &packets.LightGet{}
 		msg := protocol.NewMessage(payload)
 
-		err = ctrl.Send(addr0, protocol.NewMessage(&packets.LightGet{}))
+		err = ctrl.Send(serial0, protocol.NewMessage(&packets.LightGet{}))
 		require.NoError(t, err)
 		ctrl.Close()
 		assert.Equal(t, 1, len(mockClient.sends))
@@ -96,15 +96,15 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 		defer ctrl.Close()
 
-		err = ctrl.addSession(addr0, target0)
+		err = ctrl.addSession(addr0, serial0)
 		require.NoError(t, err)
-		err = ctrl.addSession(addr1, target1)
+		err = ctrl.addSession(addr1, serial1)
 		require.NoError(t, err)
 
 		devices := ctrl.GetDevices()
 		assert.Equal(t, 2, len(devices))
-		assert.Equal(t, Serial(target0), devices[0].Serial)
-		assert.Equal(t, Serial(target1), devices[1].Serial)
+		assert.Equal(t, serial0, devices[0].Serial)
+		assert.Equal(t, serial1, devices[1].Serial)
 
 	})
 
@@ -116,12 +116,12 @@ func TestController(t *testing.T) {
 
 		payload := &packets.DeviceStateService{Service: enums.DeviceServiceDEVICESERVICEUDP}
 		msg := protocol.NewMessage(payload)
-		msg.SetTarget(target0)
+		msg.SetTarget(serial0)
 
 		mockClient.inbound <- recvMsg{msg: msg, addr: addr0}
 		time.Sleep(10 * time.Millisecond)
 		assert.Equal(t, 1, len(ctrl.GetDevices()))
-		assert.Equal(t, Serial(target0), ctrl.GetDevices()[0].Serial)
+		assert.Equal(t, serial0, ctrl.GetDevices()[0].Serial)
 	})
 
 	t.Run("Routes state messages to device with session", func(t *testing.T) {
@@ -130,18 +130,18 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 		defer ctrl.Close()
 
-		err = ctrl.addSession(addr0, target0)
+		err = ctrl.addSession(addr0, serial0)
 		require.NoError(t, err)
 
 		label0 := [32]byte{0, 0, 0, 1}
 		payload := &packets.DeviceStateLabel{Label: label0}
 		msg := protocol.NewMessage(payload)
-		msg.SetTarget(target0)
+		msg.SetTarget(serial0)
 
 		mockClient.inbound <- recvMsg{msg: msg, addr: addr0}
 		time.Sleep(10 * time.Millisecond)
 		assert.Equal(t, 1, len(ctrl.GetDevices()))
-		assert.Equal(t, Serial(target0), ctrl.GetDevices()[0].Serial)
+		assert.Equal(t, serial0, ctrl.GetDevices()[0].Serial)
 	})
 
 	t.Run("Terminate sessions when closed", func(t *testing.T) {
@@ -150,9 +150,9 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 
 		session := &DeviceSession{
-			sender: mockClient, device: NewDevice(addr0, target0), done: make(chan struct{}),
+			sender: mockClient, device: NewDevice(addr0, serial0), done: make(chan struct{}),
 		}
-		ctrl.sessions[addr0.IP.String()] = session
+		ctrl.sessions[serial0] = session
 
 		ctrl.Close()
 		select {
@@ -166,7 +166,7 @@ func TestController(t *testing.T) {
 func BenchmarkControllerGetDevices(b *testing.B) {
 	var (
 		addr0   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
-		target0 = [8]byte{1, 0, 0, 0, 0, 0, 0, 0}
+		serial0 = Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
 	)
 
 	mockClient := newMockClient()
@@ -174,7 +174,7 @@ func BenchmarkControllerGetDevices(b *testing.B) {
 	require.NoError(b, err)
 	defer ctrl.Close()
 
-	err = ctrl.addSession(addr0, target0)
+	err = ctrl.addSession(addr0, serial0)
 	require.NoError(b, err)
 
 	msg := protocol.NewMessage(&packets.LightState{})
