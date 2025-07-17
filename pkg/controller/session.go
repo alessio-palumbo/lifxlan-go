@@ -132,6 +132,8 @@ func (s *DeviceSession) recvloop() {
 				s.device.Location = ParseLabel(p.Label)
 			case *packets.DeviceStateGroup:
 				s.device.Group = ParseLabel(p.Label)
+			case *packets.TileStateDeviceChain:
+				s.device.SetMatrixProperties(p)
 			case *packets.DeviceStateService, *packets.DeviceStateUnhandled: // Ignore these messages
 			default:
 				log.WithField("serial", s.device.Serial).

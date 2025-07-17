@@ -97,10 +97,19 @@ type Device struct {
 	Location        string
 	Group           string
 
+	// Device specific properties.
+	MatrixProperties MatrixProperties
+
 	// High Frequency updated fields.
 	Color      Color
 	PoweredOn  bool
 	LastSeenAt time.Time
+}
+
+type MatrixProperties struct {
+	Height      uint8
+	Width       uint8
+	ChainLength uint8
 }
 
 func NewDevice(address *net.UDPAddr, serial [8]byte) *Device {
@@ -125,6 +134,17 @@ func (d *Device) SetProductInfo(pid uint32) {
 	}
 }
 
+func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) {
+	if p.TileDevicesCount == 0 {
+		return
+	}
+	d.MatrixProperties = MatrixProperties{
+		Height:      p.TileDevices[0].Height,
+		Width:       p.TileDevices[0].Width,
+		ChainLength: p.TileDevicesCount,
+	}
+}
+
 // SortDevices sorts devices by label and if equal, by Serial.
 func SortDevices(devices []Device) {
 	slices.SortFunc(devices, func(a, b Device) int {
@@ -145,6 +165,7 @@ func DeviceStateMessages() []*protocol.Message {
 		protocol.NewMessage(&packets.DeviceGetHostFirmware{}),
 		protocol.NewMessage(&packets.DeviceGetLocation{}),
 		protocol.NewMessage(&packets.DeviceGetGroup{}),
+		protocol.NewMessage(&packets.TileGetDeviceChain{}),
 	}
 }
 
