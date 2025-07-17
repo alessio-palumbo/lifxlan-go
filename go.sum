@@ -2,6 +2,8 @@ github.com/alessio-palumbo/lifxprotocol-go v0.1.0 h1:9sjqTWqQLI4wj5yMirGPQaMvjCD
 github.com/alessio-palumbo/lifxprotocol-go v0.1.0/go.mod h1:Wvmw7KNc2ieF6CPM8Of0EdWW0e/w5nlTwK7sLwMDbJ0=
 github.com/alessio-palumbo/lifxregistry-go v0.1.0 h1:Nve6VqXpTfkhoPXsIfujJnb3r9sESzKZDCLvSosFsEc=
 github.com/alessio-palumbo/lifxregistry-go v0.1.0/go.mod h1:42P1qmWK+kzuqJp9cvWjFUgcru+10bZ+w4MSRAQGCZo=
+github.com/alessio-palumbo/lifxregistry-go v0.2.0 h1:PhdRMyMJbBhwM0VpQdWqWDrNcl20frOBsdWqzuDFnG8=
+github.com/alessio-palumbo/lifxregistry-go v0.2.0/go.mod h1:42P1qmWK+kzuqJp9cvWjFUgcru+10bZ+w4MSRAQGCZo=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

@@ -114,7 +114,7 @@ func (d *Device) SetProductInfo(pid uint32) {
 
 	if p.Features.Relays {
 		d.Type = DeviceTypeSwitch
-	} else if p.Features.Buttons {
+	} else if isLight(p.Features) && p.Features.Buttons {
 		d.Type = DeviceTypeHybrid
 	}
 
@@ -123,7 +123,6 @@ func (d *Device) SetProductInfo(pid uint32) {
 	} else if p.Features.Matrix {
 		d.LightType = LightTypeMatrix
 	}
-
 }
 
 // SortDevices sorts devices by label and if equal, by Serial.
@@ -152,4 +151,8 @@ func DeviceStateMessages() []*protocol.Message {
 // ParseLabel parses the raw byte label into a string and trims C-style null bytes.
 func ParseLabel(label [32]byte) string {
 	return strings.Trim(string(label[:]), "\u0000")
+}
+
+func isLight(f registry.FeatureSet) bool {
+	return f.Color || f.TemperatureRange != nil
 }

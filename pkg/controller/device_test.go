@@ -43,6 +43,15 @@ func TestSetProductInfo(t *testing.T) {
 				Type:         DeviceTypeSwitch,
 			},
 		},
+		"Hybrid": {
+			pid: 219,
+			want: &Device{
+				ProductID:    219,
+				RegistryName: "LIFX Luna US",
+				Type:         DeviceTypeHybrid,
+				LightType:    LightTypeMatrix,
+			},
+		},
 	}
 
 	for name, tt := range tests {
