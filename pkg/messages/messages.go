@@ -54,6 +54,17 @@ func SetColor(h, s, b *float64, k *uint16, d time.Duration, waveform enums.Light
 	return protocol.NewMessage(m)
 }
 
+func SetMatrixColors(startIndex, length, width uint8, colors [64]packets.LightHsbk, d time.Duration) *protocol.Message {
+	m := &packets.TileSet64{
+		TileIndex: startIndex,
+		Length:    length,
+		Rect:      packets.TileBufferRect{Width: width},
+		Duration:  uint32(d.Milliseconds()),
+		Colors:    colors,
+	}
+	return protocol.NewMessage(m)
+}
+
 // convertExternalToDeviceValue takes an external value and multiplier
 // and converts it into a device value 0-65535.
 func convertExternalToDeviceValue(v float64, multiplier float64) uint16 {
