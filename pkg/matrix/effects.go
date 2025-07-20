@@ -1,6 +1,8 @@
 package matrix
 
 import (
+	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/messages"
@@ -26,10 +28,25 @@ const (
 // SendFunc is an interface for sending protocol messages.
 type SendFunc = func(msg *protocol.Message) error
 
+// ErrStopped is the error returned when manually stopping an effect.
+var ErrStopped = fmt.Errorf("manual stop")
+
+// SendWithStop wraps a SendFunc with an atomic.Bool to manually stop the sender
+// at the next cycle.
+func SendWithStop(send SendFunc) (SendFunc, *atomic.Bool) {
+	var stopped atomic.Bool
+	return func(msg *protocol.Message) error {
+		if stopped.Load() {
+			return ErrStopped
+		}
+		return send(msg)
+	}, &stopped
+}
+
 // Waterfall applies the given colors sequentially on each row centering them, if possible.
 // It waits for the given interval before setting the next row.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
-func Waterfall(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, colors ...packets.LightHsbk) {
+func Waterfall(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, colors ...packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 
 	if len(colors) > m.Width {
@@ -38,52 +55,61 @@ func Waterfall(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode 
 	// Try to center the colors if possible.
 	x := (m.Width - len(colors)) / 2
 
-	repeatForCycles(cycles, func() {
+	return repeatForCycles(cycles, func() error {
 		switch mode {
 		case ChainModeSequential:
 			for ti := range m.ChainLength {
-				waterfall(m, send, d, x, ti, 1, colors...)
+				if err := waterfall(m, send, d, x, ti, 1, colors...); err != nil {
+					return err
+				}
 			}
+			return nil
 		case ChainModeSynced:
-			waterfall(m, send, d, x, 0, m.ChainLength, colors...)
+			return waterfall(m, send, d, x, 0, m.ChainLength, colors...)
 		default:
-			waterfall(m, send, d, x, 0, 1, colors...)
+			return waterfall(m, send, d, x, 0, 1, colors...)
 		}
 	})
 }
 
-func waterfall(m *Matrix, send SendFunc, d time.Duration, x, mIdx, mLength int, colors ...packets.LightHsbk) {
+func waterfall(m *Matrix, send SendFunc, d time.Duration, x, mIdx, mLength int, colors ...packets.LightHsbk) error {
 	m.Clear()
 
 	for i := range m.Height {
 		m.SetColors(x, i, colors...)
-		send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval))
+		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+			return err
+		}
 		time.Sleep(d)
 	}
+	return nil
 }
 
 // Rockets sequentially applies a color to a single pixel row by row wrapping at the end.
 // It waits for the given interval before setting the next pixel.
 // If multiple colors are provided colors are rotated on each row.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
-func Rockets(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, colors ...packets.LightHsbk) {
+func Rockets(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, colors ...packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 
-	repeatForCycles(cycles, func() {
+	return repeatForCycles(cycles, func() error {
 		switch mode {
 		case ChainModeSequential:
 			for ti := range m.ChainLength {
-				rockets(m, send, d, ti, 1, colors...)
+				if err := rockets(m, send, d, ti, 1, colors...); err != nil {
+					return err
+				}
 			}
+			return nil
 		case ChainModeSynced:
-			rockets(m, send, d, 0, m.ChainLength, colors...)
+			return rockets(m, send, d, 0, m.ChainLength, colors...)
 		default:
-			rockets(m, send, d, 0, 1, colors...)
+			return rockets(m, send, d, 0, 1, colors...)
 		}
 	})
 }
 
-func rockets(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength int, colors ...packets.LightHsbk) {
+func rockets(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength int, colors ...packets.LightHsbk) error {
 	m.Clear()
 
 	color := colors[0]
@@ -97,32 +123,38 @@ func rockets(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength int, color
 		m.Clear()
 
 		m.SetPixel(x, y, color)
-		send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval))
+		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+			return err
+		}
 		time.Sleep(d)
 	}
+	return nil
 }
 
 // Worm moves n pixels along the matrix wrapping and reversing at every row with a wave-like movement.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
-func Worm(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, size int, color packets.LightHsbk) {
+func Worm(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, size int, color packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	wormSize := min(max(size, 1), m.Width)
 
-	repeatForCycles(cycles, func() {
+	return repeatForCycles(cycles, func() error {
 		switch mode {
 		case ChainModeSequential:
 			for ti := range m.ChainLength {
-				worm(m, send, d, wormSize, ti, 1, color)
+				if err := worm(m, send, d, wormSize, ti, 1, color); err != nil {
+					return err
+				}
 			}
+			return nil
 		case ChainModeSynced:
-			worm(m, send, d, wormSize, 0, m.ChainLength, color)
+			return worm(m, send, d, wormSize, 0, m.ChainLength, color)
 		default:
-			worm(m, send, d, wormSize, 0, 1, color)
+			return worm(m, send, d, wormSize, 0, 1, color)
 		}
 	})
 }
 
-func worm(m *Matrix, send SendFunc, d time.Duration, wormSize, mIdx, mLength int, color packets.LightHsbk) {
+func worm(m *Matrix, send SendFunc, d time.Duration, wormSize, mIdx, mLength int, color packets.LightHsbk) error {
 	m.Clear()
 
 	pxCache := NewPixelCache(wormSize)
@@ -140,39 +172,47 @@ func worm(m *Matrix, send SendFunc, d time.Duration, wormSize, mIdx, mLength int
 		pxCache.SetPixel(i%wormSize, x, y)
 
 		m.SetPixel(x, y, color)
-		send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval))
+		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+			return err
+		}
 		time.Sleep(d)
 	}
 
 	// Clear the tail and turn off all pixels.
 	for _, p := range pxCache.Pixels() {
 		m.Clear(p)
-		send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval))
+		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+			return err
+		}
 		time.Sleep(d)
 	}
+	return nil
 }
 
 // Snake moves n pixels along the matrix wrapping and reversing at every row.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
-func Snake(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, size int, color packets.LightHsbk) {
+func Snake(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, size int, color packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	snakeSize := min(max(size, 1), m.Width)
 
-	repeatForCycles(cycles, func() {
+	return repeatForCycles(cycles, func() error {
 		switch mode {
 		case ChainModeSequential:
 			for ti := range m.ChainLength {
-				snake(m, send, d, snakeSize, ti, 1, color)
+				if err := snake(m, send, d, snakeSize, ti, 1, color); err != nil {
+					return err
+				}
 			}
+			return nil
 		case ChainModeSynced:
-			snake(m, send, d, snakeSize, 0, m.ChainLength, color)
+			return snake(m, send, d, snakeSize, 0, m.ChainLength, color)
 		default:
-			snake(m, send, d, snakeSize, 0, 1, color)
+			return snake(m, send, d, snakeSize, 0, 1, color)
 		}
 	})
 }
 
-func snake(m *Matrix, send SendFunc, d time.Duration, snakeSize, mIdx, mLength int, color packets.LightHsbk) {
+func snake(m *Matrix, send SendFunc, d time.Duration, snakeSize, mIdx, mLength int, color packets.LightHsbk) error {
 	m.Clear()
 
 	pxCache := NewPixelCache(snakeSize)
@@ -189,28 +229,37 @@ func snake(m *Matrix, send SendFunc, d time.Duration, snakeSize, mIdx, mLength i
 		pxCache.SetPixel(v, x, y)
 
 		m.SetPixel(x, y, color)
-		send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval))
+		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+			return nil
+		}
 		time.Sleep(d)
 	}
 
 	// Clear the tail and turn off all pixels.
 	for _, p := range pxCache.Pixels() {
 		m.Clear(p)
-		send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval))
+		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+			return err
+		}
 		time.Sleep(d)
 	}
+	return nil
 }
 
 // repeatForCycles repeats the given function for n cycles or indefinitely if cycles is 0.
-func repeatForCycles(cycles int, f func()) {
+func repeatForCycles(cycles int, f func() error) error {
 	if cycles > 0 {
 		for range cycles {
-			f()
+			if err := f(); err != nil {
+				return err
+			}
 		}
-		return
+		return nil
 	} else {
 		for {
-			f()
+			if err := f(); err != nil {
+				return err
+			}
 		}
 	}
 }
