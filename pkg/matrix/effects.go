@@ -25,6 +25,19 @@ const (
 	ChainModeSynced
 )
 
+// ParseChainMode converts an int to chainmode.
+// If invalid it return ChainModeNone.
+func ParseChainMode(m int) chainMode {
+	switch m {
+	case 1:
+		return ChainModeNone
+	case 2:
+		return ChainModeSequential
+	default:
+		return ChainModeNone
+	}
+}
+
 // SendFunc is an interface for sending protocol messages.
 type SendFunc = func(msg *protocol.Message) error
 
