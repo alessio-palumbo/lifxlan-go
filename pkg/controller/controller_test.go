@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/client"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
@@ -18,8 +19,8 @@ func TestController(t *testing.T) {
 	var (
 		addr0   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
 		addr1   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 11)}
-		serial0 = Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
-		serial1 = Serial([8]byte{2, 0, 0, 0, 0, 0, 0, 0})
+		serial0 = device.Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
+		serial1 = device.Serial([8]byte{2, 0, 0, 0, 0, 0, 0, 0})
 	)
 	t.Run("Sets up default configuration", func(t *testing.T) {
 		mockClient := newMockClient()
@@ -76,7 +77,7 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 
 		// Do not use NewDeviceSession to prevent runninng state update goroutine
-		session := &DeviceSession{sender: mockClient, device: NewDevice(addr0, serial0), done: make(chan struct{})}
+		session := &DeviceSession{sender: mockClient, device: device.NewDevice(addr0, serial0), done: make(chan struct{})}
 		ctrl.sessions[serial0] = session
 
 		payload := &packets.LightGet{}
@@ -150,7 +151,7 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 
 		session := &DeviceSession{
-			sender: mockClient, device: NewDevice(addr0, serial0), done: make(chan struct{}),
+			sender: mockClient, device: device.NewDevice(addr0, serial0), done: make(chan struct{}),
 		}
 		ctrl.sessions[serial0] = session
 
@@ -166,7 +167,7 @@ func TestController(t *testing.T) {
 func BenchmarkControllerGetDevices(b *testing.B) {
 	var (
 		addr0   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
-		serial0 = Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
+		serial0 = device.Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
 	)
 
 	mockClient := newMockClient()

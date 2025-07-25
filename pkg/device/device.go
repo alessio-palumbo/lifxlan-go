@@ -1,13 +1,13 @@
-package controller
+package device
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/alessio-palumbo/lifxregistry-go/gen/registry"
 )
@@ -66,6 +66,21 @@ func (l lightType) String() string {
 // Serial is a LIFX device serial as set in the protocol Header,
 // the first 6 bytes contains the serial number and the last 2 bytes are set to 0.
 type Serial [8]byte
+
+// SerialFromHex parses an hex string into a Serial.
+func SerialFromHex(hexStr string) (Serial, error) {
+	if len(hexStr) != 12 {
+		return Serial{}, fmt.Errorf("expected 12 hex chars (6 bytes), got %d", len(hexStr))
+	}
+
+	var b [8]byte
+	_, err := hex.Decode(b[:6], []byte(hexStr))
+	if err != nil {
+		return Serial{}, fmt.Errorf("decode error: %v", err)
+	}
+
+	return Serial(b), nil
+}
 
 // String converts a serial into its hexadecimal equivalent.
 func (s Serial) String() string {
@@ -154,19 +169,6 @@ func SortDevices(devices []Device) {
 		// If names are equal, order by serial
 		return strings.Compare(a.Serial.String(), b.Serial.String())
 	})
-}
-
-// DeviceStateMessages
-func DeviceStateMessages() []*protocol.Message {
-	return []*protocol.Message{
-		protocol.NewMessage(&packets.DeviceGetLabel{}),
-		protocol.NewMessage(&packets.DeviceGetVersion{}),
-		protocol.NewMessage(&packets.LightGet{}),
-		protocol.NewMessage(&packets.DeviceGetHostFirmware{}),
-		protocol.NewMessage(&packets.DeviceGetLocation{}),
-		protocol.NewMessage(&packets.DeviceGetGroup{}),
-		protocol.NewMessage(&packets.TileGetDeviceChain{}),
-	}
 }
 
 // ParseLabel parses the raw byte label into a string and trims C-style null bytes.

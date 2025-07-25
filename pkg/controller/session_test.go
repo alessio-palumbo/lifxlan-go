@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,7 @@ import (
 func TestSession(t *testing.T) {
 	var (
 		addr0   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
-		serial0 = Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
+		serial0 = device.Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
 
 		cfg0 = &Config{
 			discoveryPeriod:                 defaultDiscoveryPeriod,
@@ -41,7 +42,7 @@ func TestSession(t *testing.T) {
 		}
 
 		wantMsgs := []packets.Payload{}
-		for _, p := range DeviceStateMessages() {
+		for _, p := range deviceStateMessages() {
 			wantMsgs = append(wantMsgs, p.Payload)
 		}
 		assert.Equal(t, wantMsgs, gotMsgs)
@@ -107,8 +108,8 @@ func TestSession(t *testing.T) {
 		session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0)
 		require.NoError(t, err)
 
-		wantDevice := Device{
-			Serial: Serial(serial0), Address: addr0,
+		wantDevice := device.Device{
+			Serial: device.Serial(serial0), Address: addr0,
 		}
 		deviceSnapshot := session.DeviceSnapshot()
 		assert.Equal(t, wantDevice, deviceSnapshot)
@@ -124,7 +125,7 @@ func TestSession(t *testing.T) {
 		session.inbound <- protocol.NewMessage(&packets.LightState{Color: color, Power: math.MaxUint16})
 		time.Sleep(10 * time.Millisecond)
 		deviceSnapshot = session.DeviceSnapshot()
-		assert.Equal(t, NewColor(color), deviceSnapshot.Color)
+		assert.Equal(t, device.NewColor(color), deviceSnapshot.Color)
 		assert.True(t, deviceSnapshot.PoweredOn)
 
 		// Updates product info
@@ -133,7 +134,7 @@ func TestSession(t *testing.T) {
 		deviceSnapshot = session.DeviceSnapshot()
 		assert.Equal(t, 55, int(deviceSnapshot.ProductID))
 		assert.Equal(t, "LIFX Tile", deviceSnapshot.RegistryName)
-		assert.Equal(t, LightTypeMatrix, deviceSnapshot.LightType)
+		assert.Equal(t, device.LightTypeMatrix, deviceSnapshot.LightType)
 
 		// Updates firmware version
 		session.inbound <- protocol.NewMessage(&packets.DeviceStateHostFirmware{VersionMajor: 3, VersionMinor: 50})

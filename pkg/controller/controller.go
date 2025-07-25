@@ -8,6 +8,7 @@ import (
 
 	"github.com/alessio-palumbo/lifxlan-go/internal/logutil"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/client"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
@@ -29,7 +30,7 @@ type Controller struct {
 
 	closeOnce sync.Once
 	mu        sync.RWMutex
-	sessions  map[Serial]*DeviceSession
+	sessions  map[device.Serial]*DeviceSession
 }
 
 type Client interface {
@@ -54,7 +55,7 @@ func New(opts ...Option) (*Controller, error) {
 
 	ctrl := &Controller{
 		recvDone: make(chan struct{}),
-		sessions: make(map[Serial]*DeviceSession),
+		sessions: make(map[device.Serial]*DeviceSession),
 		cfg: &Config{
 			discoveryPeriod:                 defaultDiscoveryPeriod,
 			highFrequencyStateRefreshPeriod: defaulthighFrequencyStateRefreshPeriod,
@@ -129,7 +130,7 @@ func (c *Controller) periodicDiscovery() {
 }
 
 // addSession adds a new device session.
-func (c *Controller) addSession(addr *net.UDPAddr, serial Serial) error {
+func (c *Controller) addSession(addr *net.UDPAddr, serial device.Serial) error {
 	session, err := NewDeviceSession(addr, serial, c.client, c.cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create device session: %w", err)
@@ -143,7 +144,7 @@ func (c *Controller) addSession(addr *net.UDPAddr, serial Serial) error {
 }
 
 // Send sends the given message to the given UDP address, if a session exists.
-func (c *Controller) Send(serial Serial, msg *protocol.Message) error {
+func (c *Controller) Send(serial device.Serial, msg *protocol.Message) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if s, ok := c.sessions[serial]; ok {
@@ -153,15 +154,15 @@ func (c *Controller) Send(serial Serial, msg *protocol.Message) error {
 }
 
 // GetDevices returns the list of devices that have a session.
-func (c *Controller) GetDevices() []Device {
-	var devices []Device
+func (c *Controller) GetDevices() []device.Device {
+	var devices []device.Device
 	c.mu.RLock()
 	for _, session := range c.sessions {
 		devices = append(devices, session.DeviceSnapshot())
 	}
 	c.mu.RUnlock()
 
-	SortDevices(devices)
+	device.SortDevices(devices)
 	return devices
 }
 
@@ -170,7 +171,7 @@ func (c *Controller) recvloop() {
 	defer close(c.recvDone)
 
 	if err := c.client.Receive(0, false, func(msg *protocol.Message, addr *net.UDPAddr) {
-		serial := Serial(msg.Target())
+		serial := device.Serial(msg.Target())
 
 		c.mu.RLock()
 		session, hasSession := c.sessions[serial]
