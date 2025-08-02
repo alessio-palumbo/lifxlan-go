@@ -147,7 +147,7 @@ func (m *Matrix) DrawSquare(x, y, length int, palette ...packets.LightHsbk) {
 }
 
 func (m *Matrix) SetBorder(padding int, colors ...packets.LightHsbk) {
-	paddedY := min(padding, m.MaxX()/2, m.MaxY()/2)
+	paddedY := min(padding, m.MaxPadding())
 	length := m.Width - (padding * 2)
 	height := m.Height - (padding * 2)
 	x := m.SetXForAlignment(AlignCenter, length)
@@ -170,6 +170,10 @@ func (m *Matrix) MaxX() int {
 // MaxY is the last valid column index.
 func (m *Matrix) MaxY() int {
 	return m.Height - 1
+}
+
+func (m *Matrix) MaxPadding() int {
+	return min(m.MaxX()/2, m.MaxY()/2)
 }
 
 // FlattenColors converts the Colors' matrix into a 64-byte array that can be

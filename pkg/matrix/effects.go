@@ -2,9 +2,12 @@ package matrix
 
 import (
 	"fmt"
+	"math"
+	"math/rand/v2"
 	"sync/atomic"
 	"time"
 
+	"github.com/alessio-palumbo/lifxlan-go/pkg/iterator"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/messages"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
@@ -23,6 +26,15 @@ const (
 	ChainModeSequential
 	// ChainModeSynced applies the effect to the whole chain.
 	ChainModeSynced
+)
+
+type animationDirection int
+
+const (
+	AnimationDirectionInwards animationDirection = iota
+	AnimationDirectionOutwards
+	AnimationDirectionInOut
+	AnimationDirectionOutIn
 )
 
 // ParseChainMode converts an int to chainmode.
@@ -256,6 +268,67 @@ func snake(m *Matrix, send SendFunc, d time.Duration, snakeSize, mIdx, mLength i
 		}
 		time.Sleep(d)
 	}
+	return nil
+}
+
+// ConcentricFrames iterates according to the given direction drawing frams of variadic sizes.
+// If an optional color is supplied it is used as the fram color, otherwise the frame color
+// will randomly change at each iteration.
+// It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
+func ConcentricFrames(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, direction animationDirection, color *packets.LightHsbk) error {
+	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
+	var iterFunc func(yield func(int) bool)
+	maxSteps := m.MaxPadding() + 1
+
+	if color == nil {
+		color = &packets.LightHsbk{
+			Hue:        uint16(rand.UintN(math.MaxUint16)),
+			Saturation: 65535,
+			Brightness: 65535,
+			Kelvin:     3500,
+		}
+	}
+
+	switch direction {
+	case AnimationDirectionInwards:
+		iterFunc = iterator.IterateUp(0, maxSteps)
+	case AnimationDirectionOutwards:
+		iterFunc = iterator.IterateDown(maxSteps, 0)
+	case AnimationDirectionInOut:
+		iterFunc = iterator.BounceUp(maxSteps)
+	case AnimationDirectionOutIn:
+		iterFunc = iterator.BounceDown(maxSteps)
+	}
+
+	return repeatForCycles(cycles, func() error {
+		switch mode {
+		case ChainModeSequential:
+			for ti := range m.ChainLength {
+				if err := concentricFrames(m, send, d, ti, 1, iterFunc, *color); err != nil {
+					return err
+				}
+			}
+			return nil
+		case ChainModeSynced:
+			return concentricFrames(m, send, d, 0, m.ChainLength, iterFunc, *color)
+		default:
+			return concentricFrames(m, send, d, 0, 1, iterFunc, *color)
+		}
+	})
+}
+
+func concentricFrames(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength int, iterator func(yield func(int) bool), color packets.LightHsbk) error {
+	m.Clear()
+
+	for p := range iterator {
+		m.Clear()
+		m.SetBorder(p, color)
+		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+			return err
+		}
+		time.Sleep(d)
+	}
+
 	return nil
 }
 
