@@ -28,15 +28,6 @@ const (
 	ChainModeSynced
 )
 
-type animationDirection int
-
-const (
-	AnimationDirectionInwards animationDirection = iota
-	AnimationDirectionOutwards
-	AnimationDirectionInOut
-	AnimationDirectionOutIn
-)
-
 // ParseChainMode converts an int to chainmode.
 // If invalid it return ChainModeNone.
 func ParseChainMode(m int) chainMode {
@@ -47,6 +38,30 @@ func ParseChainMode(m int) chainMode {
 		return ChainModeSequential
 	default:
 		return ChainModeNone
+	}
+}
+
+type animationDirection int
+
+const (
+	AnimationDirectionInwards animationDirection = iota
+	AnimationDirectionOutwards
+	AnimationDirectionInOut
+	AnimationDirectionOutIn
+)
+
+// ParseAnimationDirection converts an int to animationDirection.
+// If invalid it return AnimationDirectionInwards.
+func ParseAnimationDirection(m int) animationDirection {
+	switch m {
+	case 1:
+		return AnimationDirectionOutwards
+	case 2:
+		return AnimationDirectionInOut
+	case 3:
+		return AnimationDirectionInOut
+	default:
+		return AnimationDirectionInwards
 	}
 }
 
