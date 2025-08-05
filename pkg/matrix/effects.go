@@ -295,15 +295,6 @@ func ConcentricFrames(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int
 	var iterFunc func(yield func(int) bool)
 	maxSteps := m.MaxPadding() + 1
 
-	if color == nil {
-		color = &packets.LightHsbk{
-			Hue:        uint16(rand.UintN(math.MaxUint16)),
-			Saturation: 65535,
-			Brightness: 65535,
-			Kelvin:     3500,
-		}
-	}
-
 	switch direction {
 	case AnimationDirectionInwards:
 		iterFunc = iterator.IterateUp(0, maxSteps)
@@ -319,25 +310,34 @@ func ConcentricFrames(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int
 		switch mode {
 		case ChainModeSequential:
 			for ti := range m.ChainLength {
-				if err := concentricFrames(m, send, d, ti, 1, iterFunc, *color); err != nil {
+				if err := concentricFrames(m, send, d, ti, 1, iterFunc, color); err != nil {
 					return err
 				}
 			}
 			return nil
 		case ChainModeSynced:
-			return concentricFrames(m, send, d, 0, m.ChainLength, iterFunc, *color)
+			return concentricFrames(m, send, d, 0, m.ChainLength, iterFunc, color)
 		default:
-			return concentricFrames(m, send, d, 0, 1, iterFunc, *color)
+			return concentricFrames(m, send, d, 0, 1, iterFunc, color)
 		}
 	})
 }
 
-func concentricFrames(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength int, iterator func(yield func(int) bool), color packets.LightHsbk) error {
+func concentricFrames(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength int, iterator func(yield func(int) bool), color *packets.LightHsbk) error {
 	m.Clear()
+
+	if color == nil {
+		color = &packets.LightHsbk{
+			Hue:        uint16(rand.UintN(math.MaxUint16)),
+			Saturation: 65535,
+			Brightness: 65535,
+			Kelvin:     3500,
+		}
+	}
 
 	for p := range iterator {
 		m.Clear()
-		m.SetBorder(p, color)
+		m.SetBorder(p, *color)
 		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
 			return err
 		}
