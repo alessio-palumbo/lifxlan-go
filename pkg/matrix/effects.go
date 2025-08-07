@@ -33,9 +33,9 @@ const (
 func ParseChainMode(m int) chainMode {
 	switch m {
 	case 1:
-		return ChainModeNone
-	case 2:
 		return ChainModeSequential
+	case 2:
+		return ChainModeSynced
 	default:
 		return ChainModeNone
 	}
@@ -59,7 +59,7 @@ func ParseAnimationDirection(m int) animationDirection {
 	case 2:
 		return AnimationDirectionInOut
 	case 3:
-		return AnimationDirectionInOut
+		return AnimationDirectionOutIn
 	default:
 		return AnimationDirectionInwards
 	}
