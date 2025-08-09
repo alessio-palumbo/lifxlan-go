@@ -155,9 +155,9 @@ func TestSession(t *testing.T) {
 		tileDevices := [16]packets.TileStateDevice{{Width: 8, Height: 8}, {Width: 8, Height: 8}}
 		session.inbound <- protocol.NewMessage(&packets.TileStateDeviceChain{TileDevicesCount: 2, TileDevices: tileDevices})
 		time.Sleep(10 * time.Millisecond)
-		assert.Equal(t, uint8(8), session.DeviceSnapshot().MatrixProperties.Height)
-		assert.Equal(t, uint8(8), session.DeviceSnapshot().MatrixProperties.Width)
-		assert.Equal(t, uint8(2), session.DeviceSnapshot().MatrixProperties.ChainLength)
+		assert.Equal(t, int(8), session.DeviceSnapshot().MatrixProperties.Height)
+		assert.Equal(t, int(8), session.DeviceSnapshot().MatrixProperties.Width)
+		assert.Equal(t, int(2), session.DeviceSnapshot().MatrixProperties.ChainLength)
 
 		// Updates LastSeeenAt
 		nowBeforeUpdate := time.Now()

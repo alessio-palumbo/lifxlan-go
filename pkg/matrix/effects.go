@@ -117,7 +117,7 @@ func waterfall(m *Matrix, send SendFunc, d time.Duration, x, mIdx, mLength int, 
 
 	for i := range m.Height {
 		m.SetColors(x, i, colors...)
-		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+		if err := send(messages.SetMatrixColors(mIdx, mLength, m.Width, m.FlattenColors(), minInterval)); err != nil {
 			return err
 		}
 		time.Sleep(d)
@@ -163,7 +163,7 @@ func rockets(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength int, color
 		m.Clear()
 
 		m.SetPixel(x, y, color)
-		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+		if err := send(messages.SetMatrixColors(mIdx, mLength, m.Width, m.FlattenColors(), minInterval)); err != nil {
 			return err
 		}
 		time.Sleep(d)
@@ -212,7 +212,7 @@ func worm(m *Matrix, send SendFunc, d time.Duration, wormSize, mIdx, mLength int
 		pxCache.SetPixel(i%wormSize, x, y)
 
 		m.SetPixel(x, y, color)
-		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+		if err := send(messages.SetMatrixColors(mIdx, mLength, m.Width, m.FlattenColors(), minInterval)); err != nil {
 			return err
 		}
 		time.Sleep(d)
@@ -221,7 +221,7 @@ func worm(m *Matrix, send SendFunc, d time.Duration, wormSize, mIdx, mLength int
 	// Clear the tail and turn off all pixels.
 	for _, p := range pxCache.Pixels() {
 		m.Clear(p)
-		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+		if err := send(messages.SetMatrixColors(mIdx, mLength, m.Width, m.FlattenColors(), minInterval)); err != nil {
 			return err
 		}
 		time.Sleep(d)
@@ -269,7 +269,7 @@ func snake(m *Matrix, send SendFunc, d time.Duration, snakeSize, mIdx, mLength i
 		pxCache.SetPixel(v, x, y)
 
 		m.SetPixel(x, y, color)
-		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+		if err := send(messages.SetMatrixColors(mIdx, mLength, m.Width, m.FlattenColors(), minInterval)); err != nil {
 			return nil
 		}
 		time.Sleep(d)
@@ -278,7 +278,7 @@ func snake(m *Matrix, send SendFunc, d time.Duration, snakeSize, mIdx, mLength i
 	// Clear the tail and turn off all pixels.
 	for _, p := range pxCache.Pixels() {
 		m.Clear(p)
-		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+		if err := send(messages.SetMatrixColors(mIdx, mLength, m.Width, m.FlattenColors(), minInterval)); err != nil {
 			return err
 		}
 		time.Sleep(d)
@@ -338,7 +338,7 @@ func concentricFrames(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength i
 	for p := range iterator {
 		m.Clear()
 		m.SetBorder(p, *color)
-		if err := send(messages.SetMatrixColors(uint8(mIdx), uint8(mLength), uint8(m.Width), m.FlattenColors(), minInterval)); err != nil {
+		if err := send(messages.SetMatrixColors(mIdx, mLength, m.Width, m.FlattenColors(), minInterval)); err != nil {
 			return err
 		}
 		time.Sleep(d)

@@ -88,6 +88,7 @@ func (s *DeviceSession) nextSeq() uint8 {
 // It uses a ticker for high frequency state changes and one for low frequency ones.
 func (s *DeviceSession) run() {
 	s.Send(deviceStateMessages()...)
+
 	hfTicker := time.NewTicker(s.cfg.highFrequencyStateRefreshPeriod)
 	lfTicker := time.NewTicker(s.cfg.lowFrequencyStateRefreshPeriod)
 
@@ -96,7 +97,7 @@ func (s *DeviceSession) run() {
 		case <-s.done:
 			return
 		case <-hfTicker.C:
-			s.Send(protocol.NewMessage(&packets.LightGet{}))
+			s.Send(s.device.HighFreqStateMessages()...)
 			hfTicker.Reset(s.cfg.highFrequencyStateRefreshPeriod)
 		case <-lfTicker.C:
 			s.Send(
@@ -136,6 +137,12 @@ func (s *DeviceSession) recvloop() {
 				s.device.Group = device.ParseLabel(p.Label)
 			case *packets.TileStateDeviceChain:
 				s.device.SetMatrixProperties(p)
+			case *packets.TileState64:
+				s.device.SetMatrixState(p)
+			case *packets.DeviceStatePower:
+				s.device.PoweredOn = p.Level > 0
+			case *packets.MultiZoneExtendedStateMultiZone:
+				// TODO
 			case *packets.DeviceStateService, *packets.DeviceStateUnhandled: // Ignore these messages
 			default:
 				log.WithField("serial", s.device.Serial).

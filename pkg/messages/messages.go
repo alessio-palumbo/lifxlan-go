@@ -54,11 +54,11 @@ func SetColor(h, s, b *float64, k *uint16, d time.Duration, waveform enums.Light
 	return protocol.NewMessage(m)
 }
 
-func SetMatrixColors(startIndex, length, width uint8, colors [64]packets.LightHsbk, d time.Duration) *protocol.Message {
+func SetMatrixColors(startIndex, length, width int, colors [64]packets.LightHsbk, d time.Duration) *protocol.Message {
 	m := &packets.TileSet64{
-		TileIndex: startIndex,
-		Length:    length,
-		Rect:      packets.TileBufferRect{Width: width},
+		TileIndex: uint8(startIndex),
+		Length:    uint8(length),
+		Rect:      packets.TileBufferRect{Width: uint8(width)},
 		Duration:  uint32(d.Milliseconds()),
 		Colors:    colors,
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/alessio-palumbo/lifxregistry-go/gen/registry"
 )
@@ -122,9 +123,10 @@ type Device struct {
 }
 
 type MatrixProperties struct {
-	Height      uint8
-	Width       uint8
-	ChainLength uint8
+	Height      int
+	Width       int
+	ChainLength int
+	ChainState  [][64]packets.LightHsbk
 }
 
 func NewDevice(address *net.UDPAddr, serial [8]byte) *Device {
@@ -149,14 +151,61 @@ func (d *Device) SetProductInfo(pid uint32) {
 	}
 }
 
+// SetMatrixProperties sets the matrix size and length properties
+// according to the first tile in the chain.
+// It also initialises the ChainState slice or resizes it according to the length.
 func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) {
 	if p.TileDevicesCount == 0 {
 		return
 	}
-	d.MatrixProperties = MatrixProperties{
-		Height:      p.TileDevices[0].Height,
-		Width:       p.TileDevices[0].Width,
-		ChainLength: p.TileDevicesCount,
+	firstIdx := int(p.StartIndex)
+	w, h, l := int(p.TileDevices[firstIdx].Width), int(p.TileDevices[firstIdx].Height), int(p.TileDevicesCount)
+	d.MatrixProperties.Width = w
+	d.MatrixProperties.Height = h
+	d.MatrixProperties.ChainLength = l
+
+	cl := len(d.MatrixProperties.ChainState)
+	switch {
+	case cl == 0:
+		d.MatrixProperties.ChainState = make([][64]packets.LightHsbk, l)
+	case cl < l:
+		for range l - cl {
+			d.MatrixProperties.ChainState = append(d.MatrixProperties.ChainState, [64]packets.LightHsbk{})
+		}
+	case cl > l:
+		d.MatrixProperties.ChainState = slices.Delete(d.MatrixProperties.ChainState, l, cl)
+	}
+}
+
+// SetMatrixState sets the colors of the matrix at the given index.
+func (d *Device) SetMatrixState(p *packets.TileState64) {
+	if int(p.TileIndex) > len(d.MatrixProperties.ChainState)-1 {
+		return
+	}
+	d.MatrixProperties.ChainState[p.TileIndex] = p.Colors
+}
+
+// HighFreqStateMessages returns a list of messages to gather state that
+// change often and should be polled frequently.
+// Messages differes according to device type.
+// TODO Handle switches.
+func (d *Device) HighFreqStateMessages() []*protocol.Message {
+	switch d.LightType {
+	case LightTypeMultiZone:
+		return []*protocol.Message{
+			protocol.NewMessage(&packets.DeviceGetPower{}),
+			protocol.NewMessage(&packets.MultiZoneExtendedGetColorZones{}),
+		}
+	case LightTypeMatrix:
+		return []*protocol.Message{
+			protocol.NewMessage(&packets.DeviceGetPower{}),
+			protocol.NewMessage(&packets.TileGet64{
+				Length: uint8(d.MatrixProperties.ChainLength),
+				Rect:   packets.TileBufferRect{Width: uint8(d.MatrixProperties.Width)},
+			}),
+		}
+	default:
+		return []*protocol.Message{protocol.NewMessage(&packets.LightGet{})}
 	}
 }
 
