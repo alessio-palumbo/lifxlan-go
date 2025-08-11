@@ -573,3 +573,90 @@ func TestSetBorder(t *testing.T) {
 		})
 	}
 }
+
+func TestFlattenColors(t *testing.T) {
+	color0 := packets.LightHsbk{Kelvin: 3500}
+	testCases := map[string]struct {
+		matrix *Matrix
+		setter func(m *Matrix)
+		want   [64]packets.LightHsbk
+	}{
+		"flatten colors: start": {
+			matrix: New(4, 4, 0),
+			setter: func(m *Matrix) { m.SetColors(0, 0, color0) },
+			want:   [64]packets.LightHsbk{color0},
+		},
+		"flatten colors: middle": {
+			matrix: New(4, 4, 0),
+			setter: func(m *Matrix) { m.SetColors(2, 1, color0) },
+			want: [64]packets.LightHsbk{
+				{}, {}, {}, {},
+				{}, {}, color0,
+			},
+		},
+		"flatten colors: end": {
+			matrix: New(4, 4, 0),
+			setter: func(m *Matrix) { m.SetColors(3, 3, color0) },
+			want: [64]packets.LightHsbk{
+				{}, {}, {}, {},
+				{}, {}, {}, {},
+				{}, {}, {}, {},
+				{}, {}, {}, color0,
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			tc.setter(tc.matrix)
+			assert.Equal(t, tc.matrix.FlattenColors(), tc.want)
+		})
+	}
+}
+
+func TestParseColors(t *testing.T) {
+	testCases := map[string]struct {
+		matrix *Matrix
+		colors [64]packets.LightHsbk
+		want   [][]packets.LightHsbk
+	}{
+		"parses colors": {
+			matrix: New(4, 4, 0),
+			colors: [64]packets.LightHsbk{
+				{Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500},
+				{}, {Kelvin: 3500}, {Kelvin: 3500}, {},
+				{Kelvin: 3500}, {Kelvin: 3500}, {}, {},
+				{Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500},
+			},
+			want: [][]packets.LightHsbk{
+				{{Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}},
+				{{}, {Kelvin: 3500}, {Kelvin: 3500}, {}},
+				{{Kelvin: 3500}, {Kelvin: 3500}, {}, {}},
+				{{Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}},
+			},
+		},
+		"parses colors: offset": {
+			matrix: New(4, 4, 0),
+			colors: [64]packets.LightHsbk{
+				{}, {}, {}, {},
+				{}, {}, {}, {},
+				{}, {}, {}, {},
+				{Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500},
+				{}, {Kelvin: 3500}, {Kelvin: 3500}, {},
+			},
+			want: [][]packets.LightHsbk{
+				{{}, {}, {}, {}},
+				{{}, {}, {}, {}},
+				{{}, {}, {}, {}},
+				{{Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}},
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			tc.matrix.ParseColors(tc.colors)
+			assert.Equal(t, tc.matrix.Colors, tc.want)
+		})
+	}
+}

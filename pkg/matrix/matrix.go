@@ -187,3 +187,7 @@ func (m *Matrix) FlattenColors() [64]packets.LightHsbk {
 	}
 	return colors
 }
+
+func (m *Matrix) ParseColors(colors [64]packets.LightHsbk) {
+	m.SetColors(0, 0, colors[:]...)
+}
