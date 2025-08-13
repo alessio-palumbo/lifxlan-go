@@ -209,6 +209,24 @@ func (d *Device) HighFreqStateMessages() []*protocol.Message {
 	}
 }
 
+// LowFreqStateMessages returns a list of messages to gather state that
+// does not change often and should be polled less frequently.
+// Messages differes according to device type.
+// TODO Handle switches.
+func (d *Device) LowFreqStateMessages() []*protocol.Message {
+	msg := []*protocol.Message{
+		protocol.NewMessage(&packets.DeviceGetLabel{}),
+		protocol.NewMessage(&packets.DeviceGetHostFirmware{}),
+		protocol.NewMessage(&packets.DeviceGetLocation{}),
+		protocol.NewMessage(&packets.DeviceGetGroup{}),
+	}
+
+	if d.LightType == LightTypeMatrix {
+		msg = append(msg, protocol.NewMessage(&packets.TileGetDeviceChain{}))
+	}
+	return msg
+}
+
 // SortDevices sorts devices by label and if equal, by Serial.
 func SortDevices(devices []Device) {
 	slices.SortFunc(devices, func(a, b Device) int {

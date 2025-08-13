@@ -3,6 +3,7 @@ package controller
 import (
 	"math"
 	"net"
+	"slices"
 	"testing"
 	"time"
 
@@ -42,7 +43,7 @@ func TestSession(t *testing.T) {
 		}
 
 		wantMsgs := []packets.Payload{}
-		for _, p := range deviceStateMessages() {
+		for _, p := range requiredStateMessages() {
 			wantMsgs = append(wantMsgs, p.Payload)
 		}
 		assert.Equal(t, wantMsgs, gotMsgs)
@@ -81,25 +82,24 @@ func TestSession(t *testing.T) {
 		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg)
 		require.NoError(t, err)
 
-		gotMsgs := make(map[uint16]int)
+		var gotMsgs []packets.Payload
+
 		timeout := time.After(10 * time.Millisecond)
 	outer:
 		for {
 			select {
 			case msg := <-mockClient.sends:
-				switch msg.Payload.PayloadType() {
-				case uint16(packets.PayloadTypeDeviceGetLabel), uint16(packets.PayloadTypeDeviceGetHostFirmware),
-					uint16(packets.PayloadTypeDeviceGetLocation), uint16(packets.PayloadTypeDeviceGetGroup):
-					gotMsgs[msg.Payload.PayloadType()]++
-				}
+				gotMsgs = append(gotMsgs, msg.Payload)
 			case <-timeout:
 				break outer
 			}
 		}
 
-		for _, n := range gotMsgs {
-			assert.Greater(t, n, 5)
+		var lowFreqMsgs []packets.Payload
+		for msg := range slices.Values(session.device.LowFreqStateMessages()) {
+			lowFreqMsgs = append(lowFreqMsgs, msg.Payload)
 		}
+		assert.Subset(t, gotMsgs, lowFreqMsgs)
 		session.Close()
 	})
 

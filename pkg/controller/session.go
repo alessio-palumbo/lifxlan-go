@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	defaultRecvBufferSize = 10
+	defaultRecvBufferSize  = 10
+	preflightHandshakeWait = time.Second
 )
 
 // sender is an interface that defines message sending.
@@ -84,10 +85,15 @@ func (s *DeviceSession) nextSeq() uint8 {
 	return uint8(s.seq.Add(1))
 }
 
-// run periodically query the device for state updates.
+// run performs a short-lived pre-flight handshake to gather required device state
+// after which it periodically queries the device for state updates.
 // It uses a ticker for high frequency state changes and one for low frequency ones.
 func (s *DeviceSession) run() {
-	s.Send(deviceStateMessages()...)
+	required := requiredStateMessages()
+	for len(required) > 0 {
+		s.Send(required...)
+		s.waitForOrTimeout(&required, preflightHandshakeWait)
+	}
 
 	hfTicker := time.NewTicker(s.cfg.highFrequencyStateRefreshPeriod)
 	lfTicker := time.NewTicker(s.cfg.lowFrequencyStateRefreshPeriod)
@@ -100,12 +106,7 @@ func (s *DeviceSession) run() {
 			s.Send(s.device.HighFreqStateMessages()...)
 			hfTicker.Reset(s.cfg.highFrequencyStateRefreshPeriod)
 		case <-lfTicker.C:
-			s.Send(
-				protocol.NewMessage(&packets.DeviceGetLabel{}),
-				protocol.NewMessage(&packets.DeviceGetHostFirmware{}),
-				protocol.NewMessage(&packets.DeviceGetLocation{}),
-				protocol.NewMessage(&packets.DeviceGetGroup{}),
-			)
+			s.Send(s.device.LowFreqStateMessages()...)
 			lfTicker.Reset(s.cfg.lowFrequencyStateRefreshPeriod)
 		}
 	}
@@ -158,9 +159,38 @@ func (s *DeviceSession) recvloop() {
 	}
 }
 
-// deviceStateMessages returns a list of protocol messages to gather information
+// waitForOrTimeout polls the list of messages at set intervals and check if they
+// have been fulfilled at which point it returns. The list is updated at each iteration
+// and if timeout occurs it returns early.
+func (s *DeviceSession) waitForOrTimeout(required *[]*protocol.Message, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for {
+		var retryMsgs []*protocol.Message
+		for _, m := range *required {
+			s.mu.RLock()
+			if f := messageDoneFuncs[m.Payload]; f != nil && !f(s.device) {
+				retryMsgs = append(retryMsgs, m)
+			}
+			s.mu.RUnlock()
+		}
+		*required = retryMsgs
+
+		if len(retryMsgs) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			// timed out with some messgaes not retried.
+			return
+		}
+
+		// polling delay
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// requiredStateMessages returns a list of protocol messages to gather critical information
 // about the state of a Device.
-func deviceStateMessages() []*protocol.Message {
+func requiredStateMessages() []*protocol.Message {
 	return []*protocol.Message{
 		protocol.NewMessage(&packets.DeviceGetLabel{}),
 		protocol.NewMessage(&packets.DeviceGetVersion{}),
@@ -170,4 +200,16 @@ func deviceStateMessages() []*protocol.Message {
 		protocol.NewMessage(&packets.DeviceGetGroup{}),
 		protocol.NewMessage(&packets.TileGetDeviceChain{}),
 	}
+}
+
+// messageDoneFuncs maps a message to a function to checks whether the message has been fulfilled.
+var messageDoneFuncs = map[packets.Payload]func(*device.Device) bool{
+	&packets.DeviceGetLabel{}:        func(d *device.Device) bool { return d.Label != "" },
+	&packets.DeviceGetVersion{}:      func(d *device.Device) bool { return d.ProductID > 0 },
+	&packets.DeviceGetHostFirmware{}: func(d *device.Device) bool { return d.FirmwareVersion != "" },
+	&packets.DeviceGetLocation{}:     func(d *device.Device) bool { return d.Location != "" },
+	&packets.DeviceGetGroup{}:        func(d *device.Device) bool { return d.Group != "" },
+	&packets.TileGetDeviceChain{}: func(d *device.Device) bool {
+		return d.LightType != device.LightTypeMatrix || d.MatrixProperties.ChainLength > 0
+	},
 }
