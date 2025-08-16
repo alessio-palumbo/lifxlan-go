@@ -581,12 +581,12 @@ func TestFlattenColors(t *testing.T) {
 		setter func(m *Matrix)
 		want   [64]packets.LightHsbk
 	}{
-		"flatten colors: start": {
+		"start": {
 			matrix: New(4, 4, 0),
 			setter: func(m *Matrix) { m.SetColors(0, 0, color0) },
 			want:   [64]packets.LightHsbk{color0},
 		},
-		"flatten colors: middle": {
+		"middle": {
 			matrix: New(4, 4, 0),
 			setter: func(m *Matrix) { m.SetColors(2, 1, color0) },
 			want: [64]packets.LightHsbk{
@@ -594,7 +594,7 @@ func TestFlattenColors(t *testing.T) {
 				{}, {}, color0,
 			},
 		},
-		"flatten colors: end": {
+		"end": {
 			matrix: New(4, 4, 0),
 			setter: func(m *Matrix) { m.SetColors(3, 3, color0) },
 			want: [64]packets.LightHsbk{
@@ -602,6 +602,29 @@ func TestFlattenColors(t *testing.T) {
 				{}, {}, {}, {},
 				{}, {}, {}, {},
 				{}, {}, {}, color0,
+			},
+		},
+		"smallest": {
+			matrix: New(2, 2, 0),
+			setter: func(m *Matrix) { m.SetColors(1, 0, color0) },
+			want: [64]packets.LightHsbk{
+				{}, color0,
+				{}, {},
+			},
+		},
+		"irregular: larger width": {
+			matrix: New(4, 2, 0),
+			setter: func(m *Matrix) { m.SetColors(3, 0, color0) },
+			want: [64]packets.LightHsbk{
+				{}, {}, {}, color0,
+			},
+		},
+		"irregular: larger height": {
+			matrix: New(2, 4, 0),
+			setter: func(m *Matrix) { m.SetColors(1, 1, color0) },
+			want: [64]packets.LightHsbk{
+				{}, {},
+				{}, color0,
 			},
 		},
 	}

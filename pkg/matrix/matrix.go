@@ -182,7 +182,7 @@ func (m *Matrix) FlattenColors() [64]packets.LightHsbk {
 	var colors [64]packets.LightHsbk
 	for y := range m.Height {
 		for x := range m.Width {
-			colors[y*m.Height+x] = m.Colors[y][x]
+			colors[y*m.Width+x] = m.Colors[y][x]
 		}
 	}
 	return colors
