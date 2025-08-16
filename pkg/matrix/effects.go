@@ -1,6 +1,7 @@
 package matrix
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
@@ -12,6 +13,8 @@ import (
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
+
+var ErrMissingColors = errors.New("missing colors")
 
 var (
 	minInterval = time.Millisecond
@@ -88,6 +91,9 @@ func SendWithStop(send SendFunc) (SendFunc, *atomic.Bool) {
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
 func Waterfall(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, colors ...packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
+	if len(colors) == 0 {
+		return ErrMissingColors
+	}
 
 	if len(colors) > m.Width {
 		colors = colors[:m.Width]
@@ -131,6 +137,9 @@ func waterfall(m *Matrix, send SendFunc, d time.Duration, x, mIdx, mLength int, 
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
 func Rockets(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, colors ...packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
+	if len(colors) == 0 {
+		return ErrMissingColors
+	}
 
 	return repeatForCycles(cycles, func() error {
 		switch mode {
