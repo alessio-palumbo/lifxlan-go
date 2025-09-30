@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	defaultRecvBufferSize  = 10
-	preflightHandshakeWait = time.Second
+	defaultRecvBufferSize     = 10
+	preflightHandshakeTimeout = 5 * time.Second
+	preflightHandshakeWait    = time.Second
 )
 
 // sender is an interface that defines message sending.
@@ -89,11 +90,7 @@ func (s *DeviceSession) nextSeq() uint8 {
 // after which it periodically queries the device for state updates.
 // It uses a ticker for high frequency state changes and one for low frequency ones.
 func (s *DeviceSession) run() {
-	required := requiredStateMessages()
-	for len(required) > 0 {
-		s.Send(required...)
-		s.waitForOrTimeout(&required, preflightHandshakeWait)
-	}
+	s.preflightHandshake(preflightHandshakeTimeout, preflightHandshakeWait)
 
 	hfTicker := time.NewTicker(s.cfg.highFrequencyStateRefreshPeriod)
 	lfTicker := time.NewTicker(s.cfg.lowFrequencyStateRefreshPeriod)
@@ -159,32 +156,41 @@ func (s *DeviceSession) recvloop() {
 	}
 }
 
-// waitForOrTimeout polls the list of messages at set intervals and check if they
-// have been fulfilled at which point it returns. The list is updated at each iteration
-// and if timeout occurs it returns early.
-func (s *DeviceSession) waitForOrTimeout(required *[]*protocol.Message, timeout time.Duration) {
+// preflightHandshake ensures the device session has a minimal known-good state
+// before starting the main periodic refresh loop.
+// It sends required state requests, waits for recvloop to update s.device,
+// and retries missing ones until all are satisfied or the deadline expires.
+func (s *DeviceSession) preflightHandshake(timeout, wait time.Duration) {
 	deadline := time.Now().Add(timeout)
-	for {
-		var retryMsgs []*protocol.Message
-		for _, m := range *required {
+	required := requiredStateMessages()
+
+	for len(required) > 0 {
+		s.Send(required...)
+
+		select {
+		case <-s.done:
+			return
+		case <-time.After(wait):
+			// shrink list of required messages after each wait
+			var retryMsgs []*protocol.Message
 			s.mu.RLock()
-			if f := messageDoneFuncs[m.Payload]; f != nil && !f(s.device) {
-				retryMsgs = append(retryMsgs, m)
+			for _, m := range required {
+				if f := messageDoneFuncs[m.Payload]; f != nil && !f(s.device) {
+					retryMsgs = append(retryMsgs, m)
+				}
 			}
 			s.mu.RUnlock()
+			required = retryMsgs
 		}
-		*required = retryMsgs
 
-		if len(retryMsgs) == 0 {
-			return
-		}
 		if time.Now().After(deadline) {
-			// timed out with some messgaes not retried.
+			if len(required) > 0 {
+				log.WithField("serial", s.device.Serial).
+					WithField("missing", len(required)).
+					Warning("Preflight timed out with missing messages")
+			}
 			return
 		}
-
-		// polling delay
-		time.Sleep(50 * time.Millisecond)
 	}
 }
 

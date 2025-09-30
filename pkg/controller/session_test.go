@@ -10,6 +10,8 @@ import (
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,4 +169,108 @@ func TestSession(t *testing.T) {
 
 		session.Close()
 	})
+}
+
+func Test_preflightHandshake(t *testing.T) {
+	var (
+		addr0   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
+		serial0 = device.Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
+
+		cfg0 = &Config{
+			discoveryPeriod:                 defaultDiscoveryPeriod,
+			highFrequencyStateRefreshPeriod: defaulthighFrequencyStateRefreshPeriod,
+			lowFrequencyStateRefreshPeriod:  defaultlowFrequencyStateRefreshPeriod,
+		}
+	)
+
+	testCases := map[string]struct {
+		msgs        []*protocol.Message
+		wantDevice  *device.Device
+		wantTimeout bool
+	}{
+		"single zone": {
+			msgs: []*protocol.Message{
+				protocol.NewMessage(&packets.DeviceStateLabel{Label: [32]byte{'S', 'Z'}}),
+				protocol.NewMessage(&packets.DeviceStateVersion{Product: 225}),
+				protocol.NewMessage(&packets.DeviceStateHostFirmware{VersionMajor: 3, VersionMinor: 90}),
+				protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'L'}}),
+				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
+			},
+			wantDevice: &device.Device{
+				Address: addr0, Serial: serial0,
+				Label: "SZ", ProductID: 225, FirmwareVersion: "3.90",
+				LightType: device.LightTypeSingleZone, Location: "L", Group: "G",
+			},
+		},
+		"multizone": {
+			msgs: []*protocol.Message{
+				protocol.NewMessage(&packets.DeviceStateLabel{Label: [32]byte{'M', 'Z'}}),
+				protocol.NewMessage(&packets.DeviceStateVersion{Product: 214}),
+				protocol.NewMessage(&packets.DeviceStateHostFirmware{VersionMajor: 3, VersionMinor: 90}),
+				protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'L'}}),
+				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
+			},
+			wantDevice: &device.Device{
+				Address: addr0, Serial: serial0,
+				Label: "MZ", ProductID: 214, FirmwareVersion: "3.90",
+				LightType: device.LightTypeMultiZone, Location: "L", Group: "G",
+			},
+		},
+		"matrix": {
+			msgs: []*protocol.Message{
+				protocol.NewMessage(&packets.DeviceStateLabel{Label: [32]byte{'M', 'X'}}),
+				protocol.NewMessage(&packets.DeviceStateVersion{Product: 201}),
+				protocol.NewMessage(&packets.DeviceStateHostFirmware{VersionMajor: 3, VersionMinor: 90}),
+				protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'L'}}),
+				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
+				protocol.NewMessage(&packets.TileStateDeviceChain{TileDevicesCount: 1, TileDevices: [16]packets.TileStateDevice{{Width: 3}}}),
+			},
+			wantDevice: &device.Device{
+				Address: addr0, Serial: serial0,
+				Label: "MX", ProductID: 201, FirmwareVersion: "3.90",
+				LightType: device.LightTypeMatrix, Location: "L", Group: "G",
+				MatrixProperties: device.MatrixProperties{ChainLength: 1, Width: 3, ChainState: [][64]packets.LightHsbk{{}}},
+			},
+		},
+		"times out with missing fields": {
+			msgs: []*protocol.Message{
+				protocol.NewMessage(&packets.DeviceStateVersion{Product: 225}),
+			},
+			wantDevice: &device.Device{
+				Address: addr0, Serial: serial0, ProductID: 225, LightType: device.LightTypeSingleZone,
+			},
+		},
+	}
+
+	// Make wait times testable
+	preflightHandshakeTimeout := 2 * time.Millisecond
+	preflightHandshakeWait := 5 * time.Millisecond
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			mockClient := newMockClient()
+			session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0)
+			require.NoError(t, err)
+
+			done := make(chan struct{})
+			go func() {
+				session.preflightHandshake(preflightHandshakeTimeout, preflightHandshakeWait)
+				close(done)
+			}()
+
+			for _, msg := range tc.msgs {
+				session.inbound <- msg
+			}
+
+			select {
+			case <-done:
+			case <-time.After(10 * time.Millisecond):
+				t.Fatal("Timed out")
+			}
+
+			if diff := cmp.Diff(session.device, tc.wantDevice, cmpopts.IgnoreFields(device.Device{}, "RegistryName", "LastSeenAt")); diff != "" {
+				t.Fatal("Got diff in device:\n", diff)
+			}
+		})
+	}
 }
