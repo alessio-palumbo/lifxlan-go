@@ -17,8 +17,13 @@ import (
 
 const (
 	defaultDiscoveryPeriod                 = 500 * time.Millisecond
-	defaulthighFrequencyStateRefreshPeriod = 10 * time.Second
-	defaultlowFrequencyStateRefreshPeriod  = 2 * time.Minute
+	defaultHighFrequencyStateRefreshPeriod = 10 * time.Second
+	defaultLowFrequencyStateRefreshPeriod  = 2 * time.Minute
+
+	preflightHandshakeTimeout = 5 * time.Second
+	preflightHandshakeWait    = time.Second
+	minLivenessTimeout        = 30 * time.Second
+	livenessTimeoutMultiplier = 5
 )
 
 // Controller manages discovery and message routing for multiple
@@ -43,9 +48,35 @@ type Client interface {
 
 // Config contains configurable options for discovery and state updates.
 type Config struct {
+	// Configurable
 	discoveryPeriod                 time.Duration
 	highFrequencyStateRefreshPeriod time.Duration
 	lowFrequencyStateRefreshPeriod  time.Duration
+
+	// Non configurable
+	deviceLivenessTimeout     time.Duration
+	preflightHandshakeTimeout time.Duration
+	preflightHandshakeWait    time.Duration
+}
+
+// setLivenessTimeout sets the inactivity period after which a device is considered
+// offline and its session marked for termination.
+//
+// The timeout is derived from the shorter of the configured high- and low-frequency
+// refresh periods, multiplied by a user-defined multiplier to tolerate jitter or
+// occasional packet loss. This ensures that as long as either probe type is running,
+// the device is expected to respond within this window.
+//
+// A minimum threshold is enforced to avoid overly aggressive checks when very low
+// refresh periods are configured (e.g. 1s). No maximum is applied, since the probe
+// intervals themselves define the heartbeat expectation.
+func (c *Config) setLivenessTimeout() {
+	t := min(c.highFrequencyStateRefreshPeriod, c.lowFrequencyStateRefreshPeriod) * time.Duration(livenessTimeoutMultiplier)
+	if t > minLivenessTimeout {
+		c.deviceLivenessTimeout = t
+		return
+	}
+	c.deviceLivenessTimeout = minLivenessTimeout
 }
 
 // New returns a Controller that periodically discovers LIFX devices
@@ -58,8 +89,10 @@ func New(opts ...Option) (*Controller, error) {
 		sessions: make(map[device.Serial]*DeviceSession),
 		cfg: &Config{
 			discoveryPeriod:                 defaultDiscoveryPeriod,
-			highFrequencyStateRefreshPeriod: defaulthighFrequencyStateRefreshPeriod,
-			lowFrequencyStateRefreshPeriod:  defaultlowFrequencyStateRefreshPeriod,
+			highFrequencyStateRefreshPeriod: defaultHighFrequencyStateRefreshPeriod,
+			lowFrequencyStateRefreshPeriod:  defaultLowFrequencyStateRefreshPeriod,
+			preflightHandshakeTimeout:       preflightHandshakeTimeout,
+			preflightHandshakeWait:          preflightHandshakeWait,
 		},
 	}
 	for _, opt := range opts {
@@ -67,6 +100,8 @@ func New(opts ...Option) (*Controller, error) {
 			return nil, err
 		}
 	}
+	// Set liveness timeout after any option has been applied.
+	ctrl.cfg.setLivenessTimeout()
 
 	if ctrl.client == nil {
 		c, err := client.NewClient(nil)
@@ -131,7 +166,8 @@ func (c *Controller) periodicDiscovery() {
 
 // addSession adds a new device session.
 func (c *Controller) addSession(addr *net.UDPAddr, serial device.Serial) error {
-	session, err := NewDeviceSession(addr, serial, c.client, c.cfg)
+	cb := func(serial device.Serial) { c.terminateSession(serial) }
+	session, err := NewDeviceSession(addr, serial, c.client, c.cfg, cb)
 	if err != nil {
 		return fmt.Errorf("failed to create device session: %w", err)
 	}
@@ -141,6 +177,16 @@ func (c *Controller) addSession(addr *net.UDPAddr, serial device.Serial) error {
 	c.mu.Unlock()
 
 	return nil
+}
+
+// terminateSession terminates a device session.
+func (c *Controller) terminateSession(serial device.Serial) {
+	c.mu.Lock()
+	if session, ok := c.sessions[serial]; ok {
+		session.Close()
+		delete(c.sessions, serial)
+	}
+	c.mu.Unlock()
 }
 
 // Send sends the given message to the given UDP address, if a session exists.

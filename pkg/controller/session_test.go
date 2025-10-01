@@ -23,14 +23,20 @@ func TestSession(t *testing.T) {
 
 		cfg0 = &Config{
 			discoveryPeriod:                 defaultDiscoveryPeriod,
-			highFrequencyStateRefreshPeriod: defaulthighFrequencyStateRefreshPeriod,
-			lowFrequencyStateRefreshPeriod:  defaultlowFrequencyStateRefreshPeriod,
+			highFrequencyStateRefreshPeriod: defaultHighFrequencyStateRefreshPeriod,
+			lowFrequencyStateRefreshPeriod:  defaultLowFrequencyStateRefreshPeriod,
+			// Skip preflight
+			preflightHandshakeTimeout: time.Millisecond,
+			preflightHandshakeWait:    time.Millisecond,
+			deviceLivenessTimeout:     minLivenessTimeout,
 		}
+
+		onTimeout = func(device.Serial) {}
 	)
 
 	t.Run("Sends initial state messages", func(t *testing.T) {
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0)
+		session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0, onTimeout)
 		require.NoError(t, err)
 
 		var gotMsgs []packets.Payload
@@ -56,7 +62,7 @@ func TestSession(t *testing.T) {
 		cfg := *cfg0
 		cfg.highFrequencyStateRefreshPeriod = time.Millisecond
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg)
+		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg, onTimeout)
 		require.NoError(t, err)
 
 		var gotMsgs int
@@ -65,7 +71,7 @@ func TestSession(t *testing.T) {
 		for {
 			select {
 			case msg := <-mockClient.sends:
-				if msg.Payload == (&packets.LightGet{}) {
+				if msg.Type() == uint16(packets.PayloadTypeLightGet) {
 					gotMsgs++
 				}
 			case <-timeout:
@@ -73,7 +79,7 @@ func TestSession(t *testing.T) {
 			}
 		}
 
-		assert.Greater(t, 5, gotMsgs)
+		assert.Greater(t, gotMsgs, 5)
 		session.Close()
 	})
 
@@ -81,16 +87,25 @@ func TestSession(t *testing.T) {
 		cfg := *cfg0
 		cfg.lowFrequencyStateRefreshPeriod = time.Millisecond
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg)
+		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg, onTimeout)
 		require.NoError(t, err)
 
 		var gotMsgs []packets.Payload
-
 		timeout := time.After(10 * time.Millisecond)
+
+		preflighMsgs := make(map[uint16]struct{})
+		for _, msg := range requiredStateMessages() {
+			preflighMsgs[msg.Type()] = struct{}{}
+		}
 	outer:
 		for {
 			select {
 			case msg := <-mockClient.sends:
+				// Skip any preflightMsgs
+				if _, ok := preflighMsgs[msg.Type()]; ok {
+					delete(preflighMsgs, msg.Type())
+					continue
+				}
 				gotMsgs = append(gotMsgs, msg.Payload)
 			case <-timeout:
 				break outer
@@ -105,9 +120,22 @@ func TestSession(t *testing.T) {
 		session.Close()
 	})
 
+	t.Run("It terminates when liveness probe is reached", func(t *testing.T) {
+		cfg := *cfg0
+		cfg.deviceLivenessTimeout = time.Millisecond
+		mockClient := newMockClient()
+		rmChan := make(chan device.Serial, 1)
+		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg, func(d device.Serial) { rmChan <- d })
+		require.NoError(t, err)
+
+		rmSerial := <-rmChan
+		assert.Equal(t, serial0, rmSerial)
+		session.Close()
+	})
+
 	t.Run("Updates state", func(t *testing.T) {
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0)
+		session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0, onTimeout)
 		require.NoError(t, err)
 
 		wantDevice := device.Device{
@@ -178,8 +206,8 @@ func Test_preflightHandshake(t *testing.T) {
 
 		cfg0 = &Config{
 			discoveryPeriod:                 defaultDiscoveryPeriod,
-			highFrequencyStateRefreshPeriod: defaulthighFrequencyStateRefreshPeriod,
-			lowFrequencyStateRefreshPeriod:  defaultlowFrequencyStateRefreshPeriod,
+			highFrequencyStateRefreshPeriod: defaultHighFrequencyStateRefreshPeriod,
+			lowFrequencyStateRefreshPeriod:  defaultLowFrequencyStateRefreshPeriod,
 		}
 	)
 
@@ -249,8 +277,15 @@ func Test_preflightHandshake(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			mockClient := newMockClient()
-			session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0)
-			require.NoError(t, err)
+			session := &DeviceSession{
+				sender:    mockClient,
+				device:    device.NewDevice(addr0, serial0),
+				inbound:   make(chan *protocol.Message, defaultRecvBufferSize),
+				done:      make(chan struct{}),
+				cfg:       cfg0,
+				onTimeout: func(device.Serial) {},
+			}
+			go session.recvloop()
 
 			done := make(chan struct{})
 			go func() {

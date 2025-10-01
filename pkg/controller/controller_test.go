@@ -29,8 +29,9 @@ func TestController(t *testing.T) {
 		defer ctrl.Close()
 
 		assert.Equal(t, defaultDiscoveryPeriod, ctrl.cfg.discoveryPeriod)
-		assert.Equal(t, defaulthighFrequencyStateRefreshPeriod, ctrl.cfg.highFrequencyStateRefreshPeriod)
-		assert.Equal(t, defaultlowFrequencyStateRefreshPeriod, ctrl.cfg.lowFrequencyStateRefreshPeriod)
+		assert.Equal(t, defaultHighFrequencyStateRefreshPeriod, ctrl.cfg.highFrequencyStateRefreshPeriod)
+		assert.Equal(t, defaultLowFrequencyStateRefreshPeriod, ctrl.cfg.lowFrequencyStateRefreshPeriod)
+		assert.Equal(t, 50*time.Second, ctrl.cfg.deviceLivenessTimeout)
 	})
 
 	t.Run("Performs continuous discovery", func(t *testing.T) {
@@ -55,7 +56,7 @@ func TestController(t *testing.T) {
 		assert.Equal(t, len(mockClient.sends), 0)
 	})
 
-	t.Run("Adds sessions", func(t *testing.T) {
+	t.Run("Adds/Terminates sessions", func(t *testing.T) {
 		mockClient := newMockClient()
 		ctrl, err := New(WithClient(mockClient))
 		require.NoError(t, err)
@@ -69,6 +70,9 @@ func TestController(t *testing.T) {
 		assert.NotNil(t, s0)
 		assert.NotNil(t, s0.device)
 		assert.Equal(t, serial0, s0.device.Serial)
+
+		ctrl.terminateSession(serial0)
+		assert.Equal(t, len(ctrl.sessions), 0)
 	})
 
 	t.Run("Sends to an addr with session", func(t *testing.T) {

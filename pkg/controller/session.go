@@ -14,9 +14,7 @@ import (
 )
 
 const (
-	defaultRecvBufferSize     = 10
-	preflightHandshakeTimeout = 5 * time.Second
-	preflightHandshakeWait    = time.Second
+	defaultRecvBufferSize = 10
 )
 
 // sender is an interface that defines message sending.
@@ -31,6 +29,8 @@ type DeviceSession struct {
 	seq     atomic.Uint32
 	done    chan struct{}
 	cfg     *Config
+	// onTimeout is a callback to terminate the session when the livenessTimeout is reached
+	onTimeout func(device.Serial)
 
 	// mu protects read/write access of DeviceState
 	mu     sync.RWMutex
@@ -40,13 +40,14 @@ type DeviceSession struct {
 // NewDeviceSession creates a new DeviceSession for the given device.
 // It spins up a goroutine to periodically query devices for state updates and
 // a second one to parse devices messages and update Device state.
-func NewDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cfg *Config) (*DeviceSession, error) {
+func NewDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cfg *Config, onTimeout func(device.Serial)) (*DeviceSession, error) {
 	ds := &DeviceSession{
-		sender:  sender,
-		device:  device.NewDevice(addr, serial),
-		inbound: make(chan *protocol.Message, defaultRecvBufferSize),
-		done:    make(chan struct{}),
-		cfg:     cfg,
+		sender:    sender,
+		device:    device.NewDevice(addr, serial),
+		inbound:   make(chan *protocol.Message, defaultRecvBufferSize),
+		done:      make(chan struct{}),
+		cfg:       cfg,
+		onTimeout: onTimeout,
 	}
 
 	go ds.recvloop()
@@ -90,10 +91,12 @@ func (s *DeviceSession) nextSeq() uint8 {
 // after which it periodically queries the device for state updates.
 // It uses a ticker for high frequency state changes and one for low frequency ones.
 func (s *DeviceSession) run() {
-	s.preflightHandshake(preflightHandshakeTimeout, preflightHandshakeWait)
+	s.preflightHandshake(s.cfg.preflightHandshakeTimeout, s.cfg.preflightHandshakeWait)
 
 	hfTicker := time.NewTicker(s.cfg.highFrequencyStateRefreshPeriod)
 	lfTicker := time.NewTicker(s.cfg.lowFrequencyStateRefreshPeriod)
+	// Check twice inside liveness timeout window.
+	livenessTicker := time.NewTicker(s.cfg.deviceLivenessTimeout / 2)
 
 	for {
 		select {
@@ -105,6 +108,17 @@ func (s *DeviceSession) run() {
 		case <-lfTicker.C:
 			s.Send(s.device.LowFreqStateMessages()...)
 			lfTicker.Reset(s.cfg.lowFrequencyStateRefreshPeriod)
+		case <-livenessTicker.C:
+			s.mu.RLock()
+			last := s.device.LastSeenAt
+			s.mu.RUnlock()
+
+			if time.Since(last) > s.cfg.deviceLivenessTimeout {
+				log.WithField("serial", s.device.Serial).
+					Warn("Device not seen for too long, terminating session")
+				s.onTimeout(s.device.Serial)
+				return
+			}
 		}
 	}
 }
