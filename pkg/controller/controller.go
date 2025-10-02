@@ -24,6 +24,8 @@ const (
 	preflightHandshakeWait    = time.Second
 	minLivenessTimeout        = 30 * time.Second
 	livenessTimeoutMultiplier = 5
+
+	sessionsTerminationTimeout = 2 * time.Second
 )
 
 // Controller manages discovery and message routing for multiple
@@ -34,6 +36,7 @@ type Controller struct {
 	cfg      *Config
 
 	closeOnce sync.Once
+	wg        sync.WaitGroup
 	mu        sync.RWMutex
 	sessions  map[device.Serial]*DeviceSession
 }
@@ -131,12 +134,22 @@ func (c *Controller) Close() error {
 		<-c.recvDone
 		c.client.Close()
 
-		for serial, session := range c.sessions {
-			if err := session.Close(); err != nil {
-				log.WithError(err).WithField("serial", serial).Error("Failed to close device session")
-			}
+		for serial := range c.sessions {
+			c.terminateSession(serial)
 		}
-		clear(c.sessions)
+
+		done := make(chan struct{})
+		go func() {
+			c.wg.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(sessionsTerminationTimeout):
+			log.Warning("Session termination timeout reached")
+		}
+
 		log.Info("Controller closed")
 	})
 
@@ -147,6 +160,29 @@ func (c *Controller) Close() error {
 func (c *Controller) Discover() error {
 	msg := protocol.NewMessage(&packets.DeviceGetService{})
 	return c.client.SendBroadcast(msg)
+}
+
+// Send sends the given message to the given UDP address, if a session exists.
+func (c *Controller) Send(serial device.Serial, msg *protocol.Message) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if s, ok := c.sessions[serial]; ok {
+		return s.Send(msg)
+	}
+	return nil
+}
+
+// GetDevices returns the list of devices that have a session.
+func (c *Controller) GetDevices() []device.Device {
+	c.mu.RLock()
+	devices := make([]device.Device, 0, len(c.sessions))
+	for _, session := range c.sessions {
+		devices = append(devices, session.DeviceSnapshot())
+	}
+	c.mu.RUnlock()
+
+	device.SortDevices(devices)
+	return devices
 }
 
 // periodicDiscovery periodically looks for new devices on the network.
@@ -165,51 +201,24 @@ func (c *Controller) periodicDiscovery() {
 }
 
 // addSession adds a new device session.
-func (c *Controller) addSession(addr *net.UDPAddr, serial device.Serial) error {
+func (c *Controller) addSession(addr *net.UDPAddr, serial device.Serial) {
+	c.wg.Add(1)
 	cb := func(serial device.Serial) { c.terminateSession(serial) }
-	session, err := NewDeviceSession(addr, serial, c.client, c.cfg, cb)
-	if err != nil {
-		return fmt.Errorf("failed to create device session: %w", err)
-	}
+	session := NewDeviceSession(addr, serial, c.client, c.cfg, c.wg.Done, cb)
 
 	c.mu.Lock()
 	c.sessions[serial] = session
 	c.mu.Unlock()
-
-	return nil
 }
 
 // terminateSession terminates a device session.
 func (c *Controller) terminateSession(serial device.Serial) {
 	c.mu.Lock()
 	if session, ok := c.sessions[serial]; ok {
-		session.Close()
 		delete(c.sessions, serial)
+		session.Close()
 	}
 	c.mu.Unlock()
-}
-
-// Send sends the given message to the given UDP address, if a session exists.
-func (c *Controller) Send(serial device.Serial, msg *protocol.Message) error {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if s, ok := c.sessions[serial]; ok {
-		return s.Send(msg)
-	}
-	return nil
-}
-
-// GetDevices returns the list of devices that have a session.
-func (c *Controller) GetDevices() []device.Device {
-	var devices []device.Device
-	c.mu.RLock()
-	for _, session := range c.sessions {
-		devices = append(devices, session.DeviceSnapshot())
-	}
-	c.mu.RUnlock()
-
-	device.SortDevices(devices)
-	return devices
 }
 
 // recv listens for incoming messages from devices and dispatches them to the appropriate session.
@@ -225,9 +234,7 @@ func (c *Controller) recvloop() {
 
 		if state, ok := msg.Payload.(*packets.DeviceStateService); ok {
 			if !hasSession && state.Service == enums.DeviceServiceDEVICESERVICEUDP {
-				if err := c.addSession(addr, serial); err != nil {
-					log.WithError(err).WithField("serial", serial).Error("Failed to spin device worker")
-				}
+				c.addSession(addr, serial)
 			}
 		} else if hasSession {
 			select {

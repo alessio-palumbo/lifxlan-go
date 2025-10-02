@@ -1,6 +1,7 @@
 package device
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -234,7 +235,7 @@ func SortDevices(devices []Device) {
 			return n
 		}
 		// If names are equal, order by serial
-		return strings.Compare(a.Serial.String(), b.Serial.String())
+		return bytes.Compare(a.Serial[:], b.Serial[:])
 	})
 }
 

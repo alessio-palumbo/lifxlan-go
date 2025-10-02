@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"math/rand"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -62,8 +64,7 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 		defer ctrl.Close()
 
-		err = ctrl.addSession(addr0, serial0)
-		require.NoError(t, err)
+		ctrl.addSession(addr0, serial0)
 		assert.Equal(t, len(ctrl.sessions), 1)
 
 		s0 := ctrl.sessions[serial0]
@@ -83,6 +84,7 @@ func TestController(t *testing.T) {
 		// Do not use NewDeviceSession to prevent runninng state update goroutine
 		session := &DeviceSession{sender: mockClient, device: device.NewDevice(addr0, serial0), done: make(chan struct{})}
 		ctrl.sessions[serial0] = session
+		ctrl.wg.Add(1)
 
 		payload := &packets.LightGet{}
 		msg := protocol.NewMessage(payload)
@@ -101,10 +103,8 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 		defer ctrl.Close()
 
-		err = ctrl.addSession(addr0, serial0)
-		require.NoError(t, err)
-		err = ctrl.addSession(addr1, serial1)
-		require.NoError(t, err)
+		ctrl.addSession(addr0, serial0)
+		ctrl.addSession(addr1, serial1)
 
 		devices := ctrl.GetDevices()
 		assert.Equal(t, 2, len(devices))
@@ -135,8 +135,7 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 		defer ctrl.Close()
 
-		err = ctrl.addSession(addr0, serial0)
-		require.NoError(t, err)
+		ctrl.addSession(addr0, serial0)
 
 		label0 := [32]byte{0, 0, 0, 1}
 		payload := &packets.DeviceStateLabel{Label: label0}
@@ -158,6 +157,7 @@ func TestController(t *testing.T) {
 			sender: mockClient, device: device.NewDevice(addr0, serial0), done: make(chan struct{}),
 		}
 		ctrl.sessions[serial0] = session
+		ctrl.wg.Add(1)
 
 		ctrl.Close()
 		select {
@@ -169,38 +169,55 @@ func TestController(t *testing.T) {
 }
 
 func BenchmarkControllerGetDevices(b *testing.B) {
-	var (
-		addr0   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
-		serial0 = device.Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
-	)
-
+	os.Setenv("LIFXLAN_LOG_LEVEL", "error")
 	mockClient := newMockClient()
 	ctrl, err := New(WithClient(mockClient))
 	require.NoError(b, err)
 	defer ctrl.Close()
 
-	err = ctrl.addSession(addr0, serial0)
-	require.NoError(b, err)
+	// Base address
+	ipBase := [4]byte{192, 168, 1, 100}
+	port := 56700
 
-	msg := protocol.NewMessage(&packets.LightState{})
-	done := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(10 * time.Millisecond)
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-				mockClient.inbound <- recvMsg{msg: msg, addr: addr0}
-			}
+	for i := range 100 {
+		// Increment the last byte of IP
+		addr := &net.UDPAddr{
+			IP:   net.IPv4(ipBase[0], ipBase[1], ipBase[2], ipBase[3]+byte(i)),
+			Port: port,
 		}
-	}()
+
+		// Build serial: top 6 bytes from counter, last 2 = 0
+		s := uint64(i + 1)
+		serial := [8]byte{
+			byte(s >> 40 & 0xFF),
+			byte(s >> 32 & 0xFF),
+			byte(s >> 24 & 0xFF),
+			byte(s >> 16 & 0xFF),
+			byte(s >> 8 & 0xFF),
+			byte(s >> 0 & 0xFF),
+			0,
+			0,
+		}
+
+		ctrl.addSession(addr, serial)
+		ctrl.sessions[serial].device.Label = randomLabel()
+	}
 
 	b.ResetTimer()
 	for b.Loop() {
 		_ = ctrl.GetDevices()
 	}
-	close(done)
+}
+
+// randomLabel returns a random string of 8–10 alphabetic characters.
+func randomLabel() string {
+	n := 8 + rand.Intn(3) // 8, 9 or 10
+	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
 
 type mockClient struct {

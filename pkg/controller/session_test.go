@@ -13,7 +13,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSession(t *testing.T) {
@@ -32,12 +31,12 @@ func TestSession(t *testing.T) {
 		}
 
 		onTimeout = func(device.Serial) {}
+		wgDone    = func() {}
 	)
 
 	t.Run("Sends initial state messages", func(t *testing.T) {
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0, onTimeout)
-		require.NoError(t, err)
+		session := NewDeviceSession(addr0, serial0, mockClient, cfg0, wgDone, onTimeout)
 
 		var gotMsgs []packets.Payload
 	outer:
@@ -62,8 +61,7 @@ func TestSession(t *testing.T) {
 		cfg := *cfg0
 		cfg.highFrequencyStateRefreshPeriod = time.Millisecond
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg, onTimeout)
-		require.NoError(t, err)
+		session := NewDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, onTimeout)
 
 		var gotMsgs int
 		timeout := time.After(10 * time.Millisecond)
@@ -87,8 +85,7 @@ func TestSession(t *testing.T) {
 		cfg := *cfg0
 		cfg.lowFrequencyStateRefreshPeriod = time.Millisecond
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg, onTimeout)
-		require.NoError(t, err)
+		session := NewDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, onTimeout)
 
 		var gotMsgs []packets.Payload
 		timeout := time.After(10 * time.Millisecond)
@@ -125,8 +122,7 @@ func TestSession(t *testing.T) {
 		cfg.deviceLivenessTimeout = time.Millisecond
 		mockClient := newMockClient()
 		rmChan := make(chan device.Serial, 1)
-		session, err := NewDeviceSession(addr0, serial0, mockClient, &cfg, func(d device.Serial) { rmChan <- d })
-		require.NoError(t, err)
+		session := NewDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, func(d device.Serial) { rmChan <- d })
 
 		rmSerial := <-rmChan
 		assert.Equal(t, serial0, rmSerial)
@@ -135,8 +131,7 @@ func TestSession(t *testing.T) {
 
 	t.Run("Updates state", func(t *testing.T) {
 		mockClient := newMockClient()
-		session, err := NewDeviceSession(addr0, serial0, mockClient, cfg0, onTimeout)
-		require.NoError(t, err)
+		session := NewDeviceSession(addr0, serial0, mockClient, cfg0, wgDone, onTimeout)
 
 		wantDevice := device.Device{
 			Serial: device.Serial(serial0), Address: addr0,

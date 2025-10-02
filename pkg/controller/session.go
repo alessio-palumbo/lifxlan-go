@@ -40,7 +40,7 @@ type DeviceSession struct {
 // NewDeviceSession creates a new DeviceSession for the given device.
 // It spins up a goroutine to periodically query devices for state updates and
 // a second one to parse devices messages and update Device state.
-func NewDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cfg *Config, onTimeout func(device.Serial)) (*DeviceSession, error) {
+func NewDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cfg *Config, wgDone func(), onTimeout func(device.Serial)) *DeviceSession {
 	ds := &DeviceSession{
 		sender:    sender,
 		device:    device.NewDevice(addr, serial),
@@ -51,15 +51,14 @@ func NewDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cf
 	}
 
 	go ds.recvloop()
-	go ds.run()
+	go ds.run(wgDone)
 
-	return ds, nil
+	return ds
 }
 
 // Close closes the DeviceSession, stopping the recv loop and cleaning up resources.
-func (s *DeviceSession) Close() error {
+func (s *DeviceSession) Close() {
 	close(s.done)
-	return nil
 }
 
 // Send sends one or more messages to the device.
@@ -90,7 +89,9 @@ func (s *DeviceSession) nextSeq() uint8 {
 // run performs a short-lived pre-flight handshake to gather required device state
 // after which it periodically queries the device for state updates.
 // It uses a ticker for high frequency state changes and one for low frequency ones.
-func (s *DeviceSession) run() {
+func (s *DeviceSession) run(wgDone func()) {
+	defer wgDone()
+
 	s.preflightHandshake(s.cfg.preflightHandshakeTimeout, s.cfg.preflightHandshakeWait)
 
 	hfTicker := time.NewTicker(s.cfg.highFrequencyStateRefreshPeriod)
