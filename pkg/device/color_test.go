@@ -1,8 +1,76 @@
 package device
 
 import (
+	"math"
 	"testing"
+
+	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
+	"github.com/stretchr/testify/assert"
 )
+
+func TestNewColor(t *testing.T) {
+	tests := []struct {
+		hsbk      packets.LightHsbk
+		wantColor Color
+	}{
+		{
+			packets.LightHsbk{},
+			Color{},
+		},
+		{
+			packets.LightHsbk{Hue: 16384, Saturation: 16384, Brightness: 16384, Kelvin: 3500},
+			Color{Hue: 90, Saturation: 25, Brightness: 25, Kelvin: 3500},
+		},
+		{
+			packets.LightHsbk{Hue: 32768, Saturation: 32768, Brightness: 32768, Kelvin: 3500},
+			Color{Hue: 180, Saturation: 50, Brightness: 50, Kelvin: 3500},
+		},
+		{
+			packets.LightHsbk{Hue: 49151, Saturation: 49151, Brightness: 49151, Kelvin: 3500},
+			Color{Hue: 270, Saturation: 75, Brightness: 75, Kelvin: 3500},
+		},
+		{
+			packets.LightHsbk{Hue: math.MaxUint16, Saturation: math.MaxUint16, Brightness: math.MaxUint16, Kelvin: 3500},
+			Color{Hue: 360, Saturation: 100, Brightness: 100, Kelvin: 3500},
+		},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.wantColor, NewColor(tt.hsbk))
+	}
+}
+
+func TestToDeviceColor(t *testing.T) {
+	tests := []struct {
+		color    Color
+		wantHsbk packets.LightHsbk
+	}{
+		{
+			Color{},
+			packets.LightHsbk{},
+		},
+		{
+			Color{Hue: 90, Saturation: 25, Brightness: 25, Kelvin: 3500},
+			packets.LightHsbk{Hue: 16384, Saturation: 16384, Brightness: 16384, Kelvin: 3500},
+		},
+		{
+			Color{Hue: 180, Saturation: 50, Brightness: 50, Kelvin: 3500},
+			packets.LightHsbk{Hue: 32768, Saturation: 32768, Brightness: 32768, Kelvin: 3500},
+		},
+		{
+			Color{Hue: 270, Saturation: 75, Brightness: 75, Kelvin: 3500},
+			packets.LightHsbk{Hue: 49151, Saturation: 49151, Brightness: 49151, Kelvin: 3500},
+		},
+		{
+			Color{Hue: 360, Saturation: 100, Brightness: 100, Kelvin: 3500},
+			packets.LightHsbk{Hue: math.MaxUint16, Saturation: math.MaxUint16, Brightness: math.MaxUint16, Kelvin: 3500},
+		},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.wantHsbk, tt.color.ToDeviceColor())
+	}
+}
 
 func TestHSBToRGB(t *testing.T) {
 	tests := []struct {
@@ -47,8 +115,8 @@ func TestKelvinToRGB(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := &Color{}
-		r, g, b := c.KelvinToRGB(tt.kelvin)
+		c := &Color{Kelvin: uint16(tt.kelvin)}
+		r, g, b := c.KelvinToRGB()
 		if r != tt.wantR || g != tt.wantG || b != tt.wantB {
 			t.Errorf("KelvinToRGB(%d) = (%d,%d,%d), want (%d,%d,%d)", tt.kelvin, r, g, b, tt.wantR, tt.wantG, tt.wantB)
 		}

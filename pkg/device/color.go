@@ -19,15 +19,25 @@ type Color struct {
 // converting device used values into human readable ones.
 func NewColor(hsbk packets.LightHsbk) Color {
 	return Color{
-		Hue:        convertDeviceValueToExternal(hsbk.Hue, 360),
-		Saturation: convertDeviceValueToExternal(hsbk.Saturation, 100),
-		Brightness: convertDeviceValueToExternal(hsbk.Brightness, 100),
+		Hue:        ConvertDeviceValueToExternal(hsbk.Hue, 360),
+		Saturation: ConvertDeviceValueToExternal(hsbk.Saturation, 100),
+		Brightness: ConvertDeviceValueToExternal(hsbk.Brightness, 100),
 		Kelvin:     hsbk.Kelvin,
 	}
 }
 
+// ToDeviceColor converts a Color to lifxprotocol-go LightHsbk.
+func (c Color) ToDeviceColor() packets.LightHsbk {
+	return packets.LightHsbk{
+		Hue:        ConvertExternalToDeviceValue(c.Hue, 360),
+		Saturation: ConvertExternalToDeviceValue(c.Saturation, 100),
+		Brightness: ConvertExternalToDeviceValue(c.Brightness, 100),
+		Kelvin:     c.Kelvin,
+	}
+}
+
 // String converts a Color into string for easy logging.
-func (c *Color) String() string {
+func (c Color) String() string {
 	if c.Saturation == 0 {
 		return fmt.Sprintf("Brightness: %f%% Kelvin: %d", c.Brightness, c.Kelvin)
 	}
@@ -74,8 +84,8 @@ func (c *Color) HSBToRGB() (int, int, int) {
 // KelvinToRGB converts a color temperature in Kelvin to an RGB color.
 // It uses a standard approximation suitable for many applications,
 // but accuracy is best between 1000K and 40000K.
-func (c *Color) KelvinToRGB(kelvin int) (r, g, b int) {
-	temp := int(math.Round(float64(kelvin) / 100.0))
+func (c *Color) KelvinToRGB() (r, g, b int) {
+	temp := int(math.Round(float64(c.Kelvin) / 100.0))
 
 	// Red
 	if temp <= 66 {
@@ -111,8 +121,14 @@ func (c *Color) KelvinToRGB(kelvin int) (r, g, b int) {
 	return int(r), int(g), int(b)
 }
 
-// convertDeviceValueToExternal takes a device value in the range 0-65535
+// ConvertDeviceValueToExternal takes a device value in the range 0-65535
 // and converts it into the range defined by the multiplier.
-func convertDeviceValueToExternal(v uint16, multiplier float64) float64 {
+func ConvertDeviceValueToExternal(v uint16, multiplier float64) float64 {
 	return math.Round(float64(v) / math.MaxUint16 * multiplier)
+}
+
+// ConvertExternalToDeviceValue takes an external value and multiplier
+// and converts it into a device value 0-65535.
+func ConvertExternalToDeviceValue(v float64, multiplier float64) uint16 {
+	return uint16(math.Round(v * math.MaxUint16 / multiplier))
 }

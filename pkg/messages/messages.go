@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
@@ -36,15 +37,15 @@ func SetColor(h, s, b *float64, k *uint16, d time.Duration, waveform enums.Light
 		Period:   uint32(d.Milliseconds()),
 	}
 	if h != nil {
-		m.Color.Hue = convertExternalToDeviceValue(*h, 360)
+		m.Color.Hue = device.ConvertExternalToDeviceValue(*h, 360)
 		m.SetHue = true
 	}
 	if s != nil {
-		m.Color.Saturation = convertExternalToDeviceValue(*s, 100)
+		m.Color.Saturation = device.ConvertExternalToDeviceValue(*s, 100)
 		m.SetSaturation = true
 	}
 	if b != nil {
-		m.Color.Brightness = convertExternalToDeviceValue(*b, 100)
+		m.Color.Brightness = device.ConvertExternalToDeviceValue(*b, 100)
 		m.SetBrightness = true
 	}
 	if k != nil {
@@ -63,10 +64,4 @@ func SetMatrixColors(startIndex, length, width int, colors [64]packets.LightHsbk
 		Colors:    colors,
 	}
 	return protocol.NewMessage(m)
-}
-
-// convertExternalToDeviceValue takes an external value and multiplier
-// and converts it into a device value 0-65535.
-func convertExternalToDeviceValue(v float64, multiplier float64) uint16 {
-	return uint16(math.Round(v * math.MaxUint16 / multiplier))
 }
