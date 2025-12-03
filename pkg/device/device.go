@@ -238,9 +238,17 @@ func (d *Device) SetMatrixState(p *packets.TileState64) {
 }
 
 func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZone) {
-	zones := make([]packets.LightHsbk, p.Count)
-	copy(zones, p.Colors[:])
-	d.MultizoneProperties.Zones = zones
+	if len(d.MultizoneProperties.Zones) != int(p.Count) {
+		d.MultizoneProperties.Zones = make([]packets.LightHsbk, p.Count)
+	}
+
+	nZones := len(d.MultizoneProperties.Zones)
+	startIndex := int(p.Index)
+	if p.ColorsCount == 0 || startIndex >= nZones {
+		return
+	}
+
+	copy(d.MultizoneProperties.Zones[startIndex:], p.Colors[:])
 }
 
 // HighFreqStateMessages returns a list of messages to gather state that

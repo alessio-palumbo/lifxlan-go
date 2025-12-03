@@ -228,3 +228,67 @@ func TestSetMatrixState(t *testing.T) {
 		})
 	}
 }
+
+func TestSetMultizoneProperties(t *testing.T) {
+	color0 := packets.LightHsbk{Hue: 0, Saturation: math.MaxUint16, Brightness: math.MaxUint16, Kelvin: 3500}
+	withColors := func(index, count int, colors ...packets.LightHsbk) []packets.LightHsbk {
+		zones := make([]packets.LightHsbk, count)
+		copy(zones[index:], colors)
+		return zones
+	}
+
+	tests := map[string]struct {
+		device *Device
+		msgs   []*packets.MultiZoneExtendedStateMultiZone
+		want   *Device
+	}{
+		"bad message": {
+			device: &Device{},
+			msgs:   []*packets.MultiZoneExtendedStateMultiZone{{}},
+			want:   &Device{},
+		},
+		"sets properties with single message": {
+			device: &Device{},
+			msgs: []*packets.MultiZoneExtendedStateMultiZone{
+				{Index: 0, Count: 24, ColorsCount: 1, Colors: [82]packets.LightHsbk{color0}},
+			},
+			want: &Device{
+				MultizoneProperties: MultizoneProperties{
+					Zones: withColors(0, 24, color0),
+				},
+			},
+		},
+		"sets properties with single message at offset": {
+			device: &Device{},
+			msgs: []*packets.MultiZoneExtendedStateMultiZone{
+				{Index: 23, Count: 24, ColorsCount: 1, Colors: [82]packets.LightHsbk{color0}},
+			},
+			want: &Device{
+				MultizoneProperties: MultizoneProperties{
+					Zones: withColors(23, 24, color0),
+				},
+			},
+		},
+		"sets properties with multiple messages": {
+			device: &Device{},
+			msgs: []*packets.MultiZoneExtendedStateMultiZone{
+				{Index: 81, Count: 120, ColorsCount: 2, Colors: [82]packets.LightHsbk{color0, color0}},
+				{Index: 83, Count: 120, ColorsCount: 1, Colors: [82]packets.LightHsbk{color0}},
+			},
+			want: &Device{
+				MultizoneProperties: MultizoneProperties{
+					Zones: withColors(81, 120, color0, color0, color0),
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			for _, msg := range tc.msgs {
+				tc.device.SetMultizoneProperties(msg)
+			}
+			assert.Equal(t, tc.want, tc.device)
+		})
+	}
+}
