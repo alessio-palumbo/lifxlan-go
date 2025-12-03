@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -154,6 +155,8 @@ func (s *DeviceSession) recvloop() {
 				s.device.SetMatrixState(p)
 			case *packets.DeviceStatePower:
 				s.device.PoweredOn = p.Level > 0
+			case *packets.DeviceStateWifiInfo:
+				s.device.WifiRSSI = device.WifiRSSI(int(math.Floor(10*math.Log10(float64(p.Signal)) + 0.5)))
 			case *packets.MultiZoneExtendedStateMultiZone:
 				// TODO
 			case *packets.DeviceStateService, *packets.DeviceStateUnhandled: // Ignore these messages
@@ -219,6 +222,7 @@ func requiredStateMessages() []*protocol.Message {
 		protocol.NewMessage(&packets.DeviceGetHostFirmware{}),
 		protocol.NewMessage(&packets.DeviceGetLocation{}),
 		protocol.NewMessage(&packets.DeviceGetGroup{}),
+		protocol.NewMessage(&packets.DeviceGetWifiInfo{}),
 		protocol.NewMessage(&packets.TileGetDeviceChain{}),
 	}
 }
@@ -230,6 +234,7 @@ var messageDoneFuncs = map[packets.Payload]func(*device.Device) bool{
 	&packets.DeviceGetHostFirmware{}: func(d *device.Device) bool { return d.FirmwareVersion != "" },
 	&packets.DeviceGetLocation{}:     func(d *device.Device) bool { return d.Location != "" },
 	&packets.DeviceGetGroup{}:        func(d *device.Device) bool { return d.Group != "" },
+	&packets.DeviceGetWifiInfo{}:     func(d *device.Device) bool { return d.WifiRSSI != 0 },
 	&packets.TileGetDeviceChain{}: func(d *device.Device) bool {
 		return d.LightType != device.LightTypeMatrix || d.MatrixProperties.ChainLength > 0
 	},

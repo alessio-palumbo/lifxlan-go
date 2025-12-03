@@ -94,6 +94,51 @@ func (s Serial) IsNil() bool {
 	return s == [8]byte{}
 }
 
+// WifiRSSI represents either RSSI or SNR depending on firmware.
+type WifiRSSI int
+
+const (
+	SignalNone      string = "No Signal"
+	SignalVeryPoor  string = "Very Poor"
+	SignalPoor      string = "Poor"
+	SignalFair      string = "Fair"
+	SignalGood      string = "Good"
+	SignalExcellent string = "Excellent"
+)
+
+// String returns a description of the WifiRSSI signal
+// handling both RSSI and SNR values as per LIFX docs.
+func (w WifiRSSI) String() string {
+	switch {
+	case w < 0:
+		if w >= -50 {
+			return SignalExcellent
+		} else if w >= -60 {
+			return SignalGood
+		} else if w >= -70 {
+			return SignalFair
+		} else if w >= -80 {
+			return SignalPoor
+		} else {
+			return SignalVeryPoor
+		}
+	case w >= 4 || w <= 24:
+		if w > 20 {
+			return SignalExcellent
+		} else if w > 16 {
+			return SignalGood
+		} else if w >= 12 {
+			return SignalFair
+		} else if w >= 7 {
+			return SignalPoor
+		} else {
+			return SignalVeryPoor
+		}
+	}
+
+	return SignalNone
+}
+
 // Device is the representation of a LIFX device on the LAN.
 // Address and Serial are immutable fields while DeviceState
 // fields are periodically updated.
@@ -113,6 +158,7 @@ type Device struct {
 	LightType       lightType
 	Location        string
 	Group           string
+	WifiRSSI        WifiRSSI
 
 	// Device specific properties.
 	MatrixProperties MatrixProperties
@@ -220,6 +266,7 @@ func (d *Device) LowFreqStateMessages() []*protocol.Message {
 		protocol.NewMessage(&packets.DeviceGetHostFirmware{}),
 		protocol.NewMessage(&packets.DeviceGetLocation{}),
 		protocol.NewMessage(&packets.DeviceGetGroup{}),
+		protocol.NewMessage(&packets.DeviceGetWifiInfo{}),
 	}
 
 	if d.LightType == LightTypeMatrix {
