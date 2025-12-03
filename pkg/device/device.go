@@ -161,7 +161,8 @@ type Device struct {
 	WifiRSSI        WifiRSSI
 
 	// Device specific properties.
-	MatrixProperties MatrixProperties
+	MatrixProperties    MatrixProperties
+	MultizoneProperties MultizoneProperties
 
 	// High Frequency updated fields.
 	Color      Color
@@ -174,6 +175,10 @@ type MatrixProperties struct {
 	Width       int
 	ChainLength int
 	ChainState  [][64]packets.LightHsbk
+}
+
+type MultizoneProperties struct {
+	Zones []packets.LightHsbk
 }
 
 func NewDevice(address *net.UDPAddr, serial [8]byte) *Device {
@@ -230,6 +235,12 @@ func (d *Device) SetMatrixState(p *packets.TileState64) {
 		return
 	}
 	d.MatrixProperties.ChainState[p.TileIndex] = p.Colors
+}
+
+func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZone) {
+	zones := make([]packets.LightHsbk, p.Count)
+	copy(zones, p.Colors[:])
+	d.MultizoneProperties.Zones = zones
 }
 
 // HighFreqStateMessages returns a list of messages to gather state that

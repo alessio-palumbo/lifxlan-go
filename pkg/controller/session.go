@@ -153,12 +153,12 @@ func (s *DeviceSession) recvloop() {
 				s.device.SetMatrixProperties(p)
 			case *packets.TileState64:
 				s.device.SetMatrixState(p)
+			case *packets.MultiZoneExtendedStateMultiZone:
+				s.device.SetMultizoneProperties(p)
 			case *packets.DeviceStatePower:
 				s.device.PoweredOn = p.Level > 0
 			case *packets.DeviceStateWifiInfo:
 				s.device.WifiRSSI = device.WifiRSSI(int(math.Floor(10*math.Log10(float64(p.Signal)) + 0.5)))
-			case *packets.MultiZoneExtendedStateMultiZone:
-				// TODO
 			case *packets.DeviceStateService, *packets.DeviceStateUnhandled: // Ignore these messages
 			default:
 				log.WithField("serial", s.device.Serial).
@@ -224,6 +224,7 @@ func requiredStateMessages() []*protocol.Message {
 		protocol.NewMessage(&packets.DeviceGetGroup{}),
 		protocol.NewMessage(&packets.DeviceGetWifiInfo{}),
 		protocol.NewMessage(&packets.TileGetDeviceChain{}),
+		protocol.NewMessage(&packets.MultiZoneExtendedGetColorZones{}),
 	}
 }
 
@@ -237,5 +238,8 @@ var messageDoneFuncs = map[packets.Payload]func(*device.Device) bool{
 	&packets.DeviceGetWifiInfo{}:     func(d *device.Device) bool { return d.WifiRSSI != 0 },
 	&packets.TileGetDeviceChain{}: func(d *device.Device) bool {
 		return d.LightType != device.LightTypeMatrix || d.MatrixProperties.ChainLength > 0
+	},
+	&packets.MultiZoneExtendedGetColorZones{}: func(d *device.Device) bool {
+		return d.LightType != device.LightTypeMultiZone || len(d.MultizoneProperties.Zones) > 0
 	},
 }
