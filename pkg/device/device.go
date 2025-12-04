@@ -259,11 +259,13 @@ func (d *Device) HighFreqStateMessages() []*protocol.Message {
 	switch d.LightType {
 	case LightTypeMultiZone:
 		return []*protocol.Message{
+			protocol.NewMessage(&packets.LightGet{}),
 			protocol.NewMessage(&packets.DeviceGetPower{}),
 			protocol.NewMessage(&packets.MultiZoneExtendedGetColorZones{}),
 		}
 	case LightTypeMatrix:
 		return []*protocol.Message{
+			protocol.NewMessage(&packets.LightGet{}),
 			protocol.NewMessage(&packets.DeviceGetPower{}),
 			protocol.NewMessage(&packets.TileGet64{
 				Length: uint8(d.MatrixProperties.ChainLength),
