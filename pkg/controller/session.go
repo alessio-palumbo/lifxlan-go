@@ -137,28 +137,66 @@ func (s *DeviceSession) recvloop() {
 			s.mu.Lock()
 			switch p := msg.Payload.(type) {
 			case *packets.DeviceStateLabel:
-				s.device.Label = device.ParseLabel(p.Label)
+				label := device.ParseLabel(p.Label)
+				if shouldUpdate(s.device.Label, label) {
+					s.device.Label = label
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.LightState:
-				s.device.Color = device.NewColor(p.Color)
-				s.device.PoweredOn = p.Power > 0
+				color := device.NewColor(p.Color)
+				poweredOn := p.Power > 0
+				if shouldUpdate(s.device.Color, color) || shouldUpdate(s.device.PoweredOn, poweredOn) {
+					s.device.Color = color
+					s.device.PoweredOn = poweredOn
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.DeviceStateVersion:
-				s.device.SetProductInfo(p.Product)
+				if shouldUpdate(s.device.ProductID, p.Product) {
+					s.device.SetProductInfo(p.Product)
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.DeviceStateHostFirmware:
-				s.device.FirmwareVersion = fmt.Sprintf("%d.%d", p.VersionMajor, p.VersionMinor)
+				fwVersion := fmt.Sprintf("%d.%d", p.VersionMajor, p.VersionMinor)
+				if shouldUpdate(s.device.FirmwareVersion, fwVersion) {
+					s.device.FirmwareVersion = fwVersion
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.DeviceStateLocation:
-				s.device.Location = device.ParseLabel(p.Label)
+				label := device.ParseLabel(p.Label)
+				if shouldUpdate(s.device.Location, label) {
+					s.device.Location = label
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.DeviceStateGroup:
-				s.device.Group = device.ParseLabel(p.Label)
+				label := device.ParseLabel(p.Label)
+				if shouldUpdate(s.device.Group, label) {
+					s.device.Group = device.ParseLabel(p.Label)
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.TileStateDeviceChain:
-				s.device.SetMatrixProperties(p)
+				if updated := s.device.SetMatrixProperties(p); updated {
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.TileState64:
-				s.device.SetMatrixState(p)
+				if updated := s.device.SetMatrixState(p); updated {
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.MultiZoneExtendedStateMultiZone:
-				s.device.SetMultizoneProperties(p)
+				if updated := s.device.SetMultizoneProperties(p); updated {
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.DeviceStatePower:
-				s.device.PoweredOn = p.Level > 0
+				poweredOn := p.Level > 0
+				if shouldUpdate(s.device.PoweredOn, poweredOn) {
+					s.device.PoweredOn = poweredOn
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.DeviceStateWifiInfo:
-				s.device.WifiRSSI = device.WifiRSSI(int(math.Floor(10*math.Log10(float64(p.Signal)) + 0.5)))
+				rssi := device.WifiRSSI(int(math.Floor(10*math.Log10(float64(p.Signal)) + 0.5)))
+				if shouldUpdate(s.device.WifiRSSI.String(), rssi.String()) {
+					s.device.WifiRSSI = rssi
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.DeviceStateService, *packets.DeviceStateUnhandled: // Ignore these messages
 			default:
 				log.WithField("serial", s.device.Serial).
@@ -172,6 +210,10 @@ func (s *DeviceSession) recvloop() {
 			return
 		}
 	}
+}
+
+func shouldUpdate[T comparable](current, updated T) bool {
+	return current != updated
 }
 
 // preflightHandshake ensures the device session has a minimal known-good state

@@ -165,9 +165,10 @@ type Device struct {
 	MultizoneProperties MultizoneProperties
 
 	// High Frequency updated fields.
-	Color      Color
-	PoweredOn  bool
-	LastSeenAt time.Time
+	Color         Color
+	PoweredOn     bool
+	LastSeenAt    time.Time
+	LastUpdatedAt time.Time
 }
 
 type MatrixProperties struct {
@@ -206,12 +207,17 @@ func (d *Device) SetProductInfo(pid uint32) {
 // SetMatrixProperties sets the matrix size and length properties
 // according to the first tile in the chain.
 // It also initialises the ChainState slice or resizes it according to the length.
-func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) {
+func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) (updated bool) {
 	if p.TileDevicesCount == 0 {
 		return
 	}
 	firstIdx := int(p.StartIndex)
 	w, h, l := int(p.TileDevices[firstIdx].Width), int(p.TileDevices[firstIdx].Height), int(p.TileDevicesCount)
+
+	if d.MatrixProperties.Width == w && d.MatrixProperties.Height == h && d.MatrixProperties.ChainLength == l {
+		return
+	}
+
 	d.MatrixProperties.Width = w
 	d.MatrixProperties.Height = h
 	d.MatrixProperties.ChainLength = l
@@ -227,17 +233,33 @@ func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) {
 	case cl > l:
 		d.MatrixProperties.ChainState = slices.Delete(d.MatrixProperties.ChainState, l, cl)
 	}
+
+	return true
 }
 
 // SetMatrixState sets the colors of the matrix at the given index.
-func (d *Device) SetMatrixState(p *packets.TileState64) {
+func (d *Device) SetMatrixState(p *packets.TileState64) (updated bool) {
 	if int(p.TileIndex) > len(d.MatrixProperties.ChainState)-1 {
 		return
 	}
+
+	if len(d.MatrixProperties.ChainState[p.TileIndex]) == len(p.Colors) {
+		for i, c := range d.MatrixProperties.ChainState[p.TileIndex] {
+			if c != p.Colors[i] {
+				updated = true
+				break
+			}
+		}
+		if !updated {
+			return
+		}
+	}
+
 	d.MatrixProperties.ChainState[p.TileIndex] = p.Colors
+	return true
 }
 
-func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZone) {
+func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZone) (updated bool) {
 	if len(d.MultizoneProperties.Zones) != int(p.Count) {
 		d.MultizoneProperties.Zones = make([]packets.LightHsbk, p.Count)
 	}
@@ -249,6 +271,7 @@ func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZo
 	}
 
 	copy(d.MultizoneProperties.Zones[startIndex:], p.Colors[:])
+	return true
 }
 
 // HighFreqStateMessages returns a list of messages to gather state that

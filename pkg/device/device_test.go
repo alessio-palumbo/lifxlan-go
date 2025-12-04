@@ -94,14 +94,33 @@ func TestSortDevices(t *testing.T) {
 
 func TestSetMatrixProperties(t *testing.T) {
 	tests := map[string]struct {
-		device *Device
-		msg    *packets.TileStateDeviceChain
-		want   *Device
+		device      *Device
+		msg         *packets.TileStateDeviceChain
+		want        *Device
+		wantUpdated bool
 	}{
 		"bad message": {
 			device: &Device{},
 			msg:    &packets.TileStateDeviceChain{},
 			want:   &Device{},
+		},
+		"does not update if unchanged": {
+			device: &Device{
+				MatrixProperties: MatrixProperties{
+					Height: 8, Width: 8, ChainLength: 2,
+					ChainState: [][64]packets.LightHsbk{{}, {}},
+				},
+			},
+			msg: &packets.TileStateDeviceChain{
+				TileDevices:      [16]packets.TileStateDevice{{Width: 8, Height: 8}, {Width: 8, Height: 8}},
+				TileDevicesCount: 2,
+			},
+			want: &Device{
+				MatrixProperties: MatrixProperties{
+					Height: 8, Width: 8, ChainLength: 2,
+					ChainState: [][64]packets.LightHsbk{{}, {}},
+				},
+			},
 		},
 		"sets properties": {
 			device: &Device{},
@@ -115,6 +134,7 @@ func TestSetMatrixProperties(t *testing.T) {
 					ChainState: [][64]packets.LightHsbk{{}, {}},
 				},
 			},
+			wantUpdated: true,
 		},
 		"sets properties when start at offset": {
 			device: &Device{},
@@ -129,6 +149,7 @@ func TestSetMatrixProperties(t *testing.T) {
 					ChainState: [][64]packets.LightHsbk{{}},
 				},
 			},
+			wantUpdated: true,
 		},
 		"adds tile to existing chain": {
 			device: &Device{MatrixProperties: MatrixProperties{ChainState: [][64]packets.LightHsbk{{}}}},
@@ -143,6 +164,7 @@ func TestSetMatrixProperties(t *testing.T) {
 					ChainState: [][64]packets.LightHsbk{{}, {}},
 				},
 			},
+			wantUpdated: true,
 		},
 		"deletes tile from existing chain": {
 			device: &Device{MatrixProperties: MatrixProperties{ChainState: [][64]packets.LightHsbk{{}, {}}}},
@@ -157,13 +179,15 @@ func TestSetMatrixProperties(t *testing.T) {
 					ChainState: [][64]packets.LightHsbk{{}},
 				},
 			},
+			wantUpdated: true,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			tc.device.SetMatrixProperties(tc.msg)
+			updated := tc.device.SetMatrixProperties(tc.msg)
 			assert.Equal(t, tc.want, tc.device)
+			assert.Equal(t, tc.wantUpdated, updated)
 		})
 	}
 }
@@ -174,9 +198,10 @@ func TestSetMatrixState(t *testing.T) {
 	tile0 := [64]packets.LightHsbk{color0}
 
 	tests := map[string]struct {
-		device *Device
-		msg    *packets.TileState64
-		want   *Device
+		device      *Device
+		msg         *packets.TileState64
+		want        *Device
+		wantUpdated bool
 	}{
 		"device has no matrix properties": {
 			device: &Device{},
@@ -184,6 +209,23 @@ func TestSetMatrixState(t *testing.T) {
 				TileIndex: 0, Colors: [64]packets.LightHsbk{},
 			},
 			want: &Device{},
+		},
+		"does not updated if unchanged": {
+			device: &Device{
+				MatrixProperties: MatrixProperties{
+					Height: 8, Width: 8, ChainLength: 2,
+					ChainState: [][64]packets.LightHsbk{tile0, {}},
+				},
+			},
+			msg: &packets.TileState64{
+				TileIndex: 0, Colors: [64]packets.LightHsbk{color0},
+			},
+			want: &Device{
+				MatrixProperties: MatrixProperties{
+					Height: 8, Width: 8, ChainLength: 2,
+					ChainState: [][64]packets.LightHsbk{tile0, {}},
+				},
+			},
 		},
 		"sets matrix state": {
 			device: &Device{
@@ -201,6 +243,7 @@ func TestSetMatrixState(t *testing.T) {
 					ChainState: [][64]packets.LightHsbk{tile0, {}},
 				},
 			},
+			wantUpdated: true,
 		},
 		"sets matrix state at offset": {
 			device: &Device{
@@ -218,13 +261,15 @@ func TestSetMatrixState(t *testing.T) {
 					ChainState: [][64]packets.LightHsbk{{}, tile0},
 				},
 			},
+			wantUpdated: true,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			tc.device.SetMatrixState(tc.msg)
+			updated := tc.device.SetMatrixState(tc.msg)
 			assert.Equal(t, tc.want, tc.device)
+			assert.Equal(t, tc.wantUpdated, updated)
 		})
 	}
 }
@@ -238,14 +283,28 @@ func TestSetMultizoneProperties(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		device *Device
-		msgs   []*packets.MultiZoneExtendedStateMultiZone
-		want   *Device
+		device      *Device
+		msgs        []*packets.MultiZoneExtendedStateMultiZone
+		want        *Device
+		wantUpdated []bool
 	}{
 		"bad message": {
-			device: &Device{},
-			msgs:   []*packets.MultiZoneExtendedStateMultiZone{{}},
-			want:   &Device{},
+			device:      &Device{},
+			msgs:        []*packets.MultiZoneExtendedStateMultiZone{{}},
+			want:        &Device{},
+			wantUpdated: []bool{false},
+		},
+		"start index greater than zones": {
+			device: &Device{MultizoneProperties: MultizoneProperties{Zones: make([]packets.LightHsbk, 8)}},
+			msgs: []*packets.MultiZoneExtendedStateMultiZone{
+				{Index: 9, Count: 8, ColorsCount: 1, Colors: [82]packets.LightHsbk{color0}},
+			},
+			want: &Device{
+				MultizoneProperties: MultizoneProperties{
+					Zones: make([]packets.LightHsbk, 8),
+				},
+			},
+			wantUpdated: []bool{false},
 		},
 		"sets properties with single message": {
 			device: &Device{},
@@ -257,6 +316,7 @@ func TestSetMultizoneProperties(t *testing.T) {
 					Zones: withColors(0, 24, color0),
 				},
 			},
+			wantUpdated: []bool{true},
 		},
 		"sets properties with single message at offset": {
 			device: &Device{},
@@ -268,6 +328,7 @@ func TestSetMultizoneProperties(t *testing.T) {
 					Zones: withColors(23, 24, color0),
 				},
 			},
+			wantUpdated: []bool{true},
 		},
 		"sets properties with multiple messages": {
 			device: &Device{},
@@ -280,15 +341,19 @@ func TestSetMultizoneProperties(t *testing.T) {
 					Zones: withColors(81, 120, color0, color0, color0),
 				},
 			},
+			wantUpdated: []bool{true, true},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			var updated []bool
 			for _, msg := range tc.msgs {
-				tc.device.SetMultizoneProperties(msg)
+				got := tc.device.SetMultizoneProperties(msg)
+				updated = append(updated, got)
 			}
 			assert.Equal(t, tc.want, tc.device)
+			assert.Equal(t, tc.wantUpdated, updated)
 		})
 	}
 }

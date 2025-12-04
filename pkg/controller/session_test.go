@@ -298,7 +298,7 @@ func Test_preflightHandshake(t *testing.T) {
 				t.Fatal("Timed out")
 			}
 
-			if diff := cmp.Diff(session.device, tc.wantDevice, cmpopts.IgnoreFields(device.Device{}, "RegistryName", "LastSeenAt")); diff != "" {
+			if diff := cmp.Diff(session.device, tc.wantDevice, cmpopts.IgnoreFields(device.Device{}, "RegistryName", "LastSeenAt", "LastUpdatedAt")); diff != "" {
 				t.Fatal("Got diff in device:\n", diff)
 			}
 		})
