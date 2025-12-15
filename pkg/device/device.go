@@ -172,10 +172,15 @@ type Device struct {
 }
 
 type MatrixProperties struct {
-	Height      int
-	Width       int
-	ChainLength int
-	ChainState  [][64]packets.LightHsbk
+	Height       int
+	Width        int
+	NZones       int
+	StatePackets int
+	ChainLength  int
+	// ChainZones supports both legacy chain devices and modern devices that support greater than 64 zones.
+	// Each slice item corresponds to a device in the chain. This is currently only used for LIFX Tile,
+	// but might be used for future devices that support chaining.
+	ChainZones [][]packets.LightHsbk
 }
 
 type MultizoneProperties struct {
@@ -206,7 +211,7 @@ func (d *Device) SetProductInfo(pid uint32) {
 
 // SetMatrixProperties sets the matrix size and length properties
 // according to the first tile in the chain.
-// It also initialises the ChainState slice or resizes it according to the length.
+// It also initialises the ChainZones slice or resizes it according to the length.
 func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) (updated bool) {
 	if p.TileDevicesCount == 0 {
 		return
@@ -220,18 +225,23 @@ func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) (updated b
 
 	d.MatrixProperties.Width = w
 	d.MatrixProperties.Height = h
+	d.MatrixProperties.NZones = w * h
 	d.MatrixProperties.ChainLength = l
+	d.MatrixProperties.StatePackets = 1 + (d.MatrixProperties.NZones-1)/64
 
-	cl := len(d.MatrixProperties.ChainState)
+	cl := len(d.MatrixProperties.ChainZones)
 	switch {
 	case cl == 0:
-		d.MatrixProperties.ChainState = make([][64]packets.LightHsbk, l)
+		d.MatrixProperties.ChainZones = make([][]packets.LightHsbk, l)
+		for i := range d.MatrixProperties.ChainZones {
+			d.MatrixProperties.ChainZones[i] = make([]packets.LightHsbk, d.MatrixProperties.NZones)
+		}
 	case cl < l:
 		for range l - cl {
-			d.MatrixProperties.ChainState = append(d.MatrixProperties.ChainState, [64]packets.LightHsbk{})
+			d.MatrixProperties.ChainZones = append(d.MatrixProperties.ChainZones, make([]packets.LightHsbk, d.MatrixProperties.NZones))
 		}
 	case cl > l:
-		d.MatrixProperties.ChainState = slices.Delete(d.MatrixProperties.ChainState, l, cl)
+		d.MatrixProperties.ChainZones = slices.Delete(d.MatrixProperties.ChainZones, l, cl)
 	}
 
 	return true
@@ -239,23 +249,28 @@ func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) (updated b
 
 // SetMatrixState sets the colors of the matrix at the given index.
 func (d *Device) SetMatrixState(p *packets.TileState64) (updated bool) {
-	if int(p.TileIndex) > len(d.MatrixProperties.ChainState)-1 {
+	if int(p.TileIndex) > len(d.MatrixProperties.ChainZones)-1 {
+		return
+	}
+	zoneIndex := p.Rect.Y * uint8(d.MatrixProperties.Width)
+	if int(zoneIndex) >= len(d.MatrixProperties.ChainZones[p.TileIndex]) {
 		return
 	}
 
-	if len(d.MatrixProperties.ChainState[p.TileIndex]) == len(p.Colors) {
-		for i, c := range d.MatrixProperties.ChainState[p.TileIndex] {
-			if c != p.Colors[i] {
-				updated = true
-				break
-			}
+	for i, c := range d.MatrixProperties.ChainZones[p.TileIndex][zoneIndex:] {
+		if i >= 64 {
+			break
 		}
-		if !updated {
-			return
+		if c != p.Colors[i] {
+			updated = true
+			break
 		}
 	}
+	if !updated {
+		return
+	}
 
-	d.MatrixProperties.ChainState[p.TileIndex] = p.Colors
+	copy(d.MatrixProperties.ChainZones[p.TileIndex][zoneIndex:], p.Colors[:])
 	return true
 }
 
@@ -287,14 +302,21 @@ func (d *Device) HighFreqStateMessages() []*protocol.Message {
 			protocol.NewMessage(&packets.MultiZoneExtendedGetColorZones{}),
 		}
 	case LightTypeMatrix:
-		return []*protocol.Message{
+		msgs := []*protocol.Message{
 			protocol.NewMessage(&packets.LightGet{}),
 			protocol.NewMessage(&packets.DeviceGetPower{}),
-			protocol.NewMessage(&packets.TileGet64{
-				Length: uint8(d.MatrixProperties.ChainLength),
-				Rect:   packets.TileBufferRect{Width: uint8(d.MatrixProperties.Width)},
-			}),
 		}
+
+		for i := range d.MatrixProperties.ChainLength {
+			for j := range d.MatrixProperties.StatePackets {
+				msgs = append(msgs, protocol.NewMessage(&packets.TileGet64{
+					TileIndex: uint8(i),
+					Length:    1,
+					Rect:      packets.TileBufferRect{Width: uint8(d.MatrixProperties.Width), Y: uint8(j * 64 / d.MatrixProperties.Width)},
+				}))
+			}
+		}
+		return msgs
 	default:
 		return []*protocol.Message{protocol.NewMessage(&packets.LightGet{})}
 	}

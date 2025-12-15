@@ -93,6 +93,9 @@ func TestSortDevices(t *testing.T) {
 }
 
 func TestSetMatrixProperties(t *testing.T) {
+	emptyZoneSlice64 := make([]packets.LightHsbk, 64)
+	emptyZoneSlice128 := make([]packets.LightHsbk, 128)
+
 	tests := map[string]struct {
 		device      *Device
 		msg         *packets.TileStateDeviceChain
@@ -107,8 +110,8 @@ func TestSetMatrixProperties(t *testing.T) {
 		"does not update if unchanged": {
 			device: &Device{
 				MatrixProperties: MatrixProperties{
-					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{{}, {}},
+					Height: 8, Width: 8, ChainLength: 2, NZones: 64, StatePackets: 1,
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
 				},
 			},
 			msg: &packets.TileStateDeviceChain{
@@ -117,12 +120,12 @@ func TestSetMatrixProperties(t *testing.T) {
 			},
 			want: &Device{
 				MatrixProperties: MatrixProperties{
-					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{{}, {}},
+					Height: 8, Width: 8, ChainLength: 2, NZones: 64, StatePackets: 1,
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
 				},
 			},
 		},
-		"sets properties": {
+		"sets properties (zones = 64)": {
 			device: &Device{},
 			msg: &packets.TileStateDeviceChain{
 				TileDevices:      [16]packets.TileStateDevice{{Width: 8, Height: 8}, {Width: 8, Height: 8}},
@@ -130,8 +133,36 @@ func TestSetMatrixProperties(t *testing.T) {
 			},
 			want: &Device{
 				MatrixProperties: MatrixProperties{
-					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{{}, {}},
+					Height: 8, Width: 8, ChainLength: 2, NZones: 64, StatePackets: 1,
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
+				},
+			},
+			wantUpdated: true,
+		},
+		"sets properties (zones < 64)": {
+			device: &Device{},
+			msg: &packets.TileStateDeviceChain{
+				TileDevices:      [16]packets.TileStateDevice{{Width: 7, Height: 5}, {Width: 7, Height: 5}},
+				TileDevicesCount: 2,
+			},
+			want: &Device{
+				MatrixProperties: MatrixProperties{
+					Height: 5, Width: 7, ChainLength: 2, NZones: 35, StatePackets: 1,
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64[:35], emptyZoneSlice64[:35]},
+				},
+			},
+			wantUpdated: true,
+		},
+		"sets properties (zones > 64)": {
+			device: &Device{},
+			msg: &packets.TileStateDeviceChain{
+				TileDevices:      [16]packets.TileStateDevice{{Width: 16, Height: 8}, {Width: 16, Height: 8}},
+				TileDevicesCount: 2,
+			},
+			want: &Device{
+				MatrixProperties: MatrixProperties{
+					Height: 8, Width: 16, ChainLength: 2, NZones: 128, StatePackets: 2,
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice128, emptyZoneSlice128},
 				},
 			},
 			wantUpdated: true,
@@ -145,14 +176,14 @@ func TestSetMatrixProperties(t *testing.T) {
 			},
 			want: &Device{
 				MatrixProperties: MatrixProperties{
-					Height: 8, Width: 8, ChainLength: 1,
-					ChainState: [][64]packets.LightHsbk{{}},
+					Height: 8, Width: 8, ChainLength: 1, NZones: 64, StatePackets: 1,
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64},
 				},
 			},
 			wantUpdated: true,
 		},
 		"adds tile to existing chain": {
-			device: &Device{MatrixProperties: MatrixProperties{ChainState: [][64]packets.LightHsbk{{}}}},
+			device: &Device{MatrixProperties: MatrixProperties{ChainZones: [][]packets.LightHsbk{emptyZoneSlice64}}},
 			msg: &packets.TileStateDeviceChain{
 				StartIndex:       0,
 				TileDevices:      [16]packets.TileStateDevice{{Width: 8, Height: 8}, {Width: 8, Height: 8}},
@@ -160,14 +191,14 @@ func TestSetMatrixProperties(t *testing.T) {
 			},
 			want: &Device{
 				MatrixProperties: MatrixProperties{
-					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{{}, {}},
+					Height: 8, Width: 8, ChainLength: 2, NZones: 64, StatePackets: 1,
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
 				},
 			},
 			wantUpdated: true,
 		},
 		"deletes tile from existing chain": {
-			device: &Device{MatrixProperties: MatrixProperties{ChainState: [][64]packets.LightHsbk{{}, {}}}},
+			device: &Device{MatrixProperties: MatrixProperties{ChainZones: [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64}}},
 			msg: &packets.TileStateDeviceChain{
 				StartIndex:       0,
 				TileDevices:      [16]packets.TileStateDevice{{Width: 8, Height: 8}},
@@ -175,8 +206,8 @@ func TestSetMatrixProperties(t *testing.T) {
 			},
 			want: &Device{
 				MatrixProperties: MatrixProperties{
-					Height: 8, Width: 8, ChainLength: 1,
-					ChainState: [][64]packets.LightHsbk{{}},
+					Height: 8, Width: 8, ChainLength: 1, NZones: 64, StatePackets: 1,
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64},
 				},
 			},
 			wantUpdated: true,
@@ -193,81 +224,111 @@ func TestSetMatrixProperties(t *testing.T) {
 }
 
 func TestSetMatrixState(t *testing.T) {
-
+	emptyZoneSlice := func() []packets.LightHsbk { return make([]packets.LightHsbk, 64) }
 	color0 := packets.LightHsbk{Hue: 180, Saturation: math.MaxUint16, Brightness: math.MaxUint16, Kelvin: 3500}
-	tile0 := [64]packets.LightHsbk{color0}
+	packet0 := [64]packets.LightHsbk{color0}
+
+	packet1 := [64]packets.LightHsbk{color0, color0, color0}
+	zones0 := make([]packets.LightHsbk, 128)
+	copy(zones0, packet0[:])
+	copy(zones0[64:], packet1[:])
 
 	tests := map[string]struct {
 		device      *Device
-		msg         *packets.TileState64
+		msgs        []*packets.TileState64
 		want        *Device
-		wantUpdated bool
+		wantUpdated []bool
 	}{
 		"device has no matrix properties": {
 			device: &Device{},
-			msg: &packets.TileState64{
-				TileIndex: 0, Colors: [64]packets.LightHsbk{},
+			msgs: []*packets.TileState64{
+				{TileIndex: 0, Colors: [64]packets.LightHsbk{}},
 			},
-			want: &Device{},
+			want:        &Device{},
+			wantUpdated: []bool{false},
 		},
 		"does not updated if unchanged": {
 			device: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{tile0, {}},
+					ChainZones: [][]packets.LightHsbk{packet0[:], emptyZoneSlice()},
 				},
 			},
-			msg: &packets.TileState64{
-				TileIndex: 0, Colors: [64]packets.LightHsbk{color0},
+			msgs: []*packets.TileState64{
+				{TileIndex: 0, Colors: [64]packets.LightHsbk{color0}},
 			},
 			want: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{tile0, {}},
+					ChainZones: [][]packets.LightHsbk{packet0[:], emptyZoneSlice()},
 				},
 			},
+			wantUpdated: []bool{false},
 		},
-		"sets matrix state": {
+		"sets matrix zones": {
 			device: &Device{
 				MatrixProperties: MatrixProperties{
-					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{{}, {}},
+					Height: 8, Width: 8, ChainLength: 2, StatePackets: 1,
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice(), emptyZoneSlice()},
 				},
 			},
-			msg: &packets.TileState64{
-				TileIndex: 0, Colors: [64]packets.LightHsbk{color0},
+			msgs: []*packets.TileState64{
+				{TileIndex: 0, Colors: [64]packets.LightHsbk{color0}},
 			},
 			want: &Device{
 				MatrixProperties: MatrixProperties{
-					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{tile0, {}},
+					Height: 8, Width: 8, ChainLength: 2, StatePackets: 1,
+					ChainZones: [][]packets.LightHsbk{packet0[:], emptyZoneSlice()},
 				},
 			},
-			wantUpdated: true,
+			wantUpdated: []bool{true},
 		},
 		"sets matrix state at offset": {
 			device: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{{}, {}},
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice(), emptyZoneSlice()},
 				},
 			},
-			msg: &packets.TileState64{
-				TileIndex: 1, Colors: [64]packets.LightHsbk{color0},
+			msgs: []*packets.TileState64{
+				{TileIndex: 1, Colors: [64]packets.LightHsbk{color0}},
 			},
 			want: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 2,
-					ChainState: [][64]packets.LightHsbk{{}, tile0},
+					ChainZones: [][]packets.LightHsbk{emptyZoneSlice(), packet0[:]},
 				},
 			},
-			wantUpdated: true,
+			wantUpdated: []bool{true},
+		},
+		"sets matrix with more than 64 zones": {
+			device: &Device{
+				MatrixProperties: MatrixProperties{
+					Height: 8, Width: 16, ChainLength: 1,
+					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 128)},
+				},
+			},
+			msgs: []*packets.TileState64{
+				{TileIndex: 0, Colors: packet0},
+				{TileIndex: 0, Colors: packet1, Rect: packets.TileBufferRect{Y: 4}},
+			},
+			want: &Device{
+				MatrixProperties: MatrixProperties{
+					Height: 8, Width: 16, ChainLength: 1,
+					ChainZones: [][]packets.LightHsbk{zones0},
+				},
+			},
+			wantUpdated: []bool{true, true},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			updated := tc.device.SetMatrixState(tc.msg)
+			var updated []bool
+			for _, msg := range tc.msgs {
+				got := tc.device.SetMatrixState(msg)
+				updated = append(updated, got)
+			}
 			assert.Equal(t, tc.want, tc.device)
 			assert.Equal(t, tc.wantUpdated, updated)
 		})

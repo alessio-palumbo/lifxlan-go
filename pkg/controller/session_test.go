@@ -239,20 +239,40 @@ func Test_preflightHandshake(t *testing.T) {
 				LightType: device.LightTypeMultiZone, Location: "L", Group: "G",
 			},
 		},
-		"matrix": {
+		"matrix < 64 zones": {
 			msgs: []*protocol.Message{
-				protocol.NewMessage(&packets.DeviceStateLabel{Label: [32]byte{'M', 'X'}}),
+				protocol.NewMessage(&packets.DeviceStateLabel{Label: [32]byte{'M', 'X', 'S'}}),
+				protocol.NewMessage(&packets.DeviceStateVersion{Product: 219}),
+				protocol.NewMessage(&packets.DeviceStateHostFirmware{VersionMajor: 3, VersionMinor: 90}),
+				protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'L'}}),
+				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
+				protocol.NewMessage(&packets.TileStateDeviceChain{TileDevicesCount: 1, TileDevices: [16]packets.TileStateDevice{{Width: 7, Height: 5}}}),
+			},
+			wantDevice: &device.Device{
+				Address: addr0, Serial: serial0, Type: device.DeviceTypeHybrid,
+				Label: "MXS", ProductID: 219, FirmwareVersion: "3.90",
+				LightType: device.LightTypeMatrix, Location: "L", Group: "G",
+				MatrixProperties: device.MatrixProperties{
+					ChainLength: 1, Width: 7, Height: 5, StatePackets: 1, NZones: 35,
+					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 35)}},
+			},
+		},
+		"matrix > 64 zones": {
+			msgs: []*protocol.Message{
+				protocol.NewMessage(&packets.DeviceStateLabel{Label: [32]byte{'M', 'X', 'L'}}),
 				protocol.NewMessage(&packets.DeviceStateVersion{Product: 201}),
 				protocol.NewMessage(&packets.DeviceStateHostFirmware{VersionMajor: 3, VersionMinor: 90}),
 				protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'L'}}),
 				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
-				protocol.NewMessage(&packets.TileStateDeviceChain{TileDevicesCount: 1, TileDevices: [16]packets.TileStateDevice{{Width: 3}}}),
+				protocol.NewMessage(&packets.TileStateDeviceChain{TileDevicesCount: 1, TileDevices: [16]packets.TileStateDevice{{Width: 16, Height: 8}}}),
 			},
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0,
-				Label: "MX", ProductID: 201, FirmwareVersion: "3.90",
+				Label: "MXL", ProductID: 201, FirmwareVersion: "3.90",
 				LightType: device.LightTypeMatrix, Location: "L", Group: "G",
-				MatrixProperties: device.MatrixProperties{ChainLength: 1, Width: 3, ChainState: [][64]packets.LightHsbk{{}}},
+				MatrixProperties: device.MatrixProperties{
+					ChainLength: 1, Width: 16, Height: 8, StatePackets: 2, NZones: 128,
+					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 128)}},
 			},
 		},
 		"times out with missing fields": {
