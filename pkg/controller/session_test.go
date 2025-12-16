@@ -223,6 +223,7 @@ func Test_preflightHandshake(t *testing.T) {
 				Address: addr0, Serial: serial0,
 				Label: "SZ", ProductID: 225, FirmwareVersion: "3.90",
 				LightType: device.LightTypeSingleZone, Location: "L", Group: "G",
+				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 			},
 		},
 		"multizone": {
@@ -237,6 +238,7 @@ func Test_preflightHandshake(t *testing.T) {
 				Address: addr0, Serial: serial0,
 				Label: "MZ", ProductID: 214, FirmwareVersion: "3.90",
 				LightType: device.LightTypeMultiZone, Location: "L", Group: "G",
+				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 			},
 		},
 		"matrix < 64 zones": {
@@ -252,6 +254,7 @@ func Test_preflightHandshake(t *testing.T) {
 				Address: addr0, Serial: serial0, Type: device.DeviceTypeHybrid,
 				Label: "MXS", ProductID: 219, FirmwareVersion: "3.90",
 				LightType: device.LightTypeMatrix, Location: "L", Group: "G",
+				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 				MatrixProperties: device.MatrixProperties{
 					ChainLength: 1, Width: 7, Height: 5, StatePackets: 1, NZones: 35,
 					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 35)}},
@@ -270,6 +273,7 @@ func Test_preflightHandshake(t *testing.T) {
 				Address: addr0, Serial: serial0,
 				Label: "MXL", ProductID: 201, FirmwareVersion: "3.90",
 				LightType: device.LightTypeMatrix, Location: "L", Group: "G",
+				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 				MatrixProperties: device.MatrixProperties{
 					ChainLength: 1, Width: 16, Height: 8, StatePackets: 2, NZones: 128,
 					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 128)}},
@@ -281,6 +285,7 @@ func Test_preflightHandshake(t *testing.T) {
 			},
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0, ProductID: 225, LightType: device.LightTypeSingleZone,
+				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 			},
 		},
 	}

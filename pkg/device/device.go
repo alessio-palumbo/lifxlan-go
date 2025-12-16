@@ -163,6 +163,7 @@ type Device struct {
 	// Device specific properties.
 	MatrixProperties    MatrixProperties
 	MultizoneProperties MultizoneProperties
+	ColorProperties     ColorProperties
 
 	// High Frequency updated fields.
 	Color         Color
@@ -187,6 +188,15 @@ type MultizoneProperties struct {
 	Zones []packets.LightHsbk
 }
 
+type ColorProperties struct {
+	HasColor         bool
+	TemperatureRange TemperatureRange
+}
+
+type TemperatureRange struct {
+	Min, Max int
+}
+
 func NewDevice(address *net.UDPAddr, serial [8]byte) *Device {
 	return &Device{Address: address, Serial: Serial(serial)}
 }
@@ -200,6 +210,19 @@ func (d *Device) SetProductInfo(pid uint32) {
 		d.Type = DeviceTypeSwitch
 	} else if isLight(p.Features) && p.Features.Buttons {
 		d.Type = DeviceTypeHybrid
+	}
+
+	if d.Type != DeviceTypeSwitch {
+		if len(p.Features.TemperatureRange) < 2 {
+			p.Features.TemperatureRange = []int{1500, 9000}
+		}
+		d.ColorProperties = ColorProperties{
+			HasColor: p.Features.Color,
+			TemperatureRange: TemperatureRange{
+				Min: p.Features.TemperatureRange[0],
+				Max: p.Features.TemperatureRange[1],
+			},
+		}
 	}
 
 	if p.Features.Multizone {

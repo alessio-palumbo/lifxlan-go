@@ -13,12 +13,27 @@ func TestSetProductInfo(t *testing.T) {
 		pid  uint32
 		want *Device
 	}{
+		"Single zone light (white only)": {
+			pid: 88,
+			want: &Device{
+				ProductID:    88,
+				RegistryName: "LIFX Mini White",
+				LightType:    LightTypeSingleZone,
+				ColorProperties: ColorProperties{
+					TemperatureRange: TemperatureRange{Min: 2700, Max: 2700},
+				},
+			},
+		},
 		"Single zone light": {
 			pid: 97,
 			want: &Device{
 				ProductID:    97,
 				RegistryName: "LIFX A19",
 				LightType:    LightTypeSingleZone,
+				ColorProperties: ColorProperties{
+					HasColor:         true,
+					TemperatureRange: TemperatureRange{Min: 1500, Max: 9000},
+				},
 			},
 		},
 		"Multizone light": {
@@ -27,6 +42,10 @@ func TestSetProductInfo(t *testing.T) {
 				ProductID:    117,
 				RegistryName: "LIFX Z US",
 				LightType:    LightTypeMultiZone,
+				ColorProperties: ColorProperties{
+					HasColor:         true,
+					TemperatureRange: TemperatureRange{Min: 1500, Max: 9000},
+				},
 			},
 		},
 		"Matrix light": {
@@ -35,6 +54,10 @@ func TestSetProductInfo(t *testing.T) {
 				ProductID:    55,
 				RegistryName: "LIFX Tile",
 				LightType:    LightTypeMatrix,
+				ColorProperties: ColorProperties{
+					HasColor:         true,
+					TemperatureRange: TemperatureRange{Min: 2500, Max: 9000},
+				},
 			},
 		},
 		"Switch": {
@@ -52,6 +75,10 @@ func TestSetProductInfo(t *testing.T) {
 				RegistryName: "LIFX Luna US",
 				Type:         DeviceTypeHybrid,
 				LightType:    LightTypeMatrix,
+				ColorProperties: ColorProperties{
+					HasColor:         true,
+					TemperatureRange: TemperatureRange{Min: 1500, Max: 9000},
+				},
 			},
 		},
 	}
