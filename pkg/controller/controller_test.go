@@ -34,6 +34,7 @@ func TestController(t *testing.T) {
 		assert.Equal(t, defaultHighFrequencyStateRefreshPeriod, ctrl.cfg.highFrequencyStateRefreshPeriod)
 		assert.Equal(t, defaultLowFrequencyStateRefreshPeriod, ctrl.cfg.lowFrequencyStateRefreshPeriod)
 		assert.Equal(t, 50*time.Second, ctrl.cfg.deviceLivenessTimeout)
+		assert.Equal(t, 5*time.Second, ctrl.cfg.preflightHandshakeTimeout)
 	})
 
 	t.Run("Performs continuous discovery", func(t *testing.T) {

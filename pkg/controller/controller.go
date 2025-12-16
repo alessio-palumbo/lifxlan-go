@@ -55,11 +55,11 @@ type Config struct {
 	discoveryPeriod                 time.Duration
 	highFrequencyStateRefreshPeriod time.Duration
 	lowFrequencyStateRefreshPeriod  time.Duration
+	preflightHandshakeTimeout       time.Duration
 
 	// Non configurable
-	deviceLivenessTimeout     time.Duration
-	preflightHandshakeTimeout time.Duration
-	preflightHandshakeWait    time.Duration
+	deviceLivenessTimeout  time.Duration
+	preflightHandshakeWait time.Duration
 }
 
 // setLivenessTimeout sets the inactivity period after which a device is considered

@@ -36,3 +36,14 @@ func WithLFStateRefreshPeriod(d time.Duration) Option {
 		return nil
 	}
 }
+
+// WithPreflightHandshakeTimeout sets the timeout after which the initial handshake is stopped
+// and normal tickets start pulling state periodically.
+// For busy network setting a longer timeout ensures all devices receive the initial messages
+// before start polling for state. For normal network the default should do.
+func WithPreflightHandshakeTimeout(d time.Duration) Option {
+	return func(ctrl *Controller) error {
+		ctrl.cfg.preflightHandshakeTimeout = d
+		return nil
+	}
+}
