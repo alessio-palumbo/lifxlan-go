@@ -57,10 +57,35 @@ func SetColor(h, s, b *float64, k *uint16, d time.Duration, waveform enums.Light
 
 // SetMatrixColors returns a TileSet64 Message that sets a matrix with the given size to the provided colors.
 func SetMatrixColors(startIndex, length, width int, colors [64]packets.LightHsbk, d time.Duration) *protocol.Message {
+	return newTileSet64Msg(startIndex, length, width, 0, 0, colors, d)
+}
+
+// SetMatrixColorsFromSlice returns one or more TileSet64 messages according to a slice of packets.LightHsbk.
+// If the slice does not contain all the 64 colors then the default zero value is used.
+func SetMatrixColorsFromSlice(startIndex, length, width int, colors []packets.LightHsbk, d time.Duration) []*protocol.Message {
+	var msgs []*protocol.Message
+	hsbk := [64]packets.LightHsbk{}
+	var tileIndex int
+
+	for i, c := range colors {
+		hsbk[i%64] = c
+
+		if (i+1)%64 == 0 || i == len(colors)-1 {
+			y := tileIndex * 64 / width
+			msgs = append(msgs, newTileSet64Msg(startIndex, length, width, 0, y, hsbk, d))
+			hsbk = [64]packets.LightHsbk{}
+			tileIndex++
+		}
+	}
+
+	return msgs
+}
+
+func newTileSet64Msg(startIndex, length, width, x, y int, colors [64]packets.LightHsbk, d time.Duration) *protocol.Message {
 	m := &packets.TileSet64{
 		TileIndex: uint8(startIndex),
 		Length:    uint8(length),
-		Rect:      packets.TileBufferRect{Width: uint8(width)},
+		Rect:      packets.TileBufferRect{Width: uint8(width), X: uint8(x), Y: uint8(y)},
 		Duration:  uint32(d.Milliseconds()),
 		Colors:    colors,
 	}
