@@ -1,5 +1,5 @@
-github.com/alessio-palumbo/lifxprotocol-go v0.1.0 h1:9sjqTWqQLI4wj5yMirGPQaMvjCDffKFrGnOni4hRZzg=
-github.com/alessio-palumbo/lifxprotocol-go v0.1.0/go.mod h1:Wvmw7KNc2ieF6CPM8Of0EdWW0e/w5nlTwK7sLwMDbJ0=
+github.com/alessio-palumbo/lifxprotocol-go v0.2.0 h1:Ykpm4xeLHeF8pgAapENHSpjEbWtsXtb+tUCOVZ/WTnk=
+github.com/alessio-palumbo/lifxprotocol-go v0.2.0/go.mod h1:Wvmw7KNc2ieF6CPM8Of0EdWW0e/w5nlTwK7sLwMDbJ0=
 github.com/alessio-palumbo/lifxregistry-go v0.2.0 h1:PhdRMyMJbBhwM0VpQdWqWDrNcl20frOBsdWqzuDFnG8=
 github.com/alessio-palumbo/lifxregistry-go v0.2.0/go.mod h1:42P1qmWK+kzuqJp9cvWjFUgcru+10bZ+w4MSRAQGCZo=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

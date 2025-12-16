@@ -34,6 +34,12 @@ func TestSetMatrixColorsFromSlice(t *testing.T) {
 	copy(greaterThan64Array1[:], greaterThan64Slice[:64])
 	copy(greaterThan64Array2[:], greaterThan64Slice[64:])
 
+	greaterThan64PartialSlice := newNColors(96)
+	greaterThan64PartialArray1 := [64]packets.LightHsbk{}
+	greaterThan64PartialArray2 := [64]packets.LightHsbk{}
+	copy(greaterThan64PartialArray1[:], greaterThan64PartialSlice[:64])
+	copy(greaterThan64PartialArray2[:], greaterThan64PartialSlice[64:])
+
 	testCases := map[string]struct {
 		startIndex int
 		length     int
@@ -74,12 +80,36 @@ func TestSetMatrixColorsFromSlice(t *testing.T) {
 			d:      time.Millisecond,
 			want: []*protocol.Message{
 				protocol.NewMessage(&packets.TileSet64{
-					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 16, X: 0, Y: 0},
-					Duration: 1, Colors: greaterThan64Array1,
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{FbIndex: 1, Width: 16, X: 0, Y: 0},
+					Duration: 0, Colors: greaterThan64Array1,
 				}),
 				protocol.NewMessage(&packets.TileSet64{
-					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 16, X: 0, Y: 4},
-					Duration: 1, Colors: greaterThan64Array2,
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{FbIndex: 1, Width: 16, X: 0, Y: 4},
+					Duration: 0, Colors: greaterThan64Array2,
+				}),
+				protocol.NewMessage(&packets.TileCopyFrameBuffer{
+					TileIndex: 0, Length: 1, SrcFbIndex: 1, DstFbIndex: 0,
+					Width: 16, Height: 8, Duration: 1,
+				}),
+			},
+		},
+		"greater than 64 colors (with partial message)": {
+			length: 1,
+			width:  16,
+			colors: greaterThan64PartialSlice,
+			d:      time.Millisecond,
+			want: []*protocol.Message{
+				protocol.NewMessage(&packets.TileSet64{
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{FbIndex: 1, Width: 16, X: 0, Y: 0},
+					Duration: 0, Colors: greaterThan64PartialArray1,
+				}),
+				protocol.NewMessage(&packets.TileSet64{
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{FbIndex: 1, Width: 16, X: 0, Y: 4},
+					Duration: 0, Colors: greaterThan64PartialArray2,
+				}),
+				protocol.NewMessage(&packets.TileCopyFrameBuffer{
+					TileIndex: 0, Length: 1, SrcFbIndex: 1, DstFbIndex: 0,
+					Width: 16, Height: 6, Duration: 1,
 				}),
 			},
 		},

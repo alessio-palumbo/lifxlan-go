@@ -57,7 +57,7 @@ func SetColor(h, s, b *float64, k *uint16, d time.Duration, waveform enums.Light
 
 // SetMatrixColors returns a TileSet64 Message that sets a matrix with the given size to the provided colors.
 func SetMatrixColors(startIndex, length, width int, colors [64]packets.LightHsbk, d time.Duration) *protocol.Message {
-	return newTileSet64Msg(startIndex, length, width, 0, 0, colors, d)
+	return newTileSet64Msg(startIndex, length, 0, width, 0, 0, colors, d)
 }
 
 // SetMatrixColorsFromSlice returns one or more TileSet64 messages according to a slice of packets.LightHsbk.
@@ -67,25 +67,42 @@ func SetMatrixColorsFromSlice(startIndex, length, width int, colors []packets.Li
 	hsbk := [64]packets.LightHsbk{}
 	var tileIndex int
 
+	var fb int
+	var flipDuration time.Duration
+	if len(colors) > 64 {
+		fb = 1
+		flipDuration = d
+		d = 0
+	}
+
 	for i, c := range colors {
 		hsbk[i%64] = c
 
 		if (i+1)%64 == 0 || i == len(colors)-1 {
 			y := tileIndex * 64 / width
-			msgs = append(msgs, newTileSet64Msg(startIndex, length, width, 0, y, hsbk, d))
+			msgs = append(msgs, newTileSet64Msg(startIndex, length, fb, width, 0, y, hsbk, d))
 			hsbk = [64]packets.LightHsbk{}
 			tileIndex++
 		}
 	}
 
+	if fb == 1 {
+		// Compute height based on the width and length of colors
+		height := len(colors) / width
+		msgs = append(msgs, protocol.NewMessage(&packets.TileCopyFrameBuffer{
+			DstFbIndex: 0, SrcFbIndex: 1, Width: uint8(width),
+			Height: uint8(height), Length: 1, Duration: uint32(flipDuration.Milliseconds()),
+		}))
+	}
+
 	return msgs
 }
 
-func newTileSet64Msg(startIndex, length, width, x, y int, colors [64]packets.LightHsbk, d time.Duration) *protocol.Message {
+func newTileSet64Msg(startIndex, length, fb, width, x, y int, colors [64]packets.LightHsbk, d time.Duration) *protocol.Message {
 	m := &packets.TileSet64{
 		TileIndex: uint8(startIndex),
 		Length:    uint8(length),
-		Rect:      packets.TileBufferRect{Width: uint8(width), X: uint8(x), Y: uint8(y)},
+		Rect:      packets.TileBufferRect{FbIndex: uint8(fb), Width: uint8(width), X: uint8(x), Y: uint8(y)},
 		Duration:  uint32(d.Milliseconds()),
 		Colors:    colors,
 	}
