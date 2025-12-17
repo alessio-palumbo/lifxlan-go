@@ -165,6 +165,8 @@ type Device struct {
 	MultizoneProperties MultizoneProperties
 	ColorProperties     ColorProperties
 
+	Buttons []Button
+
 	// High Frequency updated fields.
 	Color         Color
 	PoweredOn     bool
@@ -191,6 +193,10 @@ type MultizoneProperties struct {
 type ColorProperties struct {
 	HasColor         bool
 	TemperatureRange TemperatureRange
+}
+
+type Button struct {
+	Actions []packets.ButtonAction
 }
 
 type TemperatureRange struct {
@@ -312,6 +318,38 @@ func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZo
 	return true
 }
 
+func (d *Device) SetButtons(p *packets.ButtonState) (updated bool) {
+	bCount := int(p.ButtonsCount)
+	if bCount != len(d.Buttons) {
+		updated = true
+		d.Buttons = make([]Button, bCount)
+		for i := range bCount {
+			d.Buttons[i].Actions = p.Buttons[i].Actions[:p.Buttons[i].ActionsCount]
+		}
+		return
+	}
+
+	for i := range bCount {
+		pButton := p.Buttons[i]
+		dButton := d.Buttons[i]
+		aCount := int(pButton.ActionsCount)
+		if aCount != len(dButton.Actions) {
+			updated = true
+			dButton.Actions = make([]packets.ButtonAction, aCount)
+		}
+
+		for j := range aCount {
+			if pButton.Actions[j].Target != dButton.Actions[j].Target ||
+				pButton.Actions[j].Gesture != dButton.Actions[j].Gesture ||
+				pButton.Actions[j].TargetType != dButton.Actions[j].TargetType {
+				updated = true
+				dButton.Actions[j] = pButton.Actions[j]
+			}
+		}
+	}
+	return
+}
+
 // HighFreqStateMessages returns a list of messages to gather state that
 // change often and should be polled frequently.
 // Messages differes according to device type.
@@ -360,6 +398,9 @@ func (d *Device) LowFreqStateMessages() []*protocol.Message {
 
 	if d.LightType == LightTypeMatrix {
 		msg = append(msg, protocol.NewMessage(&packets.TileGetDeviceChain{}))
+	}
+	if d.Type != DeviceTypeLight {
+		msg = append(msg, protocol.NewMessage(&packets.ButtonGet{}))
 	}
 	return msg
 }

@@ -185,6 +185,10 @@ func (s *DeviceSession) recvloop() {
 				if updated := s.device.SetMultizoneProperties(p); updated {
 					s.device.LastUpdatedAt = time.Now()
 				}
+			case *packets.ButtonState:
+				if updated := s.device.SetButtons(p); updated {
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.DeviceStatePower:
 				poweredOn := p.Level > 0
 				if shouldUpdate(s.device.PoweredOn, poweredOn) {
@@ -235,8 +239,23 @@ func (s *DeviceSession) preflightHandshake(timeout, wait time.Duration) {
 			var retryMsgs []*protocol.Message
 			s.mu.RLock()
 			for _, m := range required {
-				if f := messageDoneFuncs[m.Payload]; f != nil && !f(s.device) {
-					retryMsgs = append(retryMsgs, m)
+				if f := messageDoneFuncs[m.Payload]; f != nil {
+					if !f(s.device) {
+						retryMsgs = append(retryMsgs, m)
+					} else if m.Payload.PayloadType() == uint16(packets.PayloadTypeDeviceGetVersion) {
+						// Add device-specific preflight messages.
+						if s.device.Type != device.DeviceTypeLight {
+							retryMsgs = append(retryMsgs, protocol.NewMessage(&packets.ButtonGet{}))
+							continue
+						}
+
+						switch s.device.LightType {
+						case device.LightTypeMatrix:
+							retryMsgs = append(retryMsgs, protocol.NewMessage(&packets.TileGetDeviceChain{}))
+						case device.LightTypeMultiZone:
+							retryMsgs = append(retryMsgs, protocol.NewMessage(&packets.MultiZoneExtendedGetColorZones{}))
+						}
+					}
 				}
 			}
 			s.mu.RUnlock()
@@ -265,8 +284,6 @@ func requiredStateMessages() []*protocol.Message {
 		protocol.NewMessage(&packets.DeviceGetLocation{}),
 		protocol.NewMessage(&packets.DeviceGetGroup{}),
 		protocol.NewMessage(&packets.DeviceGetWifiInfo{}),
-		protocol.NewMessage(&packets.TileGetDeviceChain{}),
-		protocol.NewMessage(&packets.MultiZoneExtendedGetColorZones{}),
 	}
 }
 
@@ -283,5 +300,8 @@ var messageDoneFuncs = map[packets.Payload]func(*device.Device) bool{
 	},
 	&packets.MultiZoneExtendedGetColorZones{}: func(d *device.Device) bool {
 		return d.LightType != device.LightTypeMultiZone || len(d.MultizoneProperties.Zones) > 0
+	},
+	&packets.ButtonGet{}: func(d *device.Device) bool {
+		return d.Type == device.DeviceTypeLight || len(d.Buttons) > 0
 	},
 }

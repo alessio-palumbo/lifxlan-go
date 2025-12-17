@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/stretchr/testify/assert"
 )
@@ -440,6 +441,111 @@ func TestSetMultizoneProperties(t *testing.T) {
 				got := tc.device.SetMultizoneProperties(msg)
 				updated = append(updated, got)
 			}
+			assert.Equal(t, tc.want, tc.device)
+			assert.Equal(t, tc.wantUpdated, updated)
+		})
+	}
+}
+
+func TestSetButtons(t *testing.T) {
+	button0 := Button{
+		Actions: []packets.ButtonAction{
+			{
+				Gesture:    enums.ButtonGestureBUTTONGESTUREHOLD,
+				TargetType: enums.ButtonTargetTypeBUTTONTARGETTYPEBRIGHTNESSDOWNDEVICE,
+				Target:     packets.ButtonTarget{},
+			},
+		},
+	}
+	button1 := Button{
+		Actions: []packets.ButtonAction{
+			{
+				Gesture:    enums.ButtonGestureBUTTONGESTUREHOLD,
+				TargetType: enums.ButtonTargetTypeBUTTONTARGETTYPEPOWERONRELAYS,
+				Target:     packets.ButtonTarget{},
+			},
+			{
+				Gesture:    enums.ButtonGestureBUTTONGESTUREHOLDTOUCH,
+				TargetType: enums.ButtonTargetTypeBUTTONTARGETTYPEBRIGHTNESSDOWNDEVICE,
+				Target:     packets.ButtonTarget{},
+			},
+		},
+	}
+	button2 := Button{
+		Actions: []packets.ButtonAction{
+			{
+				Gesture:    enums.ButtonGestureBUTTONGESTUREHOLD,
+				TargetType: enums.ButtonTargetTypeBUTTONTARGETTYPEBRIGHTNESSUPDEVICE,
+				Target:     packets.ButtonTarget{},
+			},
+			{
+				Gesture:    enums.ButtonGestureBUTTONGESTUREHOLDRELEASE,
+				TargetType: enums.ButtonTargetTypeBUTTONTARGETTYPEPOWEROFFGROUP,
+				Target:     packets.ButtonTarget{},
+			},
+		},
+	}
+
+	tests := map[string]struct {
+		device      *Device
+		msg         *packets.ButtonState
+		want        *Device
+		wantUpdated bool
+	}{
+		"bad message": {
+			device:      &Device{},
+			msg:         &packets.ButtonState{},
+			want:        &Device{},
+			wantUpdated: false,
+		},
+		"no change": {
+			device: &Device{Buttons: []Button{button0, button1}},
+			msg: &packets.ButtonState{
+				ButtonsCount: 2, Buttons: [8]packets.Button{
+					{ActionsCount: 1, Actions: [5]packets.ButtonAction{button0.Actions[0]}},
+					{ActionsCount: 2, Actions: [5]packets.ButtonAction{button1.Actions[0], button1.Actions[1]}},
+				},
+			},
+			want:        &Device{Buttons: []Button{button0, button1}},
+			wantUpdated: false,
+		},
+		"add button": {
+			device: &Device{Buttons: []Button{button0}},
+			msg: &packets.ButtonState{
+				ButtonsCount: 2, Buttons: [8]packets.Button{
+					{ActionsCount: 1, Actions: [5]packets.ButtonAction{button0.Actions[0]}},
+					{ActionsCount: 2, Actions: [5]packets.ButtonAction{button1.Actions[0], button1.Actions[1]}},
+				},
+			},
+			want:        &Device{Buttons: []Button{button0, button1}},
+			wantUpdated: true,
+		},
+		"remove button": {
+			device: &Device{Buttons: []Button{button0, button1}},
+			msg: &packets.ButtonState{
+				ButtonsCount: 1, Buttons: [8]packets.Button{
+					{ActionsCount: 1, Actions: [5]packets.ButtonAction{button0.Actions[0]}},
+				},
+			},
+			want:        &Device{Buttons: []Button{button0}},
+			wantUpdated: true,
+		},
+		"updates button": {
+			device: &Device{Buttons: []Button{button0, button2}},
+			msg: &packets.ButtonState{
+				ButtonsCount: 2, Buttons: [8]packets.Button{
+					{ActionsCount: 1, Actions: [5]packets.ButtonAction{button0.Actions[0]}},
+					{ActionsCount: 2, Actions: [5]packets.ButtonAction{button1.Actions[0], button1.Actions[1]}},
+				},
+			},
+			want:        &Device{Buttons: []Button{button0, button1}},
+			wantUpdated: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			updated := tc.device.SetButtons(tc.msg)
 			assert.Equal(t, tc.want, tc.device)
 			assert.Equal(t, tc.wantUpdated, updated)
 		})
