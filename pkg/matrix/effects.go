@@ -20,11 +20,11 @@ var (
 	minInterval = time.Millisecond
 )
 
-type chainMode int
+type ChainMode int
 
 const (
 	// ChainModeNone applies the effect to the first device in the chain.
-	ChainModeNone chainMode = iota
+	ChainModeNone ChainMode = iota
 	// ChainModeSequential applies the effect sequentially on each chain index.
 	ChainModeSequential
 	// ChainModeSynced applies the effect to the whole chain.
@@ -33,7 +33,7 @@ const (
 
 // ParseChainMode converts an int to chainmode.
 // If invalid it return ChainModeNone.
-func ParseChainMode(m int) chainMode {
+func ParseChainMode(m int) ChainMode {
 	switch m {
 	case 1:
 		return ChainModeSequential
@@ -44,18 +44,18 @@ func ParseChainMode(m int) chainMode {
 	}
 }
 
-type animationDirection int
+type AnimationDirection int
 
 const (
-	AnimationDirectionInwards animationDirection = iota
+	AnimationDirectionInwards AnimationDirection = iota
 	AnimationDirectionOutwards
 	AnimationDirectionInOut
 	AnimationDirectionOutIn
 )
 
-// ParseAnimationDirection converts an int to animationDirection.
+// ParseAnimationDirection converts an int to AnimationDirection.
 // If invalid it return AnimationDirectionInwards.
-func ParseAnimationDirection(m int) animationDirection {
+func ParseAnimationDirection(m int) AnimationDirection {
 	switch m {
 	case 1:
 		return AnimationDirectionOutwards
@@ -89,7 +89,7 @@ func SendWithStop(send SendFunc) (SendFunc, *atomic.Bool) {
 // Waterfall applies the given colors sequentially on each row centering them, if possible.
 // It waits for the given interval before setting the next row.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
-func Waterfall(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, colors ...packets.LightHsbk) error {
+func Waterfall(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, colors ...packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	if len(colors) == 0 {
 		return ErrMissingColors
@@ -135,7 +135,7 @@ func waterfall(m *Matrix, send SendFunc, d time.Duration, x, mIdx, mLength int, 
 // It waits for the given interval before setting the next pixel.
 // If multiple colors are provided colors are rotated on each row.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
-func Rockets(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, colors ...packets.LightHsbk) error {
+func Rockets(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, colors ...packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	if len(colors) == 0 {
 		return ErrMissingColors
@@ -182,7 +182,7 @@ func rockets(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength int, color
 
 // Worm moves n pixels along the matrix wrapping and reversing at every row with a wave-like movement.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
-func Worm(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, size int, color packets.LightHsbk) error {
+func Worm(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, size int, color packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	wormSize := min(max(size, 1), m.Width)
 
@@ -240,7 +240,7 @@ func worm(m *Matrix, send SendFunc, d time.Duration, wormSize, mIdx, mLength int
 
 // Snake moves n pixels along the matrix wrapping and reversing at every row.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
-func Snake(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, size int, color packets.LightHsbk) error {
+func Snake(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, size int, color packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	snakeSize := min(max(size, 1), m.Width)
 
@@ -299,7 +299,7 @@ func snake(m *Matrix, send SendFunc, d time.Duration, snakeSize, mIdx, mLength i
 // If an optional color is supplied it is used as the fram color, otherwise the frame color
 // will randomly change at each iteration.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
-func ConcentricFrames(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode chainMode, direction animationDirection, color *packets.LightHsbk) error {
+func ConcentricFrames(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, direction AnimationDirection, color *packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	var iterFunc func(yield func(int) bool)
 	maxSteps := m.MaxPadding() + 1

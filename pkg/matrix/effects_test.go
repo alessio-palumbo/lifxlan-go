@@ -12,7 +12,7 @@ import (
 func TestParseChainMode(t *testing.T) {
 	testCases := map[string]struct {
 		value int
-		want  chainMode
+		want  ChainMode
 	}{
 		"mode none": {
 			value: 0, want: ChainModeNone,
@@ -40,7 +40,7 @@ func TestParseChainMode(t *testing.T) {
 func TestParseAnimationDirection(t *testing.T) {
 	testCases := map[string]struct {
 		value int
-		want  animationDirection
+		want  AnimationDirection
 	}{
 		"direction inwards": {
 			value: 0, want: AnimationDirectionInwards,
@@ -95,7 +95,7 @@ func TestSendWithStop(t *testing.T) {
 
 func TestWaterfall(t *testing.T) {
 	testCases := map[string]struct {
-		mode    chainMode
+		mode    ChainMode
 		colors  []packets.LightHsbk
 		want    []*packets.TileSet64
 		wantErr error
@@ -260,7 +260,7 @@ func TestWaterfall(t *testing.T) {
 
 func TestRockets(t *testing.T) {
 	testCases := map[string]struct {
-		mode    chainMode
+		mode    ChainMode
 		colors  []packets.LightHsbk
 		want    []*packets.TileSet64
 		wantErr error
@@ -369,7 +369,7 @@ func TestRockets(t *testing.T) {
 
 func TestWorm(t *testing.T) {
 	testCases := map[string]struct {
-		mode    chainMode
+		mode    ChainMode
 		size    int
 		color   packets.LightHsbk
 		want    []*packets.TileSet64
@@ -583,7 +583,7 @@ func TestWorm(t *testing.T) {
 
 func TestSnake(t *testing.T) {
 	testCases := map[string]struct {
-		mode    chainMode
+		mode    ChainMode
 		size    int
 		color   packets.LightHsbk
 		want    []*packets.TileSet64
@@ -797,8 +797,8 @@ func TestSnake(t *testing.T) {
 
 func TestConcentricFrames(t *testing.T) {
 	testCases := map[string]struct {
-		mode      chainMode
-		direction animationDirection
+		mode      ChainMode
+		direction AnimationDirection
 		color     *packets.LightHsbk
 		want      []*packets.TileSet64
 		wantErr   error
