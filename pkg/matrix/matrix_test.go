@@ -637,6 +637,79 @@ func TestFlattenColors(t *testing.T) {
 	}
 }
 
+func TestFlatten(t *testing.T) {
+	color0 := packets.LightHsbk{Kelvin: 3500}
+	testCases := map[string]struct {
+		matrix *Matrix
+		setter func(m *Matrix)
+		want   []packets.LightHsbk
+	}{
+		"start": {
+			matrix: New(4, 4, 0),
+			setter: func(m *Matrix) { m.SetColors(0, 0, color0) },
+			want: []packets.LightHsbk{
+				color0, {}, {}, {},
+				{}, {}, {}, {},
+				{}, {}, {}, {},
+				{}, {}, {}, {},
+			},
+		},
+		"middle": {
+			matrix: New(4, 4, 0),
+			setter: func(m *Matrix) { m.SetColors(2, 1, color0) },
+			want: []packets.LightHsbk{
+				{}, {}, {}, {},
+				{}, {}, color0, {},
+				{}, {}, {}, {},
+				{}, {}, {}, {},
+			},
+		},
+		"end": {
+			matrix: New(4, 4, 0),
+			setter: func(m *Matrix) { m.SetColors(3, 3, color0) },
+			want: []packets.LightHsbk{
+				{}, {}, {}, {},
+				{}, {}, {}, {},
+				{}, {}, {}, {},
+				{}, {}, {}, color0,
+			},
+		},
+		"smallest": {
+			matrix: New(2, 2, 0),
+			setter: func(m *Matrix) { m.SetColors(1, 0, color0) },
+			want: []packets.LightHsbk{
+				{}, color0,
+				{}, {},
+			},
+		},
+		"irregular: larger width": {
+			matrix: New(4, 2, 0),
+			setter: func(m *Matrix) { m.SetColors(3, 0, color0) },
+			want: []packets.LightHsbk{
+				{}, {}, {}, color0,
+				{}, {}, {}, {},
+			},
+		},
+		"irregular: larger height": {
+			matrix: New(2, 4, 0),
+			setter: func(m *Matrix) { m.SetColors(1, 1, color0) },
+			want: []packets.LightHsbk{
+				{}, {},
+				{}, color0,
+				{}, {},
+				{}, {},
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			tc.setter(tc.matrix)
+			assert.Equal(t, tc.matrix.Flatten(), tc.want)
+		})
+	}
+}
+
 func TestParseColors(t *testing.T) {
 	testCases := map[string]struct {
 		matrix *Matrix

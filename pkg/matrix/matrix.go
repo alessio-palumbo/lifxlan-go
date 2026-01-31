@@ -178,8 +178,20 @@ func (m *Matrix) MaxPadding() int {
 
 // FlattenColors converts the Colors' matrix into a 64-byte array that can be
 // used with the LIFX protocol.
+// DEPRECATED Use Flatten instead.
 func (m *Matrix) FlattenColors() [64]packets.LightHsbk {
 	var colors [64]packets.LightHsbk
+	for y := range m.Height {
+		for x := range m.Width {
+			colors[y*m.Width+x] = m.Colors[y][x]
+		}
+	}
+	return colors
+}
+
+// Flatten flattens the matrix into a slice of LightHsbk colors.
+func (m *Matrix) Flatten() []packets.LightHsbk {
+	colors := make([]packets.LightHsbk, m.Height*m.Width)
 	for y := range m.Height {
 		for x := range m.Width {
 			colors[y*m.Width+x] = m.Colors[y][x]
