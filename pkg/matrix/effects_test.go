@@ -1280,15 +1280,17 @@ func TestConcentricFrames(t *testing.T) {
 	testCases := map[string]struct {
 		mode      ChainMode
 		matrix    *Matrix
+		cycles    int
 		direction AnimationDirection
-		color     *packets.LightHsbk
+		colors    []packets.LightHsbk
 		want      []packets.Payload
 		wantErr   error
 	}{
 		"single tile: inwards": {
 			matrix:    New(6, 6, 2),
+			cycles:    1,
 			direction: AnimationDirectionInwards,
-			color:     &packets.LightHsbk{Kelvin: 3500},
+			colors:    []packets.LightHsbk{{Kelvin: 3500}},
 			want: []packets.Payload{
 				&packets.TileSet64{
 					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
@@ -1327,8 +1329,9 @@ func TestConcentricFrames(t *testing.T) {
 		},
 		"single tile: outwards": {
 			matrix:    New(6, 6, 2),
+			cycles:    1,
 			direction: AnimationDirectionOutwards,
-			color:     &packets.LightHsbk{Kelvin: 3500},
+			colors:    []packets.LightHsbk{{Kelvin: 3500}},
 			want: []packets.Payload{
 				&packets.TileSet64{
 					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
@@ -1368,7 +1371,8 @@ func TestConcentricFrames(t *testing.T) {
 		"single tile: in-out": {
 			direction: AnimationDirectionInOut,
 			matrix:    New(6, 6, 2),
-			color:     &packets.LightHsbk{Kelvin: 3500},
+			cycles:    1,
+			colors:    []packets.LightHsbk{{Kelvin: 3500}},
 			want: []packets.Payload{
 				&packets.TileSet64{
 					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
@@ -1419,7 +1423,8 @@ func TestConcentricFrames(t *testing.T) {
 		"single tile: out-in": {
 			direction: AnimationDirectionOutIn,
 			matrix:    New(6, 6, 2),
-			color:     &packets.LightHsbk{Kelvin: 3500},
+			cycles:    1,
+			colors:    []packets.LightHsbk{{Kelvin: 3500}},
 			want: []packets.Payload{
 				&packets.TileSet64{
 					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
@@ -1470,7 +1475,8 @@ func TestConcentricFrames(t *testing.T) {
 		"multiple tiles: sequential": {
 			mode:   ChainModeSequential,
 			matrix: New(6, 6, 2),
-			color:  &packets.LightHsbk{Kelvin: 3500},
+			cycles: 1,
+			colors: []packets.LightHsbk{{Kelvin: 3500}},
 			want: []packets.Payload{
 				&packets.TileSet64{
 					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
@@ -1543,7 +1549,8 @@ func TestConcentricFrames(t *testing.T) {
 		"multiple tiles: synced": {
 			mode:   ChainModeSynced,
 			matrix: New(6, 6, 2),
-			color:  &packets.LightHsbk{Kelvin: 3500},
+			cycles: 1,
+			colors: []packets.LightHsbk{{Kelvin: 3500}},
 			want: []packets.Payload{
 				&packets.TileSet64{
 					TileIndex: 0, Length: 2, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
@@ -1582,7 +1589,8 @@ func TestConcentricFrames(t *testing.T) {
 		},
 		"matrix greater than 64": {
 			matrix: New(16, 8, 1),
-			color:  &packets.LightHsbk{Kelvin: 3500},
+			cycles: 1,
+			colors: []packets.LightHsbk{{Kelvin: 3500}},
 			want: []packets.Payload{
 				&packets.TileSet64{
 					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 16, FbIndex: 1, Y: 0},
@@ -1674,6 +1682,79 @@ func TestConcentricFrames(t *testing.T) {
 				},
 			},
 		},
+		"single tile: multiple colors": {
+			matrix: New(6, 6, 2),
+			cycles: 2,
+			colors: []packets.LightHsbk{{Kelvin: 3500}, {Kelvin: 3700}},
+			want: []packets.Payload{
+				&packets.TileSet64{
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
+					Colors: [64]packets.LightHsbk{
+						{Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500},
+						{Kelvin: 3500}, {}, {}, {}, {}, {Kelvin: 3500},
+						{Kelvin: 3500}, {}, {}, {}, {}, {Kelvin: 3500},
+						{Kelvin: 3500}, {}, {}, {}, {}, {Kelvin: 3500},
+						{Kelvin: 3500}, {}, {}, {}, {}, {Kelvin: 3500},
+						{Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500},
+					},
+				},
+				&packets.TileSet64{
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
+					Colors: [64]packets.LightHsbk{
+						{}, {}, {}, {}, {}, {},
+						{}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {},
+						{}, {Kelvin: 3500}, {}, {}, {Kelvin: 3500}, {},
+						{}, {Kelvin: 3500}, {}, {}, {Kelvin: 3500}, {},
+						{}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {Kelvin: 3500}, {},
+						{}, {}, {}, {}, {}, {},
+					},
+				},
+				&packets.TileSet64{
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
+					Colors: [64]packets.LightHsbk{
+						{}, {}, {}, {}, {}, {},
+						{}, {}, {}, {}, {}, {},
+						{}, {}, {Kelvin: 3500}, {Kelvin: 3500}, {}, {},
+						{}, {}, {Kelvin: 3500}, {Kelvin: 3500}, {}, {},
+						{}, {}, {}, {}, {}, {},
+						{}, {}, {}, {}, {}, {},
+					},
+				},
+				&packets.TileSet64{
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
+					Colors: [64]packets.LightHsbk{
+						{Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700},
+						{Kelvin: 3700}, {}, {}, {}, {}, {Kelvin: 3700},
+						{Kelvin: 3700}, {}, {}, {}, {}, {Kelvin: 3700},
+						{Kelvin: 3700}, {}, {}, {}, {}, {Kelvin: 3700},
+						{Kelvin: 3700}, {}, {}, {}, {}, {Kelvin: 3700},
+						{Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700},
+					},
+				},
+				&packets.TileSet64{
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
+					Colors: [64]packets.LightHsbk{
+						{}, {}, {}, {}, {}, {},
+						{}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {},
+						{}, {Kelvin: 3700}, {}, {}, {Kelvin: 3700}, {},
+						{}, {Kelvin: 3700}, {}, {}, {Kelvin: 3700}, {},
+						{}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {Kelvin: 3700}, {},
+						{}, {}, {}, {}, {}, {},
+					},
+				},
+				&packets.TileSet64{
+					TileIndex: 0, Length: 1, Rect: packets.TileBufferRect{Width: 6}, Duration: 1,
+					Colors: [64]packets.LightHsbk{
+						{}, {}, {}, {}, {}, {},
+						{}, {}, {}, {}, {}, {},
+						{}, {}, {Kelvin: 3700}, {Kelvin: 3700}, {}, {},
+						{}, {}, {Kelvin: 3700}, {Kelvin: 3700}, {}, {},
+						{}, {}, {}, {}, {}, {},
+						{}, {}, {}, {}, {}, {},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range testCases {
@@ -1683,7 +1764,7 @@ func TestConcentricFrames(t *testing.T) {
 				got = append(got, msg.Payload)
 				return nil
 			}
-			if err := ConcentricFrames(tc.matrix, send, 1, 1, tc.mode, tc.direction, tc.color); err != tc.wantErr {
+			if err := ConcentricFrames(tc.matrix, send, 1, tc.cycles, tc.mode, tc.direction, tc.colors...); err != tc.wantErr {
 				t.Fatalf("Got error %v, want %v", err, tc.wantErr)
 			}
 			assert.Equal(t, got, tc.want)
