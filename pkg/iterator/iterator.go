@@ -27,7 +27,7 @@ func BounceUp(n int) func(yield func(int) bool) {
 	return Chain(IterateUp(0, n), IterateDown(n-1, 1))
 }
 
-// BounceDowqn returns an iterator that first iterate down to 0 then back up.
+// BounceDown returns an iterator that first iterate down to 0 then back up.
 func BounceDown(n int) func(yield func(int) bool) {
 	return Chain(IterateDown(n, 0), IterateUp(1, n-1))
 }
