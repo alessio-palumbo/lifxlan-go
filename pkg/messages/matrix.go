@@ -47,10 +47,7 @@ func SetMatrixColorsFromSlice(startIndex, length, width int, colors []packets.Li
 	if fb == 1 {
 		// Compute height based on the width and length of colors
 		height := len(colors) / width
-		msgs = append(msgs, protocol.NewMessage(&packets.TileCopyFrameBuffer{
-			DstFbIndex: 0, SrcFbIndex: 1, Width: uint8(width),
-			Height: uint8(height), Length: 1, Duration: uint32(flipDuration.Milliseconds()),
-		}))
+		msgs = append(msgs, SetMatrixVisibleFrameBuffer(startIndex, length, fb, width, height, flipDuration))
 	}
 
 	return msgs
@@ -156,6 +153,63 @@ func SetMatrixSunsetEffect(speed *time.Duration, softOff bool) *protocol.Message
 			},
 			Speed: uint32(speed.Milliseconds()),
 		},
+	})
+}
+
+// SetMatrixFrameAnimation returns a slice of messages to preloads animation frames into device hidden frame buffers
+// and a function the returns a message that copies the next frame into the visible buffer.
+func SetMatrixFrameAnimation(startIndex, length, width int, frames [][]packets.LightHsbk, brightness float64, d time.Duration) ([]*protocol.Message, func() *protocol.Message) {
+	frameCount := len(frames)
+	if frameCount == 0 {
+		return nil, nil
+	}
+
+	var msgs []*protocol.Message
+	brightness = max(1, min(brightness, 100))
+
+	// Load each frame into fb 1..N
+	for fb := range frameCount {
+		colors := frames[fb]
+
+		hsbk := [64]packets.LightHsbk{}
+		tileIndex := 0
+
+		for i, c := range colors {
+			c.Brightness = uint16(float64(c.Brightness) / 100 * brightness)
+			hsbk[i%64] = c
+
+			if (i+1)%64 == 0 || i == len(colors)-1 {
+				y := tileIndex * 64 / width
+				msgs = append(msgs, newTileSet64Msg(startIndex, length, fb+1, width, 0, y, hsbk, 0))
+				hsbk = [64]packets.LightHsbk{}
+				tileIndex++
+			}
+		}
+	}
+
+	// activeFrame is the index of the last frame copied into the visible buffer (0).
+	var activeFrame int
+
+	return msgs, func() *protocol.Message {
+		// nextFrameFb is the frame buffer that will be copied into the visible frame buffer (0).
+		nextFrameFb := activeFrame + 1
+		activeFrame = (nextFrameFb) % frameCount
+		return SetMatrixVisibleFrameBuffer(startIndex, length, nextFrameFb, width, len(frames[0])/width, d)
+	}
+}
+
+// SetMatrixVisibleFrameBuffer copies the given frame buffer (fb) into the visible frame buffer (0).
+// This can be used to switch between previously stored frame buffers for animations or smooth transitions (as in the case
+// of matrix that exceeds 64 colors and therefore needs multiple messages to be set).
+func SetMatrixVisibleFrameBuffer(startIndex, length, fb, width, height int, d time.Duration) *protocol.Message {
+	return protocol.NewMessage(&packets.TileCopyFrameBuffer{
+		TileIndex:  uint8(startIndex),
+		Length:     uint8(length),
+		DstFbIndex: 0, // Visible buffer
+		SrcFbIndex: uint8(fb),
+		Width:      uint8(width),
+		Height:     uint8(height),
+		Duration:   uint32(d.Milliseconds()),
 	})
 }
 
