@@ -244,9 +244,9 @@ func (s *DeviceSession) preflightHandshake(timeout, wait time.Duration) {
 						retryMsgs = append(retryMsgs, m)
 					} else if m.Payload.PayloadType() == uint16(packets.PayloadTypeDeviceGetVersion) {
 						// Add device-specific preflight messages.
-						if s.device.Type != device.DeviceTypeLight {
+
+						if s.device.Type == device.DeviceTypeHybrid || s.device.Type == device.DeviceTypeSwitch {
 							retryMsgs = append(retryMsgs, protocol.NewMessage(&packets.ButtonGet{}))
-							continue
 						}
 
 						switch s.device.LightType {

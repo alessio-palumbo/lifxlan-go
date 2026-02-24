@@ -241,7 +241,7 @@ func Test_preflightHandshake(t *testing.T) {
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 			},
 		},
-		"matrix < 64 zones": {
+		"matrix < 64 zones (hybrid)": {
 			msgs: []*protocol.Message{
 				protocol.NewMessage(&packets.DeviceStateLabel{Label: [32]byte{'M', 'X', 'S'}}),
 				protocol.NewMessage(&packets.DeviceStateVersion{Product: 219}),
@@ -249,6 +249,7 @@ func Test_preflightHandshake(t *testing.T) {
 				protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'L'}}),
 				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
 				protocol.NewMessage(&packets.TileStateDeviceChain{TileDevicesCount: 1, TileDevices: [16]packets.TileStateDevice{{Width: 7, Height: 5}}}),
+				protocol.NewMessage(&packets.ButtonState{ButtonsCount: 4, Buttons: [8]packets.Button{{}, {}, {}, {}}}),
 			},
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0, Type: device.DeviceTypeHybrid,
@@ -257,7 +258,14 @@ func Test_preflightHandshake(t *testing.T) {
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 				MatrixProperties: device.MatrixProperties{
 					ChainLength: 1, Width: 7, Height: 5, StatePackets: 1, NZones: 35,
-					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 35)}},
+					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 35)},
+				},
+				Buttons: []device.Button{
+					{Actions: []packets.ButtonAction{}},
+					{Actions: []packets.ButtonAction{}},
+					{Actions: []packets.ButtonAction{}},
+					{Actions: []packets.ButtonAction{}},
+				},
 			},
 		},
 		"matrix > 64 zones": {
@@ -276,7 +284,27 @@ func Test_preflightHandshake(t *testing.T) {
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 				MatrixProperties: device.MatrixProperties{
 					ChainLength: 1, Width: 16, Height: 8, StatePackets: 2, NZones: 128,
-					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 128)}},
+					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 128)},
+				},
+			},
+		},
+		"switch": {
+			msgs: []*protocol.Message{
+				protocol.NewMessage(&packets.DeviceStateLabel{Label: [32]byte{'S', 'W'}}),
+				protocol.NewMessage(&packets.DeviceStateVersion{Product: 116}),
+				protocol.NewMessage(&packets.DeviceStateHostFirmware{VersionMajor: 3, VersionMinor: 90}),
+				protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'L'}}),
+				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
+				protocol.NewMessage(&packets.ButtonState{ButtonsCount: 2, Buttons: [8]packets.Button{{}, {}}}),
+			},
+			wantDevice: &device.Device{
+				Address: addr0, Serial: serial0,
+				Label: "SW", ProductID: 116, FirmwareVersion: "3.90",
+				Type: device.DeviceTypeSwitch, Location: "L", Group: "G",
+				Buttons: []device.Button{
+					{Actions: []packets.ButtonAction{}},
+					{Actions: []packets.ButtonAction{}},
+				},
 			},
 		},
 		"times out with missing fields": {
