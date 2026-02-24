@@ -139,7 +139,8 @@ func TestSetMatrixProperties(t *testing.T) {
 			device: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 2, NZones: 64, StatePackets: 1,
-					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
+					ChainZones:        [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
+					ChainOrientations: []Orientation{OrientationRightSideUp, OrientationRightSideUp},
 				},
 			},
 			msg: &packets.TileStateDeviceChain{
@@ -149,7 +150,8 @@ func TestSetMatrixProperties(t *testing.T) {
 			want: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 2, NZones: 64, StatePackets: 1,
-					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
+					ChainZones:        [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
+					ChainOrientations: []Orientation{OrientationRightSideUp, OrientationRightSideUp},
 				},
 			},
 		},
@@ -162,7 +164,8 @@ func TestSetMatrixProperties(t *testing.T) {
 			want: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 2, NZones: 64, StatePackets: 1,
-					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
+					ChainZones:        [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
+					ChainOrientations: []Orientation{OrientationRightSideUp, OrientationRightSideUp},
 				},
 			},
 			wantUpdated: true,
@@ -176,7 +179,8 @@ func TestSetMatrixProperties(t *testing.T) {
 			want: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 5, Width: 7, ChainLength: 2, NZones: 35, StatePackets: 1,
-					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64[:35], emptyZoneSlice64[:35]},
+					ChainZones:        [][]packets.LightHsbk{emptyZoneSlice64[:35], emptyZoneSlice64[:35]},
+					ChainOrientations: []Orientation{OrientationRightSideUp, OrientationRightSideUp},
 				},
 			},
 			wantUpdated: true,
@@ -190,7 +194,8 @@ func TestSetMatrixProperties(t *testing.T) {
 			want: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 16, ChainLength: 2, NZones: 128, StatePackets: 2,
-					ChainZones: [][]packets.LightHsbk{emptyZoneSlice128, emptyZoneSlice128},
+					ChainZones:        [][]packets.LightHsbk{emptyZoneSlice128, emptyZoneSlice128},
+					ChainOrientations: []Orientation{OrientationRightSideUp, OrientationRightSideUp},
 				},
 			},
 			wantUpdated: true,
@@ -205,7 +210,8 @@ func TestSetMatrixProperties(t *testing.T) {
 			want: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 1, NZones: 64, StatePackets: 1,
-					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64},
+					ChainZones:        [][]packets.LightHsbk{emptyZoneSlice64},
+					ChainOrientations: []Orientation{OrientationRightSideUp},
 				},
 			},
 			wantUpdated: true,
@@ -220,7 +226,8 @@ func TestSetMatrixProperties(t *testing.T) {
 			want: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 2, NZones: 64, StatePackets: 1,
-					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
+					ChainZones:        [][]packets.LightHsbk{emptyZoneSlice64, emptyZoneSlice64},
+					ChainOrientations: []Orientation{OrientationRightSideUp, OrientationRightSideUp},
 				},
 			},
 			wantUpdated: true,
@@ -235,7 +242,8 @@ func TestSetMatrixProperties(t *testing.T) {
 			want: &Device{
 				MatrixProperties: MatrixProperties{
 					Height: 8, Width: 8, ChainLength: 1, NZones: 64, StatePackets: 1,
-					ChainZones: [][]packets.LightHsbk{emptyZoneSlice64},
+					ChainZones:        [][]packets.LightHsbk{emptyZoneSlice64},
+					ChainOrientations: []Orientation{OrientationRightSideUp},
 				},
 			},
 			wantUpdated: true,

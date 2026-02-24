@@ -258,7 +258,8 @@ func Test_preflightHandshake(t *testing.T) {
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 				MatrixProperties: device.MatrixProperties{
 					ChainLength: 1, Width: 7, Height: 5, StatePackets: 1, NZones: 35,
-					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 35)},
+					ChainZones:        [][]packets.LightHsbk{make([]packets.LightHsbk, 35)},
+					ChainOrientations: []device.Orientation{device.OrientationRightSideUp},
 				},
 				Buttons: []device.Button{
 					{Actions: []packets.ButtonAction{}},
@@ -284,7 +285,8 @@ func Test_preflightHandshake(t *testing.T) {
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 				MatrixProperties: device.MatrixProperties{
 					ChainLength: 1, Width: 16, Height: 8, StatePackets: 2, NZones: 128,
-					ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 128)},
+					ChainZones:        [][]packets.LightHsbk{make([]packets.LightHsbk, 128)},
+					ChainOrientations: []device.Orientation{device.OrientationRightSideUp},
 				},
 			},
 		},

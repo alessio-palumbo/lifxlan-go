@@ -184,6 +184,8 @@ type MatrixProperties struct {
 	// Each slice item corresponds to a device in the chain. This is currently only used for LIFX Tile,
 	// but might be used for future devices that support chaining.
 	ChainZones [][]packets.LightHsbk
+	// ChainOrientations describe devices orientation according to accelerometer measurements, if supported.
+	ChainOrientations []Orientation
 }
 
 type MultizoneProperties struct {
@@ -257,6 +259,12 @@ func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) (updated b
 	d.MatrixProperties.NZones = w * h
 	d.MatrixProperties.ChainLength = l
 	d.MatrixProperties.StatePackets = 1 + (d.MatrixProperties.NZones-1)/64
+
+	d.MatrixProperties.ChainOrientations = make([]Orientation, l)
+	for i := range l {
+		a := p.TileDevices[i].AccelMeas
+		d.MatrixProperties.ChainOrientations[i] = NearestOrientation(d.ProductID, a.X, a.Y, a.Z)
+	}
 
 	cl := len(d.MatrixProperties.ChainZones)
 	switch {
