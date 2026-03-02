@@ -2,7 +2,9 @@
 
 `lifxlan-go` is a Go client library for discovering and controlling [LIFX](https://www.lifx.com) smart lights over your local network using the LIFX LAN protocol.
 
-This library is designed to be lightweight, idiomatic, and suitable for both CLI and GUI applications that interact with LIFX devices on the same LAN.
+It provides everything needed to build local-first LIFX applications, including device discovery, protocol messaging, state tracking, and a natural-language command parser.
+
+This library is designed to be lightweight, idiomatic, and suitable for CLI tools, desktop apps, automation services, and embedded controllers.
 
 ## Features
 
@@ -11,6 +13,7 @@ This library is designed to be lightweight, idiomatic, and suitable for both CLI
 - Manage per-device sessions
 - Track device state (power, color, label, etc.)
 - Perform periodic discovery and session health checks
+- Natural-language command parsing → protocol messages
 - Fully testable and modular architecture
 - Extensible for advanced control
 
@@ -119,6 +122,30 @@ You can:
 - Start a background client.Receive() to process incoming messages.
 - Build and customize your own logic for managing responses.
 
+## 🧠 Command Parsing
+
+The command parser converts user text into executable protocol messages.
+This allows applications to support natural commands like:
+
+```
+set kitchen lights orange 50%
+desk lamp off
+bedroom lights blue and dim 20%
+```
+
+Example:
+
+```
+parser := commandparser.NewCommandParser(devices)
+cmds := parser.Parse("kitchen lights warm white 50%")
+
+for _, cmd := range cmds {
+    cmd.ForEachSend(func(s device.Serial, msg *protocol.Message) {
+		_ = ctrl.Send(s, msg)
+    })
+}
+```
+
 ## 📦 Dependencies
 
 This package depends on:
@@ -140,9 +167,12 @@ LIFX_LOG_LEVEL: Set the log level (info, debug, warn, error). Default is info.
 ## Project Structure
 
 - pkg/controller – high-level controller for managing sessions and device state
+- pkg/device – contains Device definition and properties
 - pkg/client – low-level UDP client for communicating with LIFX protocol
 - pkg/protocol – contains the LIFX Message library
 - pkg/messages – a selection of ready-to-use LIFX messages
+- pkg/matrix – a library to perform matrix editing and effects
+- pkg/command – simple natural-language → Command compiler
 
 ## Contributing
 
