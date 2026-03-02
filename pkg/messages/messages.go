@@ -15,12 +15,20 @@ const (
 )
 
 // SetPowerOn sets a device power to its maximum value of 65535.
-func SetPowerOn() *protocol.Message {
+// An optional time.Duration argument can be specified to apply a slower transition (>1s).
+func SetPowerOn(d ...time.Duration) *protocol.Message {
+	if len(d) > 0 && d[0] > time.Second {
+		return protocol.NewMessage(&packets.LightSetPower{Level: math.MaxUint16, Duration: uint32(d[0].Milliseconds())})
+	}
 	return protocol.NewMessage(&packets.DeviceSetPower{Level: math.MaxUint16})
 }
 
 // SetPowerOff sets a device power to 0.
-func SetPowerOff() *protocol.Message {
+// An optional time.Duration argument can be specified to apply a slower transition (>1s).
+func SetPowerOff(d ...time.Duration) *protocol.Message {
+	if len(d) > 0 && d[0] > time.Second {
+		return protocol.NewMessage(&packets.LightSetPower{Level: 0, Duration: uint32(d[0].Milliseconds())})
+	}
 	return protocol.NewMessage(&packets.DeviceSetPower{Level: 0})
 }
 
