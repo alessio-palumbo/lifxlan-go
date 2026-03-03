@@ -135,7 +135,7 @@ bedroom lights blue and dim 20%
 
 Example:
 
-```
+```go
 parser := commandparser.NewCommandParser(devices)
 cmds := parser.Parse("kitchen lights warm white 50%")
 
@@ -145,6 +145,16 @@ for _, cmd := range cmds {
     })
 }
 ```
+
+### Matching and autocomplete
+
+The parser also supports matching device names, groups, or locations based on partial or fuzzy input using:
+
+```go
+matches := parser.Match("ki") // returns top matches for "ki", e.g. ["kitchen lights", "kit lamp"]
+```
+
+You can use Match() for autocomplete, suggestions, or fuzzy device selection in your UI or CLI application.
 
 ## 📦 Dependencies
 
