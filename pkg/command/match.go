@@ -60,7 +60,7 @@ func (p *CommandParser) Match(term string) []string {
 
 	out := make([]string, len(results))
 	for i, r := range results {
-		out[i] = r.key
+		out[i] = p.originalForSelector(r.key)
 	}
 
 	return out

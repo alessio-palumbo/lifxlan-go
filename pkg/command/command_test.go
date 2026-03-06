@@ -339,28 +339,34 @@ func Test_selectorsFromDevices(t *testing.T) {
 		serial1 = device.Serial([8]byte{0, 0, 0, 0, 0, 1})
 		serial2 = device.Serial([8]byte{0, 0, 0, 0, 0, 2})
 
-		device0 = device.Device{Serial: serial0, Label: "moon", Group: "tv", Location: "home"}
-		device1 = device.Device{Serial: serial1, Label: "luna", Group: "living room", Location: "home"}
-		device2 = device.Device{Serial: serial2, Label: "neon", Group: "living room", Location: "home"}
+		device0 = device.Device{Serial: serial0, Label: "mOOn", Group: "tv", Location: "Home"}
+		device1 = device.Device{Serial: serial1, Label: "luna", Group: "Living Room", Location: "Home"}
+		device2 = device.Device{Serial: serial2, Label: "Neon", Group: "Living Room", Location: "Home"}
 	)
 
 	testCases := map[string]struct {
-		devices []device.Device
-		want    map[string][]*device.Device
+		devices       []device.Device
+		wantSelectors map[string][]*device.Device
+		wantLabels    map[string]string
 	}{
 		"single": {
 			devices: []device.Device{device0},
-			want: map[string][]*device.Device{
+			wantSelectors: map[string][]*device.Device{
 				"000000000000": {&device0},
 				"moon":         {&device0},
 				"tv":           {&device0},
 				"home":         {&device0},
 				"all":          {&device0},
 			},
+			wantLabels: map[string]string{
+				"moon": "mOOn",
+				"tv":   "tv",
+				"home": "Home",
+			},
 		},
 		"multiple devices": {
 			devices: []device.Device{device0, device1, device2},
-			want: map[string][]*device.Device{
+			wantSelectors: map[string][]*device.Device{
 				"000000000000": {&device0},
 				"moon":         {&device0},
 				"000000000001": {&device1},
@@ -372,13 +378,23 @@ func Test_selectorsFromDevices(t *testing.T) {
 				"home":         {&device0, &device1, &device2},
 				"all":          {&device0, &device1, &device2},
 			},
+			wantLabels: map[string]string{
+				"moon":        "mOOn",
+				"luna":        "luna",
+				"neon":        "Neon",
+				"tv":          "tv",
+				"living room": "Living Room",
+				"home":        "Home",
+			},
 		},
 	}
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			got := selectorsFromDevices(tc.devices)
-			assert.Equal(t, tc.want, got)
+			cmdParser := &CommandParser{}
+			cmdParser.selectorsFromDevices(tc.devices)
+			assert.Equal(t, tc.wantSelectors, cmdParser.selectors)
+			assert.Equal(t, tc.wantLabels, cmdParser.selectorsLabels)
 		})
 	}
 }

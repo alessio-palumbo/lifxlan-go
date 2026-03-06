@@ -154,7 +154,7 @@ The parser also supports matching device names, groups, or locations based on pa
 matches := parser.Match("ki") // returns top matches for "ki", e.g. ["kitchen lights", "kit lamp"]
 ```
 
-You can use Match() for autocomplete, suggestions, or fuzzy device selection in your UI or CLI application.
+You can use Match(term) for autocomplete, suggestions, or fuzzy device selection in your UI or CLI application.
 
 ## 📦 Dependencies
 

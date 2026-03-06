@@ -15,9 +15,9 @@ func TestMatch(t *testing.T) {
 		serial3 = device.Serial([8]byte{0, 0, 0, 0, 0, 3})
 
 		devices = []device.Device{
-			{Serial: serial0, Label: "moon", Group: "tv", Location: "home"},
-			{Serial: serial1, Label: "luna", Group: "living room", Location: "home"},
-			{Serial: serial2, Label: "neon", Group: "living room", Location: "home"},
+			{Serial: serial0, Label: "mOOn", Group: "tv", Location: "home"},
+			{Serial: serial1, Label: "luna", Group: "Living Room", Location: "home"},
+			{Serial: serial2, Label: "Neon", Group: "Living Room", Location: "home"},
 			{Serial: serial3, Label: "filo", Group: "tv", Location: "home"},
 		}
 		cmdParser = NewCommandParser(devices)
@@ -27,10 +27,10 @@ func TestMatch(t *testing.T) {
 		term string
 		want []string
 	}{
-		"exact":    {term: "moon", want: []string{"moon"}},
-		"prefix":   {term: "mo", want: []string{"moon"}},
-		"contains": {term: "on", want: []string{"moon", "neon"}},
-		"fuzzy":    {term: "no", want: []string{"neon", "living room"}},
+		"exact":    {term: "moon", want: []string{"mOOn"}},
+		"prefix":   {term: "mo", want: []string{"mOOn"}},
+		"contains": {term: "on", want: []string{"mOOn", "Neon"}},
+		"fuzzy":    {term: "no", want: []string{"Neon", "Living Room"}},
 		"no match": {term: "xyz", want: []string{}},
 	}
 

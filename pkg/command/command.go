@@ -59,7 +59,8 @@ var inputReplacer = strings.NewReplacer(
 
 // CommandParser converts free-form user text into executable commands.
 type CommandParser struct {
-	selectors map[string][]*device.Device
+	selectors       map[string][]*device.Device
+	selectorsLabels map[string]string
 }
 
 // Command represents an instruction ready for dispatch.
@@ -80,7 +81,9 @@ type selectorMatch struct {
 // NewCommandParser builds a parser instance from a device list.
 // It precomputes selector phrases so parsing later inputs is fast.
 func NewCommandParser(devices []device.Device) *CommandParser {
-	return &CommandParser{selectors: selectorsFromDevices(devices)}
+	c := &CommandParser{}
+	c.selectorsFromDevices(devices)
+	return c
 }
 
 // Parse converts raw user input into a list of executable Commands.
@@ -170,26 +173,46 @@ func (p *CommandParser) buildCommands(intents []intent) []Command {
 	return cmds
 }
 
-// selectorsFromDevices parses a list of device.Device and returns a mapping that
+// selectorsFromDevices parses a list of device.Device and sets a mapping that
 // groups devices by serial (hex string), group name, location name and "all" selectors.
-func selectorsFromDevices(devices []device.Device) map[string][]*device.Device {
-	selectors := make(map[string][]*device.Device)
+// It also builds a map of lowercased to original labels for device names, groups and locations.
+// Note: Selectors are lowercased for ease and performance, so a single selectors might
+// include multiple devices, if labels contain the same letters. selectorsLabels are also
+// affected by this edge case and will only match the latest device sharing the label.
+func (p *CommandParser) selectorsFromDevices(devices []device.Device) {
+	p.selectors = make(map[string][]*device.Device)
+	p.selectorsLabels = make(map[string]string)
+
 	for i := range devices {
 		d := &devices[i]
 		serial, label := d.Serial.String(), strings.ToLower(d.Label)
 		group, location := strings.ToLower(d.Group), strings.ToLower(d.Location)
 
-		selectors[serial] = append(selectors[serial], d)
-		selectors[label] = append(selectors[label], d)
+		p.selectors[serial] = append(p.selectors[serial], d)
+
+		p.selectors[label] = append(p.selectors[label], d)
+		p.selectorsLabels[label] = d.Label
+
 		if group != "" {
-			selectors[group] = append(selectors[group], d)
+			p.selectors[group] = append(p.selectors[group], d)
+			p.selectorsLabels[group] = d.Group
 		}
 		if location != "" {
-			selectors[location] = append(selectors[location], d)
+			p.selectors[location] = append(p.selectors[location], d)
+			p.selectorsLabels[location] = d.Location
 		}
-		selectors[selectorAll] = append(selectors[selectorAll], d)
+
+		p.selectors[selectorAll] = append(p.selectors[selectorAll], d)
 	}
-	return selectors
+}
+
+// originalForSelector tries to find the original label for a selector, otherwise
+// it returns the selector.
+func (p *CommandParser) originalForSelector(l string) string {
+	if v, ok := p.selectorsLabels[l]; ok {
+		return v
+	}
+	return l
 }
 
 func dedupeSerials(targets []*device.Device) []device.Serial {
