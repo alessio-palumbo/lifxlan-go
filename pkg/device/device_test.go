@@ -18,7 +18,7 @@ func TestSetProductInfo(t *testing.T) {
 			pid: 88,
 			want: &Device{
 				ProductID:    88,
-				RegistryName: "LIFX Mini White",
+				RegistryName: "LIFX White",
 				LightType:    LightTypeSingleZone,
 				ColorProperties: ColorProperties{
 					TemperatureRange: TemperatureRange{Min: 2700, Max: 2700},
@@ -29,7 +29,7 @@ func TestSetProductInfo(t *testing.T) {
 			pid: 97,
 			want: &Device{
 				ProductID:    97,
-				RegistryName: "LIFX A19",
+				RegistryName: "LIFX Colour A19 1200lm",
 				LightType:    LightTypeSingleZone,
 				ColorProperties: ColorProperties{
 					HasColor:         true,
@@ -41,7 +41,7 @@ func TestSetProductInfo(t *testing.T) {
 			pid: 117,
 			want: &Device{
 				ProductID:    117,
-				RegistryName: "LIFX Z US",
+				RegistryName: "LIFX Z",
 				LightType:    LightTypeMultiZone,
 				ColorProperties: ColorProperties{
 					HasColor:         true,
@@ -73,7 +73,7 @@ func TestSetProductInfo(t *testing.T) {
 			pid: 219,
 			want: &Device{
 				ProductID:    219,
-				RegistryName: "LIFX Luna US",
+				RegistryName: "LIFX Luna",
 				Type:         DeviceTypeHybrid,
 				LightType:    LightTypeMatrix,
 				ColorProperties: ColorProperties{
