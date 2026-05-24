@@ -50,6 +50,14 @@ func main() {
 }
 ```
 
+The controller is silent by default.
+To receive controller and device-session logs, pass a standard `log/slog` logger:
+
+```go
+logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+ctrl, err := controller.New(controller.WithLogger(logger))
+```
+
 ## 🛠️ Creating Custom LIFX Messages
 
 The messages package provides helpers to build your own LAN messages using the lifxprotocol-go types.

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"net"
 	"sync"
@@ -11,7 +12,6 @@ import (
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -23,9 +23,10 @@ type sender interface {
 	Send(dst *net.UDPAddr, msg *protocol.Message) error
 }
 
-// DeviceSession represents a session for a specific device.
-type DeviceSession struct {
+// deviceSession represents a session for a specific device.
+type deviceSession struct {
 	sender  sender
+	logger  *slog.Logger
 	inbound chan *protocol.Message
 	seq     atomic.Uint32
 	done    chan struct{}
@@ -38,12 +39,13 @@ type DeviceSession struct {
 	device *device.Device
 }
 
-// NewDeviceSession creates a new DeviceSession for the given device.
+// newDeviceSession creates a new deviceSession for the given device.
 // It spins up a goroutine to periodically query devices for state updates and
 // a second one to parse devices messages and update Device state.
-func NewDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cfg *Config, wgDone func(), onTimeout func(device.Serial)) *DeviceSession {
-	ds := &DeviceSession{
+func newDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cfg *Config, wgDone func(), onTimeout func(device.Serial), logger *slog.Logger) *deviceSession {
+	ds := &deviceSession{
 		sender:    sender,
+		logger:    logger,
 		device:    device.NewDevice(addr, serial),
 		inbound:   make(chan *protocol.Message, defaultRecvBufferSize),
 		done:      make(chan struct{}),
@@ -57,13 +59,13 @@ func NewDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cf
 	return ds
 }
 
-// Close closes the DeviceSession, stopping the recv loop and cleaning up resources.
-func (s *DeviceSession) Close() {
+// close closes the deviceSession, stopping the recv loop and cleaning up resources.
+func (s *deviceSession) close() {
 	close(s.done)
 }
 
-// Send sends one or more messages to the device.
-func (s *DeviceSession) Send(msgs ...*protocol.Message) error {
+// send sends one or more messages to the device.
+func (s *deviceSession) send(msgs ...*protocol.Message) error {
 	for _, msg := range msgs {
 		msg.SetTarget(s.device.Serial)
 		msg.SetSequence(s.nextSeq())
@@ -74,8 +76,8 @@ func (s *DeviceSession) Send(msgs ...*protocol.Message) error {
 	return nil
 }
 
-// DeviceSnapshot returns a copy of a Device with its current device state.
-func (s *DeviceSession) DeviceSnapshot() device.Device {
+// deviceSnapshot returns a copy of a Device with its current device state.
+func (s *deviceSession) deviceSnapshot() device.Device {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return *s.device
@@ -83,14 +85,14 @@ func (s *DeviceSession) DeviceSnapshot() device.Device {
 
 // nextSeq increments the sequence number and returns the new value.
 // It wraps around after reaching 255.
-func (s *DeviceSession) nextSeq() uint8 {
+func (s *deviceSession) nextSeq() uint8 {
 	return uint8(s.seq.Add(1))
 }
 
 // run performs a short-lived pre-flight handshake to gather required device state
 // after which it periodically queries the device for state updates.
 // It uses a ticker for high frequency state changes and one for low frequency ones.
-func (s *DeviceSession) run(wgDone func()) {
+func (s *deviceSession) run(wgDone func()) {
 	defer wgDone()
 
 	s.preflightHandshake(s.cfg.preflightHandshakeTimeout, s.cfg.preflightHandshakeWait)
@@ -105,10 +107,10 @@ func (s *DeviceSession) run(wgDone func()) {
 		case <-s.done:
 			return
 		case <-hfTicker.C:
-			s.Send(s.device.HighFreqStateMessages()...)
+			s.send(s.device.HighFreqStateMessages()...)
 			hfTicker.Reset(s.cfg.highFrequencyStateRefreshPeriod)
 		case <-lfTicker.C:
-			s.Send(s.device.LowFreqStateMessages()...)
+			s.send(s.device.LowFreqStateMessages()...)
 			lfTicker.Reset(s.cfg.lowFrequencyStateRefreshPeriod)
 		case <-livenessTicker.C:
 			s.mu.RLock()
@@ -116,8 +118,10 @@ func (s *DeviceSession) run(wgDone func()) {
 			s.mu.RUnlock()
 
 			if time.Since(last) > s.cfg.deviceLivenessTimeout {
-				log.WithField("serial", s.device.Serial).
-					Warn("Device not seen for too long, terminating session")
+				s.logger.Warn(
+					"Device not seen for too long, terminating session",
+					"serial", s.device.Serial,
+				)
 				s.onTimeout(s.device.Serial)
 				return
 			}
@@ -126,7 +130,7 @@ func (s *DeviceSession) run(wgDone func()) {
 }
 
 // recvloop listens for incoming messages from the device and processes them.
-func (s *DeviceSession) recvloop() {
+func (s *deviceSession) recvloop() {
 	for {
 		select {
 		case msg := <-s.inbound:
@@ -203,14 +207,16 @@ func (s *DeviceSession) recvloop() {
 				}
 			case *packets.DeviceStateService, *packets.DeviceStateUnhandled: // Ignore these messages
 			default:
-				log.WithField("serial", s.device.Serial).
-					WithField("payload", msg.Payload.PayloadType()).
-					Debug("Session: Unhandled message type")
+				s.logger.Debug(
+					"Session: Unhandled message type",
+					"serial", s.device.Serial,
+					"payload", msg.Payload.PayloadType(),
+				)
 			}
 			s.device.LastSeenAt = time.Now()
 			s.mu.Unlock()
 		case <-s.done:
-			log.WithField("serial", s.device.Serial).Info("Exiting device recv loop")
+			s.logger.Info("Exiting device recv loop", "serial", s.device.Serial)
 			return
 		}
 	}
@@ -224,12 +230,12 @@ func shouldUpdate[T comparable](current, updated T) bool {
 // before starting the main periodic refresh loop.
 // It sends required state requests, waits for recvloop to update s.device,
 // and retries missing ones until all are satisfied or the deadline expires.
-func (s *DeviceSession) preflightHandshake(timeout, wait time.Duration) {
+func (s *deviceSession) preflightHandshake(timeout, wait time.Duration) {
 	deadline := time.Now().Add(timeout)
 	required := requiredStateMessages()
 
 	for len(required) > 0 {
-		s.Send(required...)
+		s.send(required...)
 
 		select {
 		case <-s.done:
@@ -264,9 +270,11 @@ func (s *DeviceSession) preflightHandshake(timeout, wait time.Duration) {
 
 		if time.Now().After(deadline) {
 			if len(required) > 0 {
-				log.WithField("serial", s.device.Serial).
-					WithField("missing", len(required)).
-					Warning("Preflight timed out with missing messages")
+				s.logger.Warn(
+					"Preflight timed out with missing messages",
+					"serial", s.device.Serial,
+					"missing", len(required),
+				)
 			}
 			return
 		}

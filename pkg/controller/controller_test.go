@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"bytes"
+	"log/slog"
 	"math/rand"
 	"net"
-	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -35,6 +37,18 @@ func TestController(t *testing.T) {
 		assert.Equal(t, defaultLowFrequencyStateRefreshPeriod, ctrl.cfg.lowFrequencyStateRefreshPeriod)
 		assert.Equal(t, 50*time.Second, ctrl.cfg.deviceLivenessTimeout)
 		assert.Equal(t, 5*time.Second, ctrl.cfg.preflightHandshakeTimeout)
+	})
+
+	t.Run("Uses configured logger", func(t *testing.T) {
+		mockClient := newMockClient()
+		var logs bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logs, nil))
+
+		ctrl, err := New(WithClient(mockClient), WithLogger(logger))
+		require.NoError(t, err)
+
+		ctrl.Close()
+		assert.True(t, strings.Contains(logs.String(), "Controller closed"))
 	})
 
 	t.Run("Performs continuous discovery", func(t *testing.T) {
@@ -82,8 +96,13 @@ func TestController(t *testing.T) {
 		ctrl, err := New(WithClient(mockClient))
 		require.NoError(t, err)
 
-		// Do not use NewDeviceSession to prevent runninng state update goroutine
-		session := &DeviceSession{sender: mockClient, device: device.NewDevice(addr0, serial0), done: make(chan struct{})}
+		// Do not use newDeviceSession to prevent running state update goroutine.
+		session := &deviceSession{
+			sender: mockClient,
+			logger: discardLogger(),
+			device: device.NewDevice(addr0, serial0),
+			done:   make(chan struct{}),
+		}
 		ctrl.sessions[serial0] = session
 		ctrl.wg.Add(1)
 
@@ -154,8 +173,11 @@ func TestController(t *testing.T) {
 		ctrl, err := New(WithClient(mockClient))
 		require.NoError(t, err)
 
-		session := &DeviceSession{
-			sender: mockClient, device: device.NewDevice(addr0, serial0), done: make(chan struct{}),
+		session := &deviceSession{
+			sender: mockClient,
+			logger: discardLogger(),
+			device: device.NewDevice(addr0, serial0),
+			done:   make(chan struct{}),
 		}
 		ctrl.sessions[serial0] = session
 		ctrl.wg.Add(1)
@@ -170,7 +192,6 @@ func TestController(t *testing.T) {
 }
 
 func BenchmarkControllerGetDevices(b *testing.B) {
-	os.Setenv("LIFXLAN_LOG_LEVEL", "error")
 	mockClient := newMockClient()
 	ctrl, err := New(WithClient(mockClient))
 	require.NoError(b, err)

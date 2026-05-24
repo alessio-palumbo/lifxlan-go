@@ -2,17 +2,16 @@ package controller
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/alessio-palumbo/lifxlan-go/internal/logutil"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/client"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -32,13 +31,14 @@ const (
 // devices on the LAN.
 type Controller struct {
 	client   Client
+	logger   *slog.Logger
 	recvDone chan struct{}
 	cfg      *Config
 
 	closeOnce sync.Once
 	wg        sync.WaitGroup
 	mu        sync.RWMutex
-	sessions  map[device.Serial]*DeviceSession
+	sessions  map[device.Serial]*deviceSession
 }
 
 type Client interface {
@@ -85,11 +85,10 @@ func (c *Config) setLivenessTimeout() {
 // New returns a Controller that periodically discovers LIFX devices
 // on the LAN and creates individual sessions for message routing.
 func New(opts ...Option) (*Controller, error) {
-	logutil.Init()
-
 	ctrl := &Controller{
+		logger:   discardLogger(),
 		recvDone: make(chan struct{}),
-		sessions: make(map[device.Serial]*DeviceSession),
+		sessions: make(map[device.Serial]*deviceSession),
 		cfg: &Config{
 			discoveryPeriod:                 defaultDiscoveryPeriod,
 			highFrequencyStateRefreshPeriod: defaultHighFrequencyStateRefreshPeriod,
@@ -147,10 +146,10 @@ func (c *Controller) Close() error {
 		select {
 		case <-done:
 		case <-time.After(sessionsTerminationTimeout):
-			log.Warning("Session termination timeout reached")
+			c.logger.Warn("Session termination timeout reached")
 		}
 
-		log.Info("Controller closed")
+		c.logger.Info("Controller closed")
 	})
 
 	return nil
@@ -167,7 +166,7 @@ func (c *Controller) Send(serial device.Serial, msg *protocol.Message) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if s, ok := c.sessions[serial]; ok {
-		return s.Send(msg)
+		return s.send(msg)
 	}
 	return nil
 }
@@ -177,7 +176,7 @@ func (c *Controller) GetDevices() []device.Device {
 	c.mu.RLock()
 	devices := make([]device.Device, 0, len(c.sessions))
 	for _, session := range c.sessions {
-		devices = append(devices, session.DeviceSnapshot())
+		devices = append(devices, session.deviceSnapshot())
 	}
 	c.mu.RUnlock()
 
@@ -204,7 +203,7 @@ func (c *Controller) periodicDiscovery() {
 func (c *Controller) addSession(addr *net.UDPAddr, serial device.Serial) {
 	c.wg.Add(1)
 	cb := func(serial device.Serial) { c.terminateSession(serial) }
-	session := NewDeviceSession(addr, serial, c.client, c.cfg, c.wg.Done, cb)
+	session := newDeviceSession(addr, serial, c.client, c.cfg, c.wg.Done, cb, c.logger)
 
 	c.mu.Lock()
 	c.sessions[serial] = session
@@ -216,7 +215,7 @@ func (c *Controller) terminateSession(serial device.Serial) {
 	c.mu.Lock()
 	if session, ok := c.sessions[serial]; ok {
 		delete(c.sessions, serial)
-		session.Close()
+		session.close()
 	}
 	c.mu.Unlock()
 }
@@ -241,9 +240,11 @@ func (c *Controller) recvloop() {
 			case session.inbound <- msg:
 			default:
 				// If the channel is full, we skip the message to avoid blocking.
-				log.WithField("serial", serial).
-					WithField("payload", msg.Payload.PayloadType()).
-					Warning("Channel full, skipping message")
+				c.logger.Warn(
+					"Channel full, skipping message",
+					"serial", serial,
+					"payload", msg.Payload.PayloadType(),
+				)
 			}
 		}
 	}); err != nil {

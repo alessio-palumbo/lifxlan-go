@@ -1,6 +1,10 @@
 package controller
 
-import "time"
+import (
+	"io"
+	"log/slog"
+	"time"
+)
 
 // Option overrides configurable Controller's options.
 type Option func(*Controller) error
@@ -11,6 +15,23 @@ func WithClient(c Client) Option {
 		ctrl.client = c
 		return nil
 	}
+}
+
+// WithLogger sets the logger used by the Controller and its device sessions.
+// By default, logs are discarded because this package is intended to be used as a library.
+func WithLogger(logger *slog.Logger) Option {
+	return func(ctrl *Controller) error {
+		if logger == nil {
+			ctrl.logger = discardLogger()
+			return nil
+		}
+		ctrl.logger = logger
+		return nil
+	}
+}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 // WithDiscoveryPeriod sets the discovery period to the given duration.
