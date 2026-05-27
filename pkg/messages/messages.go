@@ -10,23 +10,19 @@ import (
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
 
-const (
-	defaultPeriod = time.Second
-)
-
 // SetPowerOn sets a device power to its maximum value of 65535.
-// An optional time.Duration argument can be specified to apply a slower transition (>1s).
+// An optional time.Duration argument can be specified to apply a custom transition.
 func SetPowerOn(d ...time.Duration) *protocol.Message {
-	if len(d) > 0 && d[0] > time.Second {
+	if len(d) > 0 {
 		return protocol.NewMessage(&packets.LightSetPower{Level: math.MaxUint16, Duration: uint32(d[0].Milliseconds())})
 	}
 	return protocol.NewMessage(&packets.DeviceSetPower{Level: math.MaxUint16})
 }
 
 // SetPowerOff sets a device power to 0.
-// An optional time.Duration argument can be specified to apply a slower transition (>1s).
+// An optional time.Duration argument can be specified to apply a custom transition.
 func SetPowerOff(d ...time.Duration) *protocol.Message {
-	if len(d) > 0 && d[0] > time.Second {
+	if len(d) > 0 {
 		return protocol.NewMessage(&packets.LightSetPower{Level: 0, Duration: uint32(d[0].Milliseconds())})
 	}
 	return protocol.NewMessage(&packets.DeviceSetPower{Level: 0})
@@ -35,9 +31,6 @@ func SetPowerOff(d ...time.Duration) *protocol.Message {
 // SetColor sets a device color with no required fields which allows keeping certain
 // parts of the original HSBK color.
 func SetColor(h, s, b *float64, k *uint16, d time.Duration, waveform enums.LightWaveform) *protocol.Message {
-	if d < time.Second {
-		d = defaultPeriod
-	}
 	m := &packets.LightSetWaveformOptional{
 		Color:    packets.LightHsbk{},
 		Waveform: waveform,

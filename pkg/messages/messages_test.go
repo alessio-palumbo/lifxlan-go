@@ -19,10 +19,6 @@ func TestSetPowerOn(t *testing.T) {
 		"no duration": {
 			want: protocol.NewMessage(&packets.DeviceSetPower{Level: math.MaxUint16}),
 		},
-		"with duration < default": {
-			d:    []time.Duration{time.Millisecond},
-			want: protocol.NewMessage(&packets.DeviceSetPower{Level: math.MaxUint16}),
-		},
 		"with duration": {
 			d:    []time.Duration{5 * time.Second},
 			want: protocol.NewMessage(&packets.LightSetPower{Level: math.MaxUint16, Duration: 5000}),
@@ -43,10 +39,6 @@ func TestSetPowerOff(t *testing.T) {
 		want *protocol.Message
 	}{
 		"no duration": {
-			want: protocol.NewMessage(&packets.DeviceSetPower{Level: 0}),
-		},
-		"with duration < default": {
-			d:    []time.Duration{time.Millisecond},
 			want: protocol.NewMessage(&packets.DeviceSetPower{Level: 0}),
 		},
 		"with duration": {
@@ -75,7 +67,7 @@ func TestSetColor(t *testing.T) {
 			h: ptr(float64(180)),
 			want: protocol.NewMessage(&packets.LightSetWaveformOptional{
 				Waveform: enums.LightWaveformLIGHTWAVEFORMSAW, Cycles: 1.0,
-				Period: uint32(defaultPeriod.Milliseconds()), SetHue: true,
+				Period: 0, SetHue: true,
 				Color: packets.LightHsbk{Hue: 32768},
 			}),
 		},
@@ -83,7 +75,7 @@ func TestSetColor(t *testing.T) {
 			s: ptr(float64(100)),
 			want: protocol.NewMessage(&packets.LightSetWaveformOptional{
 				Waveform: enums.LightWaveformLIGHTWAVEFORMSAW, Cycles: 1.0,
-				Period: uint32(defaultPeriod.Milliseconds()), SetSaturation: true,
+				Period: 0, SetSaturation: true,
 				Color: packets.LightHsbk{Saturation: math.MaxUint16},
 			}),
 		},
@@ -91,7 +83,7 @@ func TestSetColor(t *testing.T) {
 			b: ptr(float64(50)),
 			want: protocol.NewMessage(&packets.LightSetWaveformOptional{
 				Waveform: enums.LightWaveformLIGHTWAVEFORMSAW, Cycles: 1.0,
-				Period: uint32(defaultPeriod.Milliseconds()), SetBrightness: true,
+				Period: 0, SetBrightness: true,
 				Color: packets.LightHsbk{Brightness: 32768},
 			}),
 		},
@@ -99,7 +91,7 @@ func TestSetColor(t *testing.T) {
 			k: ptr(uint16(5000)),
 			want: protocol.NewMessage(&packets.LightSetWaveformOptional{
 				Waveform: enums.LightWaveformLIGHTWAVEFORMSAW, Cycles: 1.0,
-				Period: uint32(defaultPeriod.Milliseconds()), SetKelvin: true,
+				Period: 0, SetKelvin: true,
 				Color: packets.LightHsbk{Kelvin: 5000},
 			}),
 		},

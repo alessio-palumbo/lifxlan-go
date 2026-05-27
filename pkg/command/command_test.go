@@ -35,7 +35,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial0},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
 							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
 						}),
 					},
@@ -49,7 +49,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial0},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
 							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
 						}),
 					},
@@ -63,7 +63,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial0, serial1, serial2},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
 							Color: packets.LightHsbk{Hue: 21845, Saturation: 65535},
 						}),
 					},
@@ -77,7 +77,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial0, serial1, serial2, serial3},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
 							Color: packets.LightHsbk{Hue: 21845, Saturation: 65535},
 						}),
 					},
@@ -102,7 +102,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial0, serial1},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
 							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
 						}),
 					},
@@ -116,7 +116,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial0, serial1},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
 							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
 						}),
 					},
@@ -130,7 +130,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial0, serial1},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
 							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
 						}),
 					},
@@ -144,7 +144,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial1},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true, SetBrightness: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true, SetBrightness: true,
 							Color: packets.LightHsbk{Hue: 21845, Saturation: 65535, Brightness: 19661},
 						}),
 					},
@@ -158,7 +158,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial1, serial0},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true, SetBrightness: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true, SetBrightness: true,
 							Color: packets.LightHsbk{Hue: 21845, Saturation: 65535, Brightness: 19661},
 						}),
 					},
@@ -172,7 +172,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial1, serial0},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true, SetBrightness: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true, SetBrightness: true,
 							Color: packets.LightHsbk{Hue: 21845, Saturation: 65535, Brightness: 19661},
 						}),
 					},
@@ -186,7 +186,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial1},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
 							Color: packets.LightHsbk{Hue: 21845, Saturation: 65535},
 						}),
 					},
@@ -195,7 +195,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial0},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetBrightness: true,
+							Cycles: 1, Period: 1, SetBrightness: true,
 							Color: packets.LightHsbk{Brightness: 19661},
 						}),
 					},
@@ -209,7 +209,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial0},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetHue: true, SetSaturation: true, SetKelvin: true,
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true, SetKelvin: true,
 							Color: packets.LightHsbk{Hue: 32768, Saturation: 6554, Kelvin: 4000},
 						}),
 						protocol.NewMessage(&packets.DeviceSetPower{Level: 0}),
@@ -219,7 +219,7 @@ func TestParse(t *testing.T) {
 					Targets: []device.Serial{serial1},
 					Msgs: []*protocol.Message{
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
-							Cycles: 1, Period: 1000, SetBrightness: true, SetKelvin: true,
+							Cycles: 1, Period: 1, SetBrightness: true, SetKelvin: true,
 							Color: packets.LightHsbk{Brightness: 6554, Kelvin: 5000},
 						}),
 						protocol.NewMessage(&packets.DeviceSetPower{Level: 65535}),
