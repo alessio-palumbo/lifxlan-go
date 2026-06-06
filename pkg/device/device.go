@@ -14,20 +14,20 @@ import (
 	"github.com/alessio-palumbo/lifxregistry-go/gen/registry"
 )
 
-// deviceType describes the type of LIFX device.
-type deviceType int
+// DeviceType describes the type of LIFX device.
+type DeviceType int
 
 const (
 	// DeviceTypeLight is a device of type light
-	DeviceTypeLight deviceType = iota
+	DeviceTypeLight DeviceType = iota
 	// DeviceTypeSwitch is a device of type switch
 	DeviceTypeSwitch
 	// DeviceTypeHybrid is a device that act both as a light and a switch
 	DeviceTypeHybrid
 )
 
-// String converts a deviceType into a string.
-func (d deviceType) String() string {
+// String converts a DeviceType into a string.
+func (d DeviceType) String() string {
 	switch d {
 	case DeviceTypeLight:
 		return "light"
@@ -39,21 +39,21 @@ func (d deviceType) String() string {
 	return ""
 }
 
-// lightType describe what interface a light implements
+// LightType describes what interface a light implements
 // and what capability it has access to.
-type lightType int
+type LightType int
 
 const (
 	// LightTypeSingleZone is a light with a single zone
-	LightTypeSingleZone lightType = iota
+	LightTypeSingleZone LightType = iota
 	// LightTypeMultiZone is a light with multi_zone capability
 	LightTypeMultiZone
 	// LightTypeMatrix is a light with matrix capability
 	LightTypeMatrix
 )
 
-// String converts a lightType into a string.
-func (l lightType) String() string {
+// String converts a LightType into a string.
+func (l LightType) String() string {
 	switch l {
 	case LightTypeSingleZone:
 		return "single_zone"
@@ -154,8 +154,8 @@ type Device struct {
 	RegistryName    string
 	ProductID       uint32
 	FirmwareVersion string
-	Type            deviceType
-	LightType       lightType
+	Type            DeviceType
+	LightType       LightType
 	Location        string
 	Group           string
 	WifiRSSI        WifiRSSI
