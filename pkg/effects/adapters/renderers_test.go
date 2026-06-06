@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"reflect"
 	"testing"
 	"time"
 
@@ -39,6 +40,63 @@ func TestSingleZoneRendererSendsColorMessage(t *testing.T) {
 	}
 	if payload.Period != 1000 {
 		t.Fatalf("period = %d, want 1000", payload.Period)
+	}
+}
+
+func TestNewRendererForDeviceSelectsRenderer(t *testing.T) {
+	tests := map[string]struct {
+		device device.Device
+		want   any
+	}{
+		"single zone": {
+			device: device.Device{LightType: device.LightTypeSingleZone},
+			want:   &SingleZoneRenderer{},
+		},
+		"multi zone": {
+			device: device.Device{LightType: device.LightTypeMultiZone},
+			want:   &MultiZoneRenderer{},
+		},
+		"matrix": {
+			device: device.Device{LightType: device.LightTypeMatrix},
+			want:   &MatrixRenderer{},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := NewRendererForDevice(tt.device, (&recordingSender{}).Send)
+			if reflect.TypeOf(got) != reflect.TypeOf(tt.want) {
+				t.Fatalf("renderer = %T, want %T", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewRendererForDeviceConfiguresMatrix(t *testing.T) {
+	sender := &recordingSender{}
+	renderer := NewRendererForDevice(device.Device{
+		LightType: device.LightTypeMatrix,
+		MatrixProperties: device.MatrixProperties{
+			ChainLength:       2,
+			ChainOrientations: []device.Orientation{device.OrientationUpsideDown},
+		},
+	}, sender.Send)
+
+	err := renderer.RenderFrame(context.Background(), effects.Frame{
+		Colors: []effects.Color{kelvinColor(3500), kelvinColor(3600), kelvinColor(3700), kelvinColor(3800)},
+		Width:  2,
+		Height: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := sender.messages[0].Payload.(*packets.TileSet64)
+	if payload.TileIndex != 0 || payload.Length != 2 {
+		t.Fatalf("matrix range = index %d length %d, want 0/2", payload.TileIndex, payload.Length)
+	}
+	if got := payload.Colors[0].Kelvin; got != 3800 {
+		t.Fatalf("first kelvin = %d, want 3800 after orientation", got)
 	}
 }
 

@@ -24,6 +24,22 @@ var (
 // SendFunc sends a target-bound protocol message.
 type SendFunc func(*protocol.Message) error
 
+// NewRendererForDevice returns a renderer configured from device capabilities.
+func NewRendererForDevice(d device.Device, send SendFunc) effects.Renderer {
+	switch d.LightType {
+	case device.LightTypeMultiZone:
+		return NewMultiZoneRenderer(send)
+	case device.LightTypeMatrix:
+		opts := []MatrixOption{WithMatrixRange(0, d.MatrixProperties.ChainLength)}
+		if len(d.MatrixProperties.ChainOrientations) > 0 {
+			opts = append(opts, WithMatrixOrientation(d.MatrixProperties.ChainOrientations[0]))
+		}
+		return NewMatrixRenderer(send, opts...)
+	default:
+		return NewSingleZoneRenderer(send)
+	}
+}
+
 // SingleZoneRenderer renders frames to a single-zone light.
 type SingleZoneRenderer struct {
 	send     SendFunc
