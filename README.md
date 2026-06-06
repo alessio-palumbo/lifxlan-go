@@ -58,6 +58,82 @@ logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 ctrl, err := controller.New(controller.WithLogger(logger))
 ```
 
+## Effects
+
+The `pkg/effects` package generates deterministic, target-free frames that can be used live or rendered offline.
+Frames do not contain serials, groups, labels, or network commands; device targeting is handled by renderers.
+
+### Run Effects Live
+
+```go
+import (
+	"context"
+	"time"
+
+	"github.com/alessio-palumbo/lifxlan-go/pkg/controller"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/effects"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/effects/adapters"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
+)
+
+func runSweep(ctx context.Context, ctrl *controller.Controller, dev device.Device) error {
+	send := func(msg *protocol.Message) error {
+		return ctrl.Send(dev.Serial, msg)
+	}
+
+	caps := effects.CapabilitiesFromDevice(dev)
+	palette := effects.Palette{
+		Base:        []effects.Color{{Hue: 210, Saturation: 100, Brightness: 35, Kelvin: 3500}},
+		Accents:     []effects.Color{{Hue: 25, Saturation: 100, Brightness: 60, Kelvin: 3000}},
+		Backgrounds: []effects.Color{{Hue: 260, Saturation: 85, Brightness: 8, Kelvin: 3500}},
+	}
+
+	return adapters.RunEffects(ctx, dev, send,
+		effects.RunConfig{
+			Effect: effects.NewSweep(effects.SweepConfig{
+				Capabilities: caps,
+				Palette:      palette,
+			}),
+			Duration: 10 * time.Second,
+			Step:     120 * time.Millisecond,
+		},
+	)
+}
+```
+
+`adapters.RunEffects` configures the right renderer from the discovered device:
+
+- single-zone lights use color messages
+- multizone lights use extended zone color messages
+- matrix lights use tile color messages and apply device orientation when available
+
+For lower-level control, build a renderer yourself:
+
+```go
+renderer := adapters.NewRendererForDevice(dev, send)
+runner := effects.NewRunner(effect, renderer, 120*time.Millisecond)
+err := runner.Run(ctx)
+```
+
+### Render Offline
+
+Use `effects.Render` when you need timestamped frames without touching the network.
+This is useful for tests, previews, or offline choreography generation.
+
+```go
+frames := effects.Render(
+	effects.NewGradient(effects.GradientConfig{
+		Capabilities: effects.Capabilities{Width: 8, Height: 8},
+		Palette:      palette,
+	}),
+	100*time.Millisecond,
+	10*time.Second,
+)
+```
+
+Available effects include `Solid`, `Gradient`, `Sweep`, `Waterfall`, `Rockets`, `Snake`, `Worm`, and `ConcentricFrames`.
+
 ## 🛠️ Creating Custom LIFX Messages
 
 The messages package provides helpers to build your own LAN messages using the lifxprotocol-go types.
@@ -190,6 +266,7 @@ LIFX_LOG_LEVEL: Set the log level (info, debug, warn, error). Default is info.
 - pkg/protocol – contains the LIFX Message library
 - pkg/messages – a selection of ready-to-use LIFX messages
 - pkg/matrix – a library to perform matrix editing and effects
+- pkg/effects – deterministic frame effects, live runners, and LIFX render adapters
 - pkg/command – simple natural-language → Command compiler
 
 ## Contributing
