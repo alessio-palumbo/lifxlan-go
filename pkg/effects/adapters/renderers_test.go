@@ -77,7 +77,10 @@ func TestNewRendererForDeviceConfiguresMatrix(t *testing.T) {
 	renderer := NewRendererForDevice(device.Device{
 		LightType: device.LightTypeMatrix,
 		MatrixProperties: device.MatrixProperties{
-			ChainLength:       2,
+			Width:             2,
+			Height:            2,
+			NZones:            4,
+			ChainLength:       1,
 			ChainOrientations: []device.Orientation{device.OrientationUpsideDown},
 		},
 	}, sender.Send)
@@ -92,8 +95,8 @@ func TestNewRendererForDeviceConfiguresMatrix(t *testing.T) {
 	}
 
 	payload := sender.messages[0].Payload.(*packets.TileSet64)
-	if payload.TileIndex != 0 || payload.Length != 2 {
-		t.Fatalf("matrix range = index %d length %d, want 0/2", payload.TileIndex, payload.Length)
+	if payload.TileIndex != 0 || payload.Length != 1 {
+		t.Fatalf("matrix range = index %d length %d, want 0/1", payload.TileIndex, payload.Length)
 	}
 	if got := payload.Colors[0].Kelvin; got != 3800 {
 		t.Fatalf("first kelvin = %d, want 3800 after orientation", got)
@@ -162,6 +165,61 @@ func TestMultiZoneRendererSendsMultipleMessages(t *testing.T) {
 	}
 }
 
+func TestMultiZoneRendererUsesSurfaceAdaptation(t *testing.T) {
+	sender := &recordingSender{}
+	surface := device.Surface{
+		LightType: device.LightTypeMultiZone,
+		Width:     2,
+		Height:    1,
+		Zones:     2,
+	}
+	renderer := NewMultiZoneRenderer(sender.Send, WithMultiZoneSurface(surface))
+
+	err := renderer.RenderFrame(context.Background(), effects.Frame{
+		Colors: []effects.Color{kelvinColor(3500), kelvinColor(3600), kelvinColor(3700), kelvinColor(3800)},
+		Width:  4,
+		Height: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := sender.messages[0].Payload.(*packets.MultiZoneExtendedSetColorZones)
+	if payload.ColorsCount != 2 {
+		t.Fatalf("colors count = %d, want 2", payload.ColorsCount)
+	}
+	if payload.Colors[0].Kelvin != 3500 || payload.Colors[1].Kelvin != 3700 {
+		t.Fatalf("colors = %#v", payload.Colors[:2])
+	}
+}
+
+func TestNewRendererForDeviceConfiguresMultiZoneSurface(t *testing.T) {
+	sender := &recordingSender{}
+	renderer := NewRendererForDevice(device.Device{
+		LightType: device.LightTypeMultiZone,
+		MultizoneProperties: device.MultizoneProperties{
+			Zones: make([]packets.LightHsbk, 2),
+		},
+	}, sender.Send)
+
+	err := renderer.RenderFrame(context.Background(), effects.Frame{
+		Colors: []effects.Color{kelvinColor(3500), kelvinColor(3600), kelvinColor(3700), kelvinColor(3800)},
+		Width:  4,
+		Height: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := sender.messages[0].Payload.(*packets.MultiZoneExtendedSetColorZones)
+	if payload.ColorsCount != 2 {
+		t.Fatalf("colors count = %d, want 2", payload.ColorsCount)
+	}
+	if payload.Colors[0].Kelvin != 3500 || payload.Colors[1].Kelvin != 3700 {
+		t.Fatalf("colors = %#v", payload.Colors[:2])
+	}
+}
+
 func TestMatrixRendererSendsTileMessages(t *testing.T) {
 	sender := &recordingSender{}
 	renderer := NewMatrixRenderer(sender.Send, WithMatrixRange(1, 2))
@@ -211,6 +269,82 @@ func TestMatrixRendererAppliesOrientation(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("kelvins = %v, want %v", got, want)
 		}
+	}
+}
+
+func TestMatrixRendererUsesSurfaceDeviceFrames(t *testing.T) {
+	sender := &recordingSender{}
+	surface := device.SurfaceFromDevice(device.Device{
+		LightType: device.LightTypeMatrix,
+		MatrixProperties: device.MatrixProperties{
+			Width:       2,
+			Height:      1,
+			NZones:      2,
+			ChainLength: 2,
+			ChainOrientations: []device.Orientation{
+				device.OrientationRightSideUp,
+				device.OrientationRightSideUp,
+			},
+		},
+	})
+	renderer := NewMatrixRenderer(sender.Send, WithMatrixSurface(surface))
+
+	err := renderer.RenderFrame(context.Background(), effects.Frame{
+		Colors: []effects.Color{kelvinColor(3500), kelvinColor(3600), kelvinColor(3700), kelvinColor(3800)},
+		Width:  4,
+		Height: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(sender.messages))
+	}
+
+	first := sender.messages[0].Payload.(*packets.TileSet64)
+	second := sender.messages[1].Payload.(*packets.TileSet64)
+	if first.TileIndex != 0 || first.Length != 2 || first.Rect.Width != 2 {
+		t.Fatalf("first payload = index %d length %d width %d", first.TileIndex, first.Length, first.Rect.Width)
+	}
+	if second.TileIndex != 1 || second.Length != 2 || second.Rect.Width != 2 {
+		t.Fatalf("second payload = index %d length %d width %d", second.TileIndex, second.Length, second.Rect.Width)
+	}
+	if first.Colors[0].Kelvin != 3500 || first.Colors[1].Kelvin != 3600 {
+		t.Fatalf("first colors = %#v", first.Colors[:2])
+	}
+	if second.Colors[0].Kelvin != 3700 || second.Colors[1].Kelvin != 3800 {
+		t.Fatalf("second colors = %#v", second.Colors[:2])
+	}
+}
+
+func TestMatrixRendererUsesSurfaceSendWidthAndHiddenCells(t *testing.T) {
+	sender := &recordingSender{}
+	surface := device.SurfaceFromDevice(device.Device{
+		ProductID: 201,
+		LightType: device.LightTypeMatrix,
+		MatrixProperties: device.MatrixProperties{
+			Width:      8,
+			Height:     16,
+			NZones:     128,
+			ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 128)},
+		},
+	})
+	renderer := NewMatrixRenderer(sender.Send, WithMatrixSurface(surface))
+
+	err := renderer.RenderFrame(context.Background(), indexedFrame(16, 8, time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := sender.messages[0].Payload.(*packets.TileSet64)
+	if payload.Rect.Width != 8 {
+		t.Fatalf("send width = %d, want 8", payload.Rect.Width)
+	}
+	if payload.Colors[0] != (packets.LightHsbk{}) || payload.Colors[1] != (packets.LightHsbk{}) {
+		t.Fatalf("hidden colors = %#v", payload.Colors[:2])
+	}
+	if payload.Colors[2].Kelvin != 3502 {
+		t.Fatalf("first visible kelvin = %d, want 3502", payload.Colors[2].Kelvin)
 	}
 }
 
@@ -268,4 +402,17 @@ func (s *recordingSender) Send(msg *protocol.Message) error {
 
 func kelvinColor(kelvin uint16) effects.Color {
 	return effects.Color{Brightness: 100, Kelvin: kelvin}
+}
+
+func indexedFrame(width, height int, duration time.Duration) effects.Frame {
+	colors := make([]effects.Color, width*height)
+	for i := range colors {
+		colors[i] = kelvinColor(uint16(3500 + i))
+	}
+	return effects.Frame{
+		Colors:   colors,
+		Width:    width,
+		Height:   height,
+		Duration: duration,
+	}
 }

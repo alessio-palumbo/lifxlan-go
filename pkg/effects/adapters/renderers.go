@@ -28,12 +28,14 @@ type SendFunc func(*protocol.Message) error
 func NewRendererForDevice(d device.Device, send SendFunc) effects.Renderer {
 	switch d.LightType {
 	case device.LightTypeMultiZone:
-		return NewMultiZoneRenderer(send)
+		return NewMultiZoneRenderer(send, WithMultiZoneSurface(device.SurfaceFromDevice(d)))
 	case device.LightTypeMatrix:
-		opts := []MatrixOption{WithMatrixRange(0, d.MatrixProperties.ChainLength)}
-		if len(d.MatrixProperties.ChainOrientations) > 0 {
-			opts = append(opts, WithMatrixOrientation(d.MatrixProperties.ChainOrientations[0]))
+		surface := device.SurfaceFromDevice(d)
+		length := 1
+		if surface.Matrix != nil && len(surface.Matrix.Chains) > 0 {
+			length = len(surface.Matrix.Chains)
 		}
+		opts := []MatrixOption{WithMatrixRange(0, length), WithMatrixSurface(surface)}
 		return NewMatrixRenderer(send, opts...)
 	default:
 		return NewSingleZoneRenderer(send)
@@ -86,6 +88,7 @@ func (r *SingleZoneRenderer) RenderFrame(ctx context.Context, frame effects.Fram
 type MultiZoneRenderer struct {
 	send       SendFunc
 	startIndex int
+	surface    *device.Surface
 }
 
 // MultiZoneOption configures a MultiZoneRenderer.
@@ -95,6 +98,13 @@ type MultiZoneOption func(*MultiZoneRenderer)
 func WithMultiZoneStartIndex(startIndex int) MultiZoneOption {
 	return func(r *MultiZoneRenderer) {
 		r.startIndex = max(startIndex, 0)
+	}
+}
+
+// WithMultiZoneSurface adapts logical frames to surface before sending.
+func WithMultiZoneSurface(surface device.Surface) MultiZoneOption {
+	return func(r *MultiZoneRenderer) {
+		r.surface = &surface
 	}
 }
 
@@ -113,11 +123,20 @@ func (r *MultiZoneRenderer) RenderFrame(ctx context.Context, frame effects.Frame
 	if err != nil {
 		return err
 	}
-	colors, err := frameDeviceColors(frame)
+	adaptFrame := multizoneFrame(frame)
+	surface := r.multizoneSurface(adaptFrame)
+	frames, err := effects.AdaptFrameToSurface(adaptFrame, surface, effects.AdaptOptions{})
+	if err != nil {
+		return mapEffectsError(err)
+	}
+	if len(frames) == 0 {
+		return ErrEmptyFrame
+	}
+	colors, err := deviceFrameColors(frames[0])
 	if err != nil {
 		return err
 	}
-	return sendAll(ctx, r.send, messages.SetMultizoneExtendedColors(r.startIndex, colors, frame.Duration))
+	return sendAll(ctx, r.send, messages.SetMultizoneExtendedColors(r.startIndex, colors, adaptFrame.Duration))
 }
 
 // MatrixRenderer renders frames to a matrix light.
@@ -126,6 +145,7 @@ type MatrixRenderer struct {
 	startIndex  int
 	length      int
 	orientation *device.Orientation
+	surface     *device.Surface
 }
 
 // MatrixOption configures a MatrixRenderer.
@@ -143,6 +163,16 @@ func WithMatrixRange(startIndex, length int) MatrixOption {
 func WithMatrixOrientation(orientation device.Orientation) MatrixOption {
 	return func(r *MatrixRenderer) {
 		r.orientation = &orientation
+	}
+}
+
+// WithMatrixSurface adapts logical frames to surface before sending.
+func WithMatrixSurface(surface device.Surface) MatrixOption {
+	return func(r *MatrixRenderer) {
+		r.surface = &surface
+		if surface.Matrix != nil && len(surface.Matrix.Chains) > 0 {
+			r.length = len(surface.Matrix.Chains)
+		}
 	}
 }
 
@@ -164,14 +194,34 @@ func (r *MatrixRenderer) RenderFrame(ctx context.Context, frame effects.Frame) e
 	if frame.Width <= 0 || frame.Height <= 0 {
 		return ErrInvalidFrame
 	}
-	colors, err := frameDeviceColors(frame)
+	surface := r.renderSurface(frame)
+	frames, err := effects.AdaptFrameToSurface(frame, surface, effects.AdaptOptions{})
 	if err != nil {
-		return err
+		return mapEffectsError(err)
 	}
-	if r.orientation != nil {
-		colors = device.ReorientMatrix(frame.Width, frame.Height, *r.orientation, colors)
+
+	for _, deviceFrame := range frames {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		colors, err := deviceFrameColors(deviceFrame)
+		if err != nil {
+			return err
+		}
+		orientation := deviceFrame.Orientation
+		if r.orientation != nil {
+			orientation = *r.orientation
+		}
+		colors = device.ReorientMatrix(deviceFrame.SendWidth, deviceFrame.Height, orientation, colors)
+		startIndex := deviceFrame.ChainIndex
+		if r.surface == nil {
+			startIndex = r.startIndex
+		}
+		if err := sendAll(ctx, r.send, messages.SetMatrixColorsFromSlice(startIndex, r.length, deviceFrame.SendWidth, colors, deviceFrame.Duration)); err != nil {
+			return err
+		}
 	}
-	return sendAll(ctx, r.send, messages.SetMatrixColorsFromSlice(r.startIndex, r.length, frame.Width, colors, frame.Duration))
+	return nil
 }
 
 func validateRenderer(ctx context.Context, send SendFunc) (context.Context, error) {
@@ -187,7 +237,29 @@ func validateRenderer(ctx context.Context, send SendFunc) (context.Context, erro
 	return ctx, nil
 }
 
-func frameDeviceColors(frame effects.Frame) ([]packets.LightHsbk, error) {
+func (r *MultiZoneRenderer) multizoneSurface(frame effects.Frame) device.Surface {
+	if r.surface != nil {
+		return *r.surface
+	}
+	zones := len(frame.Colors)
+	return device.Surface{
+		LightType: device.LightTypeMultiZone,
+		Width:     max(zones, 1),
+		Height:    1,
+		Zones:     max(zones, 1),
+	}
+}
+
+func multizoneFrame(frame effects.Frame) effects.Frame {
+	if frame.Width > 0 && frame.Height > 0 {
+		return frame
+	}
+	frame.Width = max(len(frame.Colors), 1)
+	frame.Height = 1
+	return frame
+}
+
+func deviceFrameColors(frame effects.DeviceFrame) ([]packets.LightHsbk, error) {
 	if len(frame.Colors) == 0 {
 		return nil, ErrEmptyFrame
 	}
@@ -196,6 +268,45 @@ func frameDeviceColors(frame effects.Frame) ([]packets.LightHsbk, error) {
 		colors[i] = color.ToDeviceColor()
 	}
 	return colors, nil
+}
+
+func (r *MatrixRenderer) renderSurface(frame effects.Frame) device.Surface {
+	if r.surface != nil {
+		return *r.surface
+	}
+
+	orientation := device.OrientationRightSideUp
+	if r.orientation != nil {
+		orientation = *r.orientation
+	}
+	rows := make([]device.MatrixRow, frame.Height)
+	for i := range rows {
+		rows[i] = device.MatrixRow{Cols: frame.Width}
+	}
+	return device.Surface{
+		LightType: device.LightTypeMatrix,
+		Width:     frame.Width,
+		Height:    frame.Height,
+		Zones:     frame.Width * frame.Height,
+		Matrix: &device.MatrixSurface{Chains: []device.MatrixChain{{
+			Index:       r.startIndex,
+			Bounds:      device.Rect{Width: frame.Width, Height: frame.Height},
+			SendWidth:   frame.Width,
+			Rows:        rows,
+			Orientation: orientation,
+		}}},
+	}
+}
+
+func mapEffectsError(err error) error {
+	switch {
+	case errors.Is(err, effects.ErrEmptyFrame):
+		return ErrEmptyFrame
+	case errors.Is(err, effects.ErrInvalidFrame):
+		return ErrInvalidFrame
+	default:
+		return err
+	}
 }
 
 func sendAll(ctx context.Context, send SendFunc, msgs []*protocol.Message) error {
