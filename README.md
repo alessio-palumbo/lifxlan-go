@@ -63,6 +63,15 @@ ctrl, err := controller.New(controller.WithLogger(logger))
 The `pkg/effects` package generates deterministic, target-free frames that can be used live or rendered offline.
 Frames do not contain serials, groups, labels, or network commands; device targeting is handled by renderers.
 
+The shared rendering pipeline is:
+
+```text
+Effect -> Frame -> device.Surface -> DeviceFrame -> renderer/messages
+```
+
+`device.SurfaceFromDevice` derives logical/display layout and physical send metadata from a discovered device.
+This includes multizone sizing, matrix chain bounds, send width, row offsets, hidden cells, and matrix orientation.
+
 ### Run Effects Live
 
 ```go
@@ -105,8 +114,8 @@ func runSweep(ctx context.Context, ctrl *controller.Controller, dev device.Devic
 `adapters.RunEffects` configures the right renderer from the discovered device:
 
 - single-zone lights use color messages
-- multizone lights use extended zone color messages
-- matrix lights use tile color messages and apply device orientation when available
+- multizone lights adapt frames to the device surface and use extended zone color messages
+- matrix lights adapt frames to the device surface, preserve send width/layout, and apply device orientation when sending tile color messages
 
 For lower-level control, build a renderer yourself:
 
@@ -114,6 +123,13 @@ For lower-level control, build a renderer yourself:
 renderer := adapters.NewRendererForDevice(dev, send)
 runner := effects.NewRunner(effect, renderer, 120*time.Millisecond)
 err := runner.Run(ctx)
+```
+
+You can also pass a known surface to lower-level renderers:
+
+```go
+surface := device.SurfaceFromDevice(dev)
+renderer := adapters.NewMatrixRenderer(send, adapters.WithMatrixSurface(surface))
 ```
 
 ### Render Offline
@@ -131,6 +147,16 @@ frames := effects.Render(
 	10*time.Second,
 )
 ```
+
+To convert a logical frame into packet-independent device frames, adapt it to a surface:
+
+```go
+surface := device.SurfaceFromDevice(dev)
+deviceFrames, err := effects.AdaptFrameToSurface(frames[0].Frame, surface, effects.AdaptOptions{})
+```
+
+The resulting `DeviceFrame` values contain colors, duration, send width, chain index, and orientation metadata.
+They can be serialized into a timeline, rendered in a preview, or converted to LAN messages later.
 
 Available effects include `Solid`, `Gradient`, `Sweep`, `Waterfall`, `Rockets`, `Snake`, `Worm`, and `ConcentricFrames`.
 
@@ -261,7 +287,7 @@ LIFX_LOG_LEVEL: Set the log level (info, debug, warn, error). Default is info.
 ## Project Structure
 
 - pkg/controller – high-level controller for managing sessions and device state
-- pkg/device – contains Device definition and properties
+- pkg/device – contains Device definition, properties, and surface/layout metadata
 - pkg/client – low-level UDP client for communicating with LIFX protocol
 - pkg/protocol – contains the LIFX Message library
 - pkg/messages – a selection of ready-to-use LIFX messages
