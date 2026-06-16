@@ -3,6 +3,8 @@ package effects
 // DefaultColor is used when a palette does not define a requested color.
 var DefaultColor = Color{Hue: 220, Saturation: 100, Brightness: 100, Kelvin: 3500}
 
+var blankColor = Color{Hue: DefaultColor.Hue, Saturation: DefaultColor.Saturation, Brightness: 0, Kelvin: DefaultColor.Kelvin}
+
 // Palette groups colors for deterministic effects.
 type Palette struct {
 	Name        string

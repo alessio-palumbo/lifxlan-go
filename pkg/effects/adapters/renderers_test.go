@@ -303,11 +303,14 @@ func TestMatrixRendererUsesSurfaceDeviceFrames(t *testing.T) {
 
 	first := sender.messages[0].Payload.(*packets.TileSet64)
 	second := sender.messages[1].Payload.(*packets.TileSet64)
-	if first.TileIndex != 0 || first.Length != 2 || first.Rect.Width != 2 {
+	if first.TileIndex != 0 || first.Length != 1 || first.Rect.Width != 2 {
 		t.Fatalf("first payload = index %d length %d width %d", first.TileIndex, first.Length, first.Rect.Width)
 	}
-	if second.TileIndex != 1 || second.Length != 2 || second.Rect.Width != 2 {
+	if second.TileIndex != 1 || second.Length != 1 || second.Rect.Width != 2 {
 		t.Fatalf("second payload = index %d length %d width %d", second.TileIndex, second.Length, second.Rect.Width)
+	}
+	if first.Duration != 1 || second.Duration != 1 {
+		t.Fatalf("durations = %d/%d, want 1/1", first.Duration, second.Duration)
 	}
 	if first.Colors[0].Kelvin != 3500 || first.Colors[1].Kelvin != 3600 {
 		t.Fatalf("first colors = %#v", first.Colors[:2])
@@ -340,8 +343,9 @@ func TestMatrixRendererUsesSurfaceSendWidthAndHiddenCells(t *testing.T) {
 	if payload.Rect.Width != 8 {
 		t.Fatalf("send width = %d, want 8", payload.Rect.Width)
 	}
-	if payload.Colors[0] != (packets.LightHsbk{}) || payload.Colors[1] != (packets.LightHsbk{}) {
-		t.Fatalf("hidden colors = %#v", payload.Colors[:2])
+	blank := blankHSBK()
+	if payload.Colors[0] != blank || payload.Colors[1] != blank {
+		t.Fatalf("hidden colors = %#v, want %#v", payload.Colors[:2], blank)
 	}
 	if payload.Colors[2].Kelvin != 3502 {
 		t.Fatalf("first visible kelvin = %d, want 3502", payload.Colors[2].Kelvin)
@@ -402,6 +406,10 @@ func (s *recordingSender) Send(msg *protocol.Message) error {
 
 func kelvinColor(kelvin uint16) effects.Color {
 	return effects.Color{Brightness: 100, Kelvin: kelvin}
+}
+
+func blankHSBK() packets.LightHsbk {
+	return effects.Color{Hue: 220, Saturation: 100, Brightness: 0, Kelvin: 3500}.ToDeviceColor()
 }
 
 func indexedFrame(width, height int, duration time.Duration) effects.Frame {

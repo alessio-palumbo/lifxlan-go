@@ -150,8 +150,8 @@ func TestAdaptFrameToSurfaceCandleOffsetAndHiddenCols(t *testing.T) {
 		t.Fatalf("offset colors = %#v, want source x=1 and x=2", colors[:2])
 	}
 	for _, index := range []int{2, 3, 4} {
-		if colors[index] != (Color{}) {
-			t.Fatalf("hidden slot %d = %#v, want zero color", index, colors[index])
+		if colors[index] != blankColor {
+			t.Fatalf("hidden slot %d = %#v, want blank color", index, colors[index])
 		}
 	}
 	if colors[5] != frame.Colors[6] {
@@ -182,8 +182,8 @@ func TestAdaptFrameToSurfaceCeilingCapsuleKeepsSendWidth(t *testing.T) {
 		t.Fatalf("frame metadata = %#v", got[0])
 	}
 	for _, index := range []int{0, 1, 14, 15, 112, 113, 126, 127} {
-		if colors[index] != (Color{}) {
-			t.Fatalf("hidden slot %d = %#v, want zero color", index, colors[index])
+		if colors[index] != blankColor {
+			t.Fatalf("hidden slot %d = %#v, want blank color", index, colors[index])
 		}
 	}
 	if colors[2] != frame.Colors[2] || colors[16] != frame.Colors[16] {
@@ -207,7 +207,7 @@ func TestAdaptFrameToSurfacePadsAndCropsMatrixCells(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantPadded := []Color{paddedFrame.Colors[0], {}}
+	wantPadded := []Color{paddedFrame.Colors[0], blankColor}
 	if !reflect.DeepEqual(padded[0].Colors, wantPadded) {
 		t.Fatalf("padded colors = %#v, want %#v", padded[0].Colors, wantPadded)
 	}

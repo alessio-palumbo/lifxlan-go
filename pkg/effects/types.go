@@ -60,13 +60,13 @@ func CapabilitiesFromDevice(d device.Device) Capabilities {
 		c.Width = c.Zones
 		c.Height = 1
 	case device.LightTypeMatrix:
-		c.Width = d.MatrixProperties.Width
-		c.Height = d.MatrixProperties.Height
-		c.Zones = d.MatrixProperties.NZones
-		if c.Zones == 0 {
-			c.Zones = c.Width * c.Height
+		surface := device.SurfaceFromDevice(d)
+		c.Width = surface.Width
+		c.Height = surface.Height
+		c.Zones = surface.Zones
+		if surface.Matrix != nil {
+			c.ChainLength = len(surface.Matrix.Chains)
 		}
-		c.ChainLength = d.MatrixProperties.ChainLength
 		c.ChainOrientations = slices.Clone(d.MatrixProperties.ChainOrientations)
 	default:
 		c.Zones = 1

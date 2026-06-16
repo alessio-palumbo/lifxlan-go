@@ -48,8 +48,8 @@ type DeviceFrame struct {
 // AdaptFrameToSurface adapts a target-free logical frame to a device surface.
 //
 // Matrix adaptation samples colors from the logical frame by surface cell
-// coordinates. Cells outside the logical frame are padded with zero colors,
-// cells outside the surface are cropped, and hidden matrix cells are zeroed.
+// coordinates. Cells outside the logical frame are padded with blank colors,
+// cells outside the surface are cropped, and hidden matrix cells are blanked.
 // Adapted matrix DeviceFrames keep packet/send dimensions and do not apply
 // orientation; Orientation is carried so a later renderer can rotate for the
 // physical device.
@@ -123,7 +123,7 @@ func adaptMatrixFrame(frame Frame, surface device.Surface) []DeviceFrame {
 	for _, chain := range surface.Matrix.Chains {
 		sendWidth := max(chain.SendWidth, 1)
 		sendHeight := matrixSendHeight(chain, sendWidth)
-		colors := make([]Color, sendWidth*sendHeight)
+		colors := blankColors(sendWidth, sendHeight)
 		sendIndex := 0
 
 		for rowIndex, row := range chain.Rows {
@@ -155,7 +155,7 @@ func adaptMatrixFrame(frame Frame, surface device.Surface) []DeviceFrame {
 func adaptRectMatrixFrame(frame Frame, surface device.Surface) []DeviceFrame {
 	width := max(surface.Width, 1)
 	height := max(surface.Height, 1)
-	colors := make([]Color, width*height)
+	colors := blankColors(width, height)
 	for y := range height {
 		for x := range width {
 			colors[y*width+x] = frameColorAt(frame, x, y)
@@ -192,7 +192,7 @@ func hiddenCol(hidden []int, col int) bool {
 
 func frameColorAt(frame Frame, x, y int) Color {
 	if x < 0 || y < 0 || x >= frame.Width || y >= frame.Height {
-		return Color{}
+		return blankColor
 	}
 	return frame.Colors[y*frame.Width+x]
 }

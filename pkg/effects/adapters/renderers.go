@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/effects"
@@ -146,6 +147,7 @@ type MatrixRenderer struct {
 	length      int
 	orientation *device.Orientation
 	surface     *device.Surface
+	duration    *time.Duration
 }
 
 // MatrixOption configures a MatrixRenderer.
@@ -173,6 +175,13 @@ func WithMatrixSurface(surface device.Surface) MatrixOption {
 		if surface.Matrix != nil && len(surface.Matrix.Chains) > 0 {
 			r.length = len(surface.Matrix.Chains)
 		}
+	}
+}
+
+// WithMatrixTransitionDuration sets the tile color transition duration.
+func WithMatrixTransitionDuration(duration time.Duration) MatrixOption {
+	return func(r *MatrixRenderer) {
+		r.duration = &duration
 	}
 }
 
@@ -214,10 +223,12 @@ func (r *MatrixRenderer) RenderFrame(ctx context.Context, frame effects.Frame) e
 		}
 		colors = device.ReorientMatrix(deviceFrame.SendWidth, deviceFrame.Height, orientation, colors)
 		startIndex := deviceFrame.ChainIndex
+		length := 1
 		if r.surface == nil {
 			startIndex = r.startIndex
+			length = r.length
 		}
-		if err := sendAll(ctx, r.send, messages.SetMatrixColorsFromSlice(startIndex, r.length, deviceFrame.SendWidth, colors, deviceFrame.Duration)); err != nil {
+		if err := sendAll(ctx, r.send, messages.SetMatrixColorsFromSlice(startIndex, length, deviceFrame.SendWidth, colors, r.matrixDuration(deviceFrame))); err != nil {
 			return err
 		}
 	}
@@ -296,6 +307,16 @@ func (r *MatrixRenderer) renderSurface(frame effects.Frame) device.Surface {
 			Orientation: orientation,
 		}}},
 	}
+}
+
+func (r *MatrixRenderer) matrixDuration(frame effects.DeviceFrame) time.Duration {
+	if r.duration != nil {
+		return *r.duration
+	}
+	if r.surface != nil {
+		return time.Millisecond
+	}
+	return frame.Duration
 }
 
 func mapEffectsError(err error) error {

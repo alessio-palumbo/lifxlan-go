@@ -320,7 +320,11 @@ type point struct {
 }
 
 func blankColors(width, height int) []Color {
-	return make([]Color, width*height)
+	colors := make([]Color, width*height)
+	for i := range colors {
+		colors[i] = blankColor
+	}
+	return colors
 }
 
 func matrixColors(colors []Color) []Color {
@@ -358,7 +362,7 @@ func setPixel(colors []Color, width, x, y int, color Color) {
 }
 
 func clearPixel(colors []Color, width int, p point) {
-	setPixel(colors, width, p.X, p.Y, Color{})
+	setPixel(colors, width, p.X, p.Y, blankColor)
 }
 
 func serpentinePoint(width, index int) point {

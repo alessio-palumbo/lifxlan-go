@@ -87,8 +87,8 @@ func TestCapabilitiesFromDeviceMatrix(t *testing.T) {
 
 	want := Capabilities{
 		LightType:         device.LightTypeMatrix,
-		Zones:             64,
-		Width:             8,
+		Zones:             128,
+		Width:             16,
 		Height:            8,
 		ChainLength:       2,
 		ChainOrientations: []device.Orientation{device.OrientationRightSideUp, device.OrientationLeft},
@@ -116,6 +116,22 @@ func TestCapabilitiesFromDeviceMatrixComputesZones(t *testing.T) {
 
 	if got.Zones != 128 {
 		t.Fatalf("zones = %d, want 128", got.Zones)
+	}
+}
+
+func TestCapabilitiesFromDeviceMatrixUsesSurfaceWidth(t *testing.T) {
+	got := CapabilitiesFromDevice(device.Device{
+		LightType: device.LightTypeMatrix,
+		MatrixProperties: device.MatrixProperties{
+			Width:       8,
+			Height:      8,
+			NZones:      64,
+			ChainLength: 2,
+		},
+	})
+
+	if got.Width != 16 || got.Height != 8 || got.Zones != 128 || got.ChainLength != 2 {
+		t.Fatalf("capabilities = %#v, want full chain 16x8 zones=128 chainLength=2", got)
 	}
 }
 

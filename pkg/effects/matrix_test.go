@@ -154,7 +154,7 @@ func matrixCaps(width, height int) Capabilities {
 }
 
 func testMatrixFrame(width, height int, pixels []pixelColor) Frame {
-	colors := make([]Color, width*height)
+	colors := blankColors(width, height)
 	for _, pixel := range pixels {
 		colors[pixel.y*width+pixel.x] = pixel.color
 	}
@@ -164,7 +164,7 @@ func testMatrixFrame(width, height int, pixels []pixelColor) Frame {
 func coloredPoints(frame Frame) []point {
 	var points []point
 	for i, color := range frame.Colors {
-		if color != (Color{}) {
+		if color.Brightness > 0 {
 			points = append(points, point{X: i % frame.Width, Y: i / frame.Width})
 		}
 	}
