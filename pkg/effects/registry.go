@@ -42,6 +42,16 @@ const (
 	EffectGradient EffectID = "gradient"
 	// EffectSweep identifies the Sweep effect.
 	EffectSweep EffectID = "sweep"
+	// EffectWaterfall identifies the Waterfall matrix effect.
+	EffectWaterfall EffectID = "waterfall"
+	// EffectRockets identifies the Rockets matrix effect.
+	EffectRockets EffectID = "rockets"
+	// EffectSnake identifies the Snake matrix effect.
+	EffectSnake EffectID = "snake"
+	// EffectWorm identifies the Worm matrix effect.
+	EffectWorm EffectID = "worm"
+	// EffectConcentricFrames identifies the ConcentricFrames matrix effect.
+	EffectConcentricFrames EffectID = "concentric_frames"
 )
 
 var (
@@ -162,6 +172,131 @@ func init() {
 				return nil, err
 			}
 			return NewSweep(SweepConfig{Capabilities: caps, Palette: palette}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectWaterfall,
+		Label:       "Waterfall",
+		Description: "Fill matrix rows cumulatively with a centered color strip.",
+		DeviceKinds: matrixLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			cyclesParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			cycles, err := intParam(config.Params, "cycles")
+			if err != nil {
+				return nil, err
+			}
+			return NewWaterfall(WaterfallConfig{Capabilities: caps, Colors: paletteColors(palette), Cycles: cycles}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectRockets,
+		Label:       "Rockets",
+		Description: "Move a single pixel through the matrix in row-major order.",
+		DeviceKinds: matrixLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			cyclesParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			cycles, err := intParam(config.Params, "cycles")
+			if err != nil {
+				return nil, err
+			}
+			return NewRockets(RocketsConfig{Capabilities: caps, Colors: paletteColors(palette), Cycles: cycles}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectSnake,
+		Label:       "Snake",
+		Description: "Move a trailing segment through a serpentine matrix path.",
+		DeviceKinds: matrixLightTypes(),
+		Params: []ParamDefinition{
+			colorParamDefinition(DefaultColor),
+			sizeParamDefinition(),
+			cyclesParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			color, err := colorParam(config.Params, "color")
+			if err != nil {
+				return nil, err
+			}
+			size, err := intParam(config.Params, "size")
+			if err != nil {
+				return nil, err
+			}
+			cycles, err := intParam(config.Params, "cycles")
+			if err != nil {
+				return nil, err
+			}
+			return NewSnake(SnakeConfig{Capabilities: caps, Size: size, Color: color, Cycles: cycles}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectWorm,
+		Label:       "Worm",
+		Description: "Move short batches of pixels through a serpentine matrix path.",
+		DeviceKinds: matrixLightTypes(),
+		Params: []ParamDefinition{
+			colorParamDefinition(DefaultColor),
+			sizeParamDefinition(),
+			cyclesParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			color, err := colorParam(config.Params, "color")
+			if err != nil {
+				return nil, err
+			}
+			size, err := intParam(config.Params, "size")
+			if err != nil {
+				return nil, err
+			}
+			cycles, err := intParam(config.Params, "cycles")
+			if err != nil {
+				return nil, err
+			}
+			return NewWorm(WormConfig{Capabilities: caps, Size: size, Color: color, Cycles: cycles}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectConcentricFrames,
+		Label:       "Concentric Frames",
+		Description: "Draw matrix borders according to direction.",
+		DeviceKinds: matrixLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			directionParamDefinition(),
+			cyclesParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			direction, err := directionParam(config.Params, "direction")
+			if err != nil {
+				return nil, err
+			}
+			cycles, err := intParam(config.Params, "cycles")
+			if err != nil {
+				return nil, err
+			}
+			return NewConcentricFrames(ConcentricFramesConfig{Capabilities: caps, Direction: direction, Colors: paletteColors(palette), Cycles: cycles}), nil
 		},
 	})
 }
@@ -439,6 +574,36 @@ func paletteParam(params map[string]any, key string) (Palette, error) {
 	return PaletteParam(params, key)
 }
 
+func intParam(params map[string]any, key string) (int, error) {
+	number, err := NumberParam(params, key)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number {
+		return 0, fmt.Errorf("%w: parameter %q must be an integer", ErrInvalidConfig, key)
+	}
+	return int(number), nil
+}
+
+func directionParam(params map[string]any, key string) (Direction, error) {
+	choice, err := ChoiceParam(params, key)
+	if err != nil {
+		return DirectionInwards, err
+	}
+	switch choice {
+	case "inwards":
+		return DirectionInwards, nil
+	case "outwards":
+		return DirectionOutwards, nil
+	case "in_out":
+		return DirectionInOut, nil
+	case "out_in":
+		return DirectionOutIn, nil
+	default:
+		return DirectionInwards, fmt.Errorf("%w: parameter %q has invalid choice %q", ErrInvalidConfig, key, choice)
+	}
+}
+
 func requiredParam(params map[string]any, key string) (any, error) {
 	value, ok := params[key]
 	if !ok || value == nil {
@@ -647,6 +812,10 @@ func allLightTypes() []device.LightType {
 	return []device.LightType{device.LightTypeSingleZone, device.LightTypeMultiZone, device.LightTypeMatrix}
 }
 
+func matrixLightTypes() []device.LightType {
+	return []device.LightType{device.LightTypeMatrix}
+}
+
 func knownParamKind(kind ParamKind) bool {
 	switch kind {
 	case ParamNumber, ParamBool, ParamChoiceKind, ParamColor, ParamPalette, ParamDuration:
@@ -654,6 +823,75 @@ func knownParamKind(kind ParamKind) bool {
 	default:
 		return false
 	}
+}
+
+func colorParamDefinition(defaultColor Color) ParamDefinition {
+	return ParamDefinition{
+		Key:     "color",
+		Label:   "Color",
+		Kind:    ParamColor,
+		Default: defaultColor,
+	}
+}
+
+func paletteParamDefinition(defaultPalette Palette) ParamDefinition {
+	return ParamDefinition{
+		Key:     "palette",
+		Label:   "Palette",
+		Kind:    ParamPalette,
+		Default: defaultPalette,
+	}
+}
+
+func cyclesParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "cycles",
+		Label:   "Cycles",
+		Kind:    ParamNumber,
+		Default: 0,
+		Min:     float64Ptr(0),
+		Step:    float64Ptr(1),
+	}
+}
+
+func sizeParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "size",
+		Label:   "Size",
+		Kind:    ParamNumber,
+		Default: 4,
+		Min:     float64Ptr(1),
+		Step:    float64Ptr(1),
+	}
+}
+
+func directionParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "direction",
+		Label:   "Direction",
+		Kind:    ParamChoiceKind,
+		Default: "inwards",
+		Choices: []ParamChoice{
+			{Value: "inwards", Label: "Inwards"},
+			{Value: "outwards", Label: "Outwards"},
+			{Value: "in_out", Label: "In Out"},
+			{Value: "out_in", Label: "Out In"},
+		},
+	}
+}
+
+func paletteColors(palette Palette) []Color {
+	colors := make([]Color, 0, len(palette.Base)+len(palette.Accents))
+	colors = append(colors, palette.Base...)
+	colors = append(colors, palette.Accents...)
+	if len(colors) == 0 {
+		return []Color{DefaultColor}
+	}
+	return colors
+}
+
+func float64Ptr(value float64) *float64 {
+	return &value
 }
 
 func cloneDefinition(def EffectDefinition) EffectDefinition {

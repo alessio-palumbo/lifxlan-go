@@ -34,7 +34,16 @@ func TestDefinitionsDeterministicAndIncludeBuiltins(t *testing.T) {
 		t.Fatalf("definitions are not sorted by ID: %#v", ids)
 	}
 
-	for _, id := range []EffectID{EffectSolid, EffectGradient, EffectSweep} {
+	for _, id := range []EffectID{
+		EffectSolid,
+		EffectGradient,
+		EffectSweep,
+		EffectWaterfall,
+		EffectRockets,
+		EffectSnake,
+		EffectWorm,
+		EffectConcentricFrames,
+	} {
 		if !slices.Contains(ids, id) {
 			t.Fatalf("missing built-in definition %q from %#v", id, ids)
 		}
@@ -82,6 +91,68 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 			}
 			if reflect.TypeOf(effect) != reflect.TypeOf(tt.want) {
 				t.Fatalf("effect = %T, want %T", effect, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewConstructsBuiltInMatrixEffects(t *testing.T) {
+	tests := map[string]struct {
+		config Config
+		want   any
+	}{
+		"waterfall": {
+			config: Config{ID: EffectWaterfall, Params: map[string]any{
+				"palette": Palette{Base: []Color{color(10), color(20)}},
+				"cycles":  1,
+			}},
+			want: &Waterfall{},
+		},
+		"rockets": {
+			config: Config{ID: EffectRockets, Params: map[string]any{
+				"palette": Palette{Base: []Color{color(10), color(20)}},
+				"cycles":  1,
+			}},
+			want: &Rockets{},
+		},
+		"snake": {
+			config: Config{ID: EffectSnake, Params: map[string]any{
+				"color":  color(10),
+				"size":   2,
+				"cycles": 1,
+			}},
+			want: &Snake{},
+		},
+		"worm": {
+			config: Config{ID: EffectWorm, Params: map[string]any{
+				"color":  color(10),
+				"size":   2,
+				"cycles": 1,
+			}},
+			want: &Worm{},
+		},
+		"concentric frames": {
+			config: Config{ID: EffectConcentricFrames, Params: map[string]any{
+				"palette":   Palette{Base: []Color{color(10)}},
+				"direction": "out_in",
+				"cycles":    1,
+			}},
+			want: &ConcentricFrames{},
+		},
+	}
+
+	caps := Capabilities{LightType: device.LightTypeMatrix, Width: 3, Height: 3}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			effect, err := New(tt.config, caps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reflect.TypeOf(effect) != reflect.TypeOf(tt.want) {
+				t.Fatalf("effect = %T, want %T", effect, tt.want)
+			}
+			if frame, ok := effect.Next(time.Second); !ok || len(frame.Colors) == 0 {
+				t.Fatalf("Next returned frame %#v, ok=%t", frame, ok)
 			}
 		})
 	}
@@ -197,6 +268,13 @@ func TestNewRejectsUnsupportedDeviceKind(t *testing.T) {
 	}
 }
 
+func TestNewRejectsMatrixEffectForNonMatrixDevice(t *testing.T) {
+	_, err := New(Config{ID: EffectSnake}, Capabilities{LightType: device.LightTypeMultiZone, Zones: 4})
+	if !errors.Is(err, ErrUnsupportedDeviceKind) {
+		t.Fatalf("error = %v, want %v", err, ErrUnsupportedDeviceKind)
+	}
+}
+
 func TestNewRejectsInvalidParams(t *testing.T) {
 	tests := map[string]Config{
 		"unknown param": {
@@ -223,11 +301,34 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 				"palette": Palette{Base: []Color{{Hue: 10, Saturation: -1, Brightness: 100, Kelvin: 3500}}},
 			},
 		},
+		"invalid matrix size": {
+			ID: EffectSnake,
+			Params: map[string]any{
+				"size": 1.5,
+			},
+		},
+		"invalid matrix cycles": {
+			ID: EffectWaterfall,
+			Params: map[string]any{
+				"cycles": 1.5,
+			},
+		},
+		"invalid matrix direction": {
+			ID: EffectConcentricFrames,
+			Params: map[string]any{
+				"direction": "sideways",
+			},
+		},
 	}
 
 	for name, config := range tests {
 		t.Run(name, func(t *testing.T) {
-			if _, err := New(config, Capabilities{LightType: device.LightTypeSingleZone}); !errors.Is(err, ErrInvalidConfig) {
+			caps := Capabilities{LightType: device.LightTypeSingleZone}
+			switch config.ID {
+			case EffectWaterfall, EffectRockets, EffectSnake, EffectWorm, EffectConcentricFrames:
+				caps = Capabilities{LightType: device.LightTypeMatrix, Width: 3, Height: 3}
+			}
+			if _, err := New(config, caps); !errors.Is(err, ErrInvalidConfig) {
 				t.Fatalf("error = %v, want %v", err, ErrInvalidConfig)
 			}
 		})
@@ -293,6 +394,31 @@ func TestNewAppliesDefaults(t *testing.T) {
 	}
 	want := Frame{
 		Colors:   []Color{DefaultColor, DefaultColor},
+		Width:    2,
+		Height:   1,
+		Duration: time.Second,
+	}
+	if !reflect.DeepEqual(frame, want) {
+		t.Fatalf("frame = %#v, want %#v", frame, want)
+	}
+}
+
+func TestNewAppliesMatrixDefaults(t *testing.T) {
+	effect, err := New(Config{ID: EffectSnake}, Capabilities{
+		LightType: device.LightTypeMatrix,
+		Width:     2,
+		Height:    1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	frame, ok := effect.Next(time.Second)
+	if !ok {
+		t.Fatal("Next returned ok=false")
+	}
+	want := Frame{
+		Colors:   []Color{DefaultColor, blankColor},
 		Width:    2,
 		Height:   1,
 		Duration: time.Second,
