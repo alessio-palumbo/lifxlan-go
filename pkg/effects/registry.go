@@ -302,7 +302,7 @@ func validateParams(defs []ParamDefinition, params map[string]any) (map[string]a
 func validateParamValue(def ParamDefinition, value any) (any, error) {
 	switch def.Kind {
 	case ParamNumber:
-		number, err := asFloat64(value)
+		number, err := numberValue(value)
 		if err != nil {
 			return nil, fmt.Errorf("%w: parameter %q must be a number", ErrInvalidConfig, def.Key)
 		}
@@ -353,12 +353,98 @@ func validateParamValue(def ParamDefinition, value any) (any, error) {
 	}
 }
 
+// ColorParam returns a validated color parameter.
+func ColorParam(params map[string]any, key string) (Color, error) {
+	value, err := requiredParam(params, key)
+	if err != nil {
+		return Color{}, err
+	}
+	color, err := asColor(value)
+	if err != nil {
+		return Color{}, fmt.Errorf("%w: parameter %q: %v", ErrInvalidConfig, key, err)
+	}
+	return color, nil
+}
+
+// PaletteParam returns a validated palette parameter.
+func PaletteParam(params map[string]any, key string) (Palette, error) {
+	value, err := requiredParam(params, key)
+	if err != nil {
+		return Palette{}, err
+	}
+	palette, err := asPalette(value)
+	if err != nil {
+		return Palette{}, fmt.Errorf("%w: parameter %q: %v", ErrInvalidConfig, key, err)
+	}
+	return palette, nil
+}
+
+// NumberParam returns a validated number parameter.
+func NumberParam(params map[string]any, key string) (float64, error) {
+	value, err := requiredParam(params, key)
+	if err != nil {
+		return 0, err
+	}
+	number, err := numberValue(value)
+	if err != nil {
+		return 0, fmt.Errorf("%w: parameter %q must be a number", ErrInvalidConfig, key)
+	}
+	return number, nil
+}
+
+// BoolParam returns a validated boolean parameter.
+func BoolParam(params map[string]any, key string) (bool, error) {
+	value, err := requiredParam(params, key)
+	if err != nil {
+		return false, err
+	}
+	boolValue, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("%w: parameter %q must be a bool", ErrInvalidConfig, key)
+	}
+	return boolValue, nil
+}
+
+// ChoiceParam returns a validated string choice parameter.
+func ChoiceParam(params map[string]any, key string) (string, error) {
+	value, err := requiredParam(params, key)
+	if err != nil {
+		return "", err
+	}
+	choice, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("%w: parameter %q must be a choice string", ErrInvalidConfig, key)
+	}
+	return choice, nil
+}
+
+// DurationParam returns a validated duration parameter.
+func DurationParam(params map[string]any, key string) (time.Duration, error) {
+	value, err := requiredParam(params, key)
+	if err != nil {
+		return 0, err
+	}
+	duration, err := asDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("%w: parameter %q must be a duration", ErrInvalidConfig, key)
+	}
+	return duration, nil
+}
+
 func colorParam(params map[string]any, key string) (Color, error) {
-	return asColor(params[key])
+	return ColorParam(params, key)
 }
 
 func paletteParam(params map[string]any, key string) (Palette, error) {
-	return asPalette(params[key])
+	return PaletteParam(params, key)
+}
+
+func requiredParam(params map[string]any, key string) (any, error) {
+	value, ok := params[key]
+	if !ok || value == nil {
+		return nil, fmt.Errorf("%w: missing parameter %q", ErrInvalidConfig, key)
+	}
+	return value, nil
 }
 
 func asColor(value any) (Color, error) {
@@ -409,7 +495,7 @@ func validateColor(color Color) (Color, error) {
 func asPalette(value any) (Palette, error) {
 	switch v := value.(type) {
 	case Palette:
-		return validatePalette(v)
+		return validatePalette(clonePalette(v))
 	case map[string]any:
 		palette := Palette{}
 		if name, ok := stringField(v, "Name", "name"); ok {
@@ -458,6 +544,10 @@ func asDuration(value any) (time.Duration, error) {
 }
 
 func asFloat64(value any) (float64, error) {
+	return numberValue(value)
+}
+
+func numberValue(value any) (float64, error) {
 	switch v := value.(type) {
 	case float64:
 		return v, nil

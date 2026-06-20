@@ -348,6 +348,140 @@ func TestConfigJSONRoundTrips(t *testing.T) {
 	}
 }
 
+func TestParamHelpersReadGoValuesAndJSONValues(t *testing.T) {
+	params := map[string]any{
+		"color":    color(10),
+		"palette":  Palette{Base: []Color{color(20)}, Accents: []Color{color(30)}},
+		"number":   12.5,
+		"bool":     true,
+		"choice":   "forward",
+		"duration": 2 * time.Second,
+	}
+
+	assertParamHelpers(t, params)
+
+	data, err := json.Marshal(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTripped map[string]any
+	if err := json.Unmarshal(data, &roundTripped); err != nil {
+		t.Fatal(err)
+	}
+
+	assertParamHelpers(t, roundTripped)
+}
+
+func assertParamHelpers(t *testing.T, params map[string]any) {
+	t.Helper()
+
+	gotColor, err := ColorParam(params, "color")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotColor != color(10) {
+		t.Fatalf("ColorParam = %#v, want %#v", gotColor, color(10))
+	}
+
+	gotPalette, err := PaletteParam(params, "palette")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gotPalette.Base, []Color{color(20)}) || !reflect.DeepEqual(gotPalette.Accents, []Color{color(30)}) {
+		t.Fatalf("PaletteParam = %#v", gotPalette)
+	}
+
+	gotNumber, err := NumberParam(params, "number")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotNumber != 12.5 {
+		t.Fatalf("NumberParam = %f, want 12.5", gotNumber)
+	}
+
+	gotBool, err := BoolParam(params, "bool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gotBool {
+		t.Fatal("BoolParam = false, want true")
+	}
+
+	gotChoice, err := ChoiceParam(params, "choice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotChoice != "forward" {
+		t.Fatalf("ChoiceParam = %q, want forward", gotChoice)
+	}
+
+	gotDuration, err := DurationParam(params, "duration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotDuration != 2*time.Second {
+		t.Fatalf("DurationParam = %s, want 2s", gotDuration)
+	}
+}
+
+func TestParamHelpersReturnClonedPalette(t *testing.T) {
+	original := Palette{Base: []Color{color(10)}, Accents: []Color{color(20)}, Backgrounds: []Color{color(30)}}
+	params := map[string]any{"palette": original}
+
+	got, err := PaletteParam(params, "palette")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.Base[0] = color(99)
+	got.Accents[0] = color(98)
+	got.Backgrounds[0] = color(97)
+
+	if original.Base[0] == color(99) || original.Accents[0] == color(98) || original.Backgrounds[0] == color(97) {
+		t.Fatalf("PaletteParam returned shared slices: %#v", original)
+	}
+}
+
+func TestParamHelpersRejectMissingAndInvalidValues(t *testing.T) {
+	tests := map[string]func() error{
+		"missing color": func() error {
+			_, err := ColorParam(nil, "color")
+			return err
+		},
+		"invalid color": func() error {
+			_, err := ColorParam(map[string]any{"color": "blue"}, "color")
+			return err
+		},
+		"invalid palette": func() error {
+			_, err := PaletteParam(map[string]any{"palette": "bright"}, "palette")
+			return err
+		},
+		"invalid number": func() error {
+			_, err := NumberParam(map[string]any{"number": "12"}, "number")
+			return err
+		},
+		"invalid bool": func() error {
+			_, err := BoolParam(map[string]any{"bool": "true"}, "bool")
+			return err
+		},
+		"invalid choice": func() error {
+			_, err := ChoiceParam(map[string]any{"choice": 1}, "choice")
+			return err
+		},
+		"invalid duration": func() error {
+			_, err := DurationParam(map[string]any{"duration": true}, "duration")
+			return err
+		},
+	}
+
+	for name, run := range tests {
+		t.Run(name, func(t *testing.T) {
+			if err := run(); !errors.Is(err, ErrInvalidConfig) {
+				t.Fatalf("error = %v, want %v", err, ErrInvalidConfig)
+			}
+		})
+	}
+}
+
 func TestConfigAndDefinitionHaveNoTargetFields(t *testing.T) {
 	for _, typ := range []reflect.Type{reflect.TypeOf(Config{}), reflect.TypeOf(EffectDefinition{})} {
 		for _, name := range []string{"Target", "Serial", "Group", "Address", "DeviceID", "Scheduler", "Timeline"} {
