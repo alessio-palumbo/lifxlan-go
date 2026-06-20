@@ -34,6 +34,71 @@ type FrameAt struct {
 	Frame Frame
 }
 
+// BlankColor returns the standard off color used for blank frame cells.
+func BlankColor() Color {
+	return blankColor
+}
+
+// FrameSize returns the number of colors needed for a width by height frame.
+func FrameSize(width, height int) int {
+	if width <= 0 || height <= 0 {
+		return 0
+	}
+	return width * height
+}
+
+// NewFrame returns a logical frame filled with color.
+func NewFrame(width, height int, duration time.Duration, color Color) Frame {
+	colors := make([]Color, FrameSize(width, height))
+	for i := range colors {
+		colors[i] = color
+	}
+	return Frame{
+		Colors:   colors,
+		Width:    width,
+		Height:   height,
+		Duration: duration,
+	}
+}
+
+// ValidateFrame validates frame dimensions and color count.
+func ValidateFrame(frame Frame) error {
+	return validateFrame(frame)
+}
+
+// FrameColor returns the color at x,y and whether the coordinate is valid.
+func FrameColor(frame Frame, x, y int) (Color, bool) {
+	index, ok := frameIndex(frame, x, y)
+	if !ok {
+		return Color{}, false
+	}
+	return frame.Colors[index], true
+}
+
+// SetFrameColor sets the color at x,y and reports whether the coordinate is valid.
+func SetFrameColor(frame *Frame, x, y int, color Color) bool {
+	if frame == nil {
+		return false
+	}
+	index, ok := frameIndex(*frame, x, y)
+	if !ok {
+		return false
+	}
+	frame.Colors[index] = color
+	return true
+}
+
+func frameIndex(frame Frame, x, y int) (int, bool) {
+	if frame.Width <= 0 || frame.Height <= 0 || x < 0 || y < 0 || x >= frame.Width || y >= frame.Height {
+		return 0, false
+	}
+	index := y*frame.Width + x
+	if index < 0 || index >= len(frame.Colors) {
+		return 0, false
+	}
+	return index, true
+}
+
 // Capabilities describes the logical rendering surface available to effects.
 type Capabilities struct {
 	LightType         device.LightType

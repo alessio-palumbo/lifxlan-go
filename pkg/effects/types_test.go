@@ -144,6 +144,121 @@ func TestFrameHasNoTargetFields(t *testing.T) {
 	}
 }
 
+func TestBlankColor(t *testing.T) {
+	got := BlankColor()
+	if got.Brightness != 0 || got.Kelvin == 0 {
+		t.Fatalf("BlankColor = %#v, want off color with valid kelvin", got)
+	}
+}
+
+func TestFrameSize(t *testing.T) {
+	tests := map[string]struct {
+		width  int
+		height int
+		want   int
+	}{
+		"valid": {
+			width:  3,
+			height: 2,
+			want:   6,
+		},
+		"zero width": {
+			width:  0,
+			height: 2,
+			want:   0,
+		},
+		"negative height": {
+			width:  2,
+			height: -1,
+			want:   0,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := FrameSize(tt.width, tt.height); got != tt.want {
+				t.Fatalf("FrameSize = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewFrame(t *testing.T) {
+	got := NewFrame(2, 3, time.Second, color(10))
+	want := Frame{
+		Colors:   []Color{color(10), color(10), color(10), color(10), color(10), color(10)},
+		Width:    2,
+		Height:   3,
+		Duration: time.Second,
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("frame = %#v, want %#v", got, want)
+	}
+}
+
+func TestValidateFrame(t *testing.T) {
+	if err := ValidateFrame(NewFrame(1, 1, time.Second, color(10))); err != nil {
+		t.Fatalf("ValidateFrame valid frame error = %v", err)
+	}
+	if err := ValidateFrame(Frame{Width: 1, Height: 1}); err != ErrEmptyFrame {
+		t.Fatalf("ValidateFrame empty error = %v, want %v", err, ErrEmptyFrame)
+	}
+	if err := ValidateFrame(Frame{Colors: []Color{color(10)}, Width: 2, Height: 1}); err != ErrInvalidFrame {
+		t.Fatalf("ValidateFrame invalid error = %v, want %v", err, ErrInvalidFrame)
+	}
+}
+
+func TestFrameColor(t *testing.T) {
+	frame := Frame{
+		Colors: []Color{
+			color(10), color(20),
+			color(30), color(40),
+		},
+		Width:  2,
+		Height: 2,
+	}
+
+	got, ok := FrameColor(frame, 1, 1)
+	if !ok || got != color(40) {
+		t.Fatalf("FrameColor = %#v, %t, want color 40 and true", got, ok)
+	}
+
+	for _, coord := range [][2]int{{-1, 0}, {0, -1}, {2, 0}, {0, 2}} {
+		if got, ok := FrameColor(frame, coord[0], coord[1]); ok || got != (Color{}) {
+			t.Fatalf("FrameColor(%d,%d) = %#v, %t, want zero and false", coord[0], coord[1], got, ok)
+		}
+	}
+
+	shortFrame := Frame{Colors: []Color{color(10)}, Width: 2, Height: 1}
+	if got, ok := FrameColor(shortFrame, 1, 0); ok || got != (Color{}) {
+		t.Fatalf("FrameColor short frame = %#v, %t, want zero and false", got, ok)
+	}
+}
+
+func TestSetFrameColor(t *testing.T) {
+	frame := NewFrame(2, 2, time.Second, BlankColor())
+
+	if ok := SetFrameColor(&frame, 1, 0, color(10)); !ok {
+		t.Fatal("SetFrameColor valid coordinate returned false")
+	}
+	if got := frame.Colors[1]; got != color(10) {
+		t.Fatalf("set color = %#v, want %#v", got, color(10))
+	}
+
+	if ok := SetFrameColor(&frame, 2, 0, color(20)); ok {
+		t.Fatal("SetFrameColor out-of-bounds coordinate returned true")
+	}
+	if ok := SetFrameColor(nil, 0, 0, color(20)); ok {
+		t.Fatal("SetFrameColor nil frame returned true")
+	}
+
+	shortFrame := Frame{Colors: []Color{color(10)}, Width: 2, Height: 1}
+	if ok := SetFrameColor(&shortFrame, 1, 0, color(20)); ok {
+		t.Fatal("SetFrameColor short frame returned true")
+	}
+}
+
 type staticEffect struct {
 	nextCalled bool
 }
