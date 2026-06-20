@@ -160,6 +160,11 @@ They can be serialized into a timeline, rendered in a preview, or converted to L
 
 Available effects include `Solid`, `Gradient`, `Sweep`, `Waterfall`, `Rockets`, `Snake`, `Worm`, and `ConcentricFrames`.
 
+The older `pkg/matrix` effect helpers are kept for compatibility, but new code
+should prefer `pkg/effects` plus `pkg/effects/adapters`. The newer API separates
+deterministic frame generation from live LAN rendering and also supports offline
+timeline generation.
+
 ## 🛠️ Creating Custom LIFX Messages
 
 The messages package provides helpers to build your own LAN messages using the lifxprotocol-go types.
@@ -291,8 +296,8 @@ LIFX_LOG_LEVEL: Set the log level (info, debug, warn, error). Default is info.
 - pkg/client – low-level UDP client for communicating with LIFX protocol
 - pkg/protocol – contains the LIFX Message library
 - pkg/messages – a selection of ready-to-use LIFX messages
-- pkg/matrix – a library to perform matrix editing and effects
 - pkg/effects – deterministic frame effects, live runners, and LIFX render adapters
+- pkg/matrix – legacy matrix editing and blocking effect helpers; prefer pkg/effects for new code
 - pkg/command – simple natural-language → Command compiler
 
 ## Contributing

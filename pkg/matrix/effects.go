@@ -89,6 +89,9 @@ func SendWithStop(send SendFunc) (SendFunc, *atomic.Bool) {
 // Waterfall applies the given colors sequentially on each row centering them, if possible.
 // It waits for the given interval before setting the next row.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
+//
+// Deprecated: use effects.NewWaterfall with effects.Render for offline frames,
+// or effects/adapters.RunEffects for live rendering.
 func Waterfall(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, colors ...packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	if len(colors) == 0 {
@@ -137,6 +140,9 @@ func waterfall(m *Matrix, send SendFunc, d time.Duration, x, mIdx, mLength int, 
 // It waits for the given interval before setting the next pixel.
 // If multiple colors are provided colors are rotated on each row.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
+//
+// Deprecated: use effects.NewRockets with effects.Render for offline frames,
+// or effects/adapters.RunEffects for live rendering.
 func Rockets(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, colors ...packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	if len(colors) == 0 {
@@ -186,6 +192,9 @@ func rockets(m *Matrix, send SendFunc, d time.Duration, mIdx, mLength int, color
 
 // Worm moves n pixels along the matrix wrapping and reversing at every row with a wave-like movement.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
+//
+// Deprecated: use effects.NewWorm with effects.Render for offline frames,
+// or effects/adapters.RunEffects for live rendering.
 func Worm(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, size int, color packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	wormSize := min(max(size, 1), m.Width)
@@ -248,6 +257,9 @@ func worm(m *Matrix, send SendFunc, d time.Duration, wormSize, mIdx, mLength int
 
 // Snake moves n pixels along the matrix wrapping and reversing at every row.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
+//
+// Deprecated: use effects.NewSnake with effects.Render for offline frames,
+// or effects/adapters.RunEffects for live rendering.
 func Snake(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, size int, color packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	snakeSize := min(max(size, 1), m.Width)
@@ -311,6 +323,9 @@ func snake(m *Matrix, send SendFunc, d time.Duration, snakeSize, mIdx, mLength i
 // If an optional set of colors is supplied, it is used as the frame colors, otherwise the frame color
 // will randomly change at each iteration.
 // It repeats for n cycles, if cycles is set to 0 it repeats indefinitely.
+//
+// Deprecated: use effects.NewConcentricFrames with effects.Render for offline
+// frames, or effects/adapters.RunEffects for live rendering.
 func ConcentricFrames(m *Matrix, send SendFunc, sendIntervalMs int64, cycles int, mode ChainMode, direction AnimationDirection, colors ...packets.LightHsbk) error {
 	d := max(time.Duration(sendIntervalMs)*time.Millisecond, minInterval)
 	var iterFunc func(yield func(int) bool)
