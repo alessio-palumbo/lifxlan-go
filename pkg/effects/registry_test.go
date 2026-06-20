@@ -112,6 +112,8 @@ func TestDefinitionsReturnCopies(t *testing.T) {
 	}
 	def.DeviceKinds[0] = device.LightType(99)
 	def.Params[0].Key = "mutated"
+	defaultPalette := def.Params[0].Default.(Palette)
+	defaultPalette.Base[0] = color(99)
 
 	next, ok := Definition(EffectGradient)
 	if !ok {
@@ -123,6 +125,10 @@ func TestDefinitionsReturnCopies(t *testing.T) {
 	if next.Params[0].Key == "mutated" {
 		t.Fatal("Definition returned mutable Params backing slice")
 	}
+	nextPalette := next.Params[0].Default.(Palette)
+	if nextPalette.Base[0] == color(99) {
+		t.Fatal("Definition returned mutable default palette backing slice")
+	}
 
 	defs := Definitions()
 	gradientIndex := slices.IndexFunc(defs, func(def EffectDefinition) bool {
@@ -133,6 +139,8 @@ func TestDefinitionsReturnCopies(t *testing.T) {
 	}
 	defs[gradientIndex].DeviceKinds[0] = device.LightType(99)
 	defs[gradientIndex].Params[0].Key = "mutated"
+	defsPalette := defs[gradientIndex].Params[0].Default.(Palette)
+	defsPalette.Base[0] = color(99)
 
 	fresh := Definitions()
 	gradientIndex = slices.IndexFunc(fresh, func(def EffectDefinition) bool {
@@ -143,6 +151,42 @@ func TestDefinitionsReturnCopies(t *testing.T) {
 	}
 	if fresh[gradientIndex].Params[0].Key == "mutated" {
 		t.Fatal("Definitions returned mutable Params backing slice")
+	}
+	freshPalette := fresh[gradientIndex].Params[0].Default.(Palette)
+	if freshPalette.Base[0] == color(99) {
+		t.Fatal("Definitions returned mutable default palette backing slice")
+	}
+}
+
+func TestValidateParamsClonesDefaults(t *testing.T) {
+	defs := []ParamDefinition{{
+		Key:  "palette",
+		Kind: ParamPalette,
+		Default: Palette{
+			Base:        []Color{color(10)},
+			Accents:     []Color{color(20)},
+			Backgrounds: []Color{color(30)},
+		},
+	}}
+
+	first, err := validateParams(defs, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPalette := first["palette"].(Palette)
+	firstPalette.Base[0] = color(99)
+	firstPalette.Accents[0] = color(98)
+	firstPalette.Backgrounds[0] = color(97)
+
+	second, err := validateParams(defs, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondPalette := second["palette"].(Palette)
+	if secondPalette.Base[0] == color(99) ||
+		secondPalette.Accents[0] == color(98) ||
+		secondPalette.Backgrounds[0] == color(97) {
+		t.Fatalf("validateParams shared default palette slices: %#v", secondPalette)
 	}
 }
 

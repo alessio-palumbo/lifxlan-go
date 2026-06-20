@@ -266,7 +266,7 @@ func validateParams(defs []ParamDefinition, params map[string]any) (map[string]a
 	for _, def := range defs {
 		known[def.Key] = def
 		if def.Default != nil {
-			out[def.Key] = def.Default
+			out[def.Key] = cloneParamDefault(def.Default)
 		}
 	}
 
@@ -282,7 +282,7 @@ func validateParams(defs []ParamDefinition, params map[string]any) (map[string]a
 			if def.Required && def.Default == nil {
 				return nil, fmt.Errorf("%w: missing required parameter %q", ErrInvalidConfig, def.Key)
 			}
-			value = def.Default
+			value = cloneParamDefault(def.Default)
 		}
 		if value == nil {
 			if def.Required {
@@ -571,6 +571,37 @@ func cloneDefinition(def EffectDefinition) EffectDefinition {
 	def.Params = slices.Clone(def.Params)
 	for i := range def.Params {
 		def.Params[i].Choices = slices.Clone(def.Params[i].Choices)
+		def.Params[i].Default = cloneParamDefault(def.Params[i].Default)
 	}
 	return def
+}
+
+func cloneParamDefault(value any) any {
+	switch v := value.(type) {
+	case Palette:
+		return clonePalette(v)
+	case []Color:
+		return slices.Clone(v)
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = cloneParamDefault(item)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for key, item := range v {
+			out[key] = cloneParamDefault(item)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func clonePalette(palette Palette) Palette {
+	palette.Base = slices.Clone(palette.Base)
+	palette.Accents = slices.Clone(palette.Accents)
+	palette.Backgrounds = slices.Clone(palette.Backgrounds)
+	return palette
 }
