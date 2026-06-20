@@ -43,6 +43,55 @@ func TestSingleZoneRendererSendsColorMessage(t *testing.T) {
 	}
 }
 
+func TestSingleZoneRendererDefaultsToFirstColorReduction(t *testing.T) {
+	sender := &recordingSender{}
+	renderer := NewSingleZoneRenderer(sender.Send)
+
+	err := renderer.RenderFrame(context.Background(), effects.Frame{
+		Colors: []effects.Color{
+			{Hue: 10, Saturation: 100, Brightness: 25, Kelvin: 3000},
+			{Hue: 200, Saturation: 50, Brightness: 75, Kelvin: 5000},
+		},
+		Width:  2,
+		Height: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := sender.messages[0].Payload.(*packets.LightSetWaveformOptional)
+	got := device.NewColor(payload.Color)
+	if got.Hue != 10 || got.Saturation != 100 || got.Brightness != 25 || got.Kelvin != 3000 {
+		t.Fatalf("color = %#v, want first frame color", got)
+	}
+}
+
+func TestSingleZoneRendererSupportsAverageReduction(t *testing.T) {
+	sender := &recordingSender{}
+	renderer := NewSingleZoneRenderer(sender.Send, WithSingleZoneReduction(effects.ReductionAverage))
+
+	err := renderer.RenderFrame(context.Background(), effects.Frame{
+		Colors: []effects.Color{
+			{Hue: 359, Saturation: 100, Brightness: 20, Kelvin: 3000},
+			{Hue: 1, Saturation: 50, Brightness: 80, Kelvin: 5000},
+		},
+		Width:  2,
+		Height: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := sender.messages[0].Payload.(*packets.LightSetWaveformOptional)
+	got := device.NewColor(payload.Color)
+	if math.Abs(got.Hue) > 0.01 && math.Abs(got.Hue-360) > 0.01 {
+		t.Fatalf("hue = %f, want near 0", got.Hue)
+	}
+	if math.Abs(got.Saturation-75) > 0.01 || math.Abs(got.Brightness-50) > 0.01 || got.Kelvin != 4000 {
+		t.Fatalf("color = %#v, want averaged saturation/brightness/kelvin", got)
+	}
+}
+
 func TestNewRendererForDeviceSelectsRenderer(t *testing.T) {
 	tests := map[string]struct {
 		device device.Device
@@ -368,6 +417,16 @@ func TestRendererValidation(t *testing.T) {
 				return NewSingleZoneRenderer((&recordingSender{}).Send).RenderFrame(context.Background(), effects.Frame{})
 			},
 			want: ErrEmptyFrame,
+		},
+		"invalid single zone frame": {
+			render: func() error {
+				return NewSingleZoneRenderer((&recordingSender{}).Send).RenderFrame(context.Background(), effects.Frame{
+					Colors: []effects.Color{kelvinColor(3500)},
+					Width:  2,
+					Height: 1,
+				})
+			},
+			want: ErrInvalidFrame,
 		},
 		"invalid matrix frame": {
 			render: func() error {

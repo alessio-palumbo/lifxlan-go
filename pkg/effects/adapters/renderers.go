@@ -45,8 +45,9 @@ func NewRendererForDevice(d device.Device, send SendFunc) effects.Renderer {
 
 // SingleZoneRenderer renders frames to a single-zone light.
 type SingleZoneRenderer struct {
-	send     SendFunc
-	waveform enums.LightWaveform
+	send      SendFunc
+	waveform  enums.LightWaveform
+	reduction effects.ReductionStrategy
 }
 
 // SingleZoneOption configures a SingleZoneRenderer.
@@ -59,6 +60,13 @@ func WithSingleZoneWaveform(waveform enums.LightWaveform) SingleZoneOption {
 	}
 }
 
+// WithSingleZoneReduction sets how multi-color frames collapse to one color.
+func WithSingleZoneReduction(reduction effects.ReductionStrategy) SingleZoneOption {
+	return func(r *SingleZoneRenderer) {
+		r.reduction = reduction
+	}
+}
+
 // NewSingleZoneRenderer returns a single-zone renderer bound to send.
 func NewSingleZoneRenderer(send SendFunc, opts ...SingleZoneOption) *SingleZoneRenderer {
 	r := &SingleZoneRenderer{send: send}
@@ -68,7 +76,7 @@ func NewSingleZoneRenderer(send SendFunc, opts ...SingleZoneOption) *SingleZoneR
 	return r
 }
 
-// RenderFrame renders the first frame color as a single-zone color command.
+// RenderFrame reduces frame colors to one color and sends a single-zone color command.
 func (r *SingleZoneRenderer) RenderFrame(ctx context.Context, frame effects.Frame) error {
 	ctx, err := validateRenderer(ctx, r.send)
 	if err != nil {
@@ -78,7 +86,16 @@ func (r *SingleZoneRenderer) RenderFrame(ctx context.Context, frame effects.Fram
 		return ErrEmptyFrame
 	}
 
-	color := frame.Colors[0]
+	adaptFrame := singleZoneFrame(frame)
+	frames, err := effects.AdaptFrameToSurface(adaptFrame, device.SurfaceFromDevice(device.Device{LightType: device.LightTypeSingleZone}), effects.AdaptOptions{Reduction: r.reduction})
+	if err != nil {
+		return mapEffectsError(err)
+	}
+	if len(frames) == 0 || len(frames[0].Colors) == 0 {
+		return ErrEmptyFrame
+	}
+
+	color := frames[0].Colors[0]
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -246,6 +263,15 @@ func validateRenderer(ctx context.Context, send SendFunc) (context.Context, erro
 		return nil, ErrMissingSendFunc
 	}
 	return ctx, nil
+}
+
+func singleZoneFrame(frame effects.Frame) effects.Frame {
+	if frame.Width > 0 && frame.Height > 0 {
+		return frame
+	}
+	frame.Width = max(len(frame.Colors), 1)
+	frame.Height = 1
+	return frame
 }
 
 func (r *MultiZoneRenderer) multizoneSurface(frame effects.Frame) device.Surface {
