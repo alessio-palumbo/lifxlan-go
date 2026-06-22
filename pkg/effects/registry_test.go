@@ -42,6 +42,7 @@ func TestDefinitionsDeterministicAndIncludeBuiltins(t *testing.T) {
 		EffectRockets,
 		EffectSnake,
 		EffectWorm,
+		EffectWave,
 		EffectConcentricFrames,
 	} {
 		if !slices.Contains(ids, id) {
@@ -130,6 +131,16 @@ func TestNewConstructsBuiltInMatrixEffects(t *testing.T) {
 				"cycles": 1,
 			}},
 			want: &Worm{},
+		},
+		"wave": {
+			config: Config{ID: EffectWave, Params: map[string]any{
+				"palette":   Palette{Base: []Color{color(200)}},
+				"amplitude": 2,
+				"width":     3,
+				"waves":     2,
+				"cycles":    1,
+			}},
+			want: &Wave{},
 		},
 		"concentric frames": {
 			config: Config{ID: EffectConcentricFrames, Params: map[string]any{
@@ -325,7 +336,7 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			caps := Capabilities{LightType: device.LightTypeSingleZone}
 			switch config.ID {
-			case EffectWaterfall, EffectRockets, EffectSnake, EffectWorm, EffectConcentricFrames:
+			case EffectWaterfall, EffectRockets, EffectSnake, EffectWorm, EffectWave, EffectConcentricFrames:
 				caps = Capabilities{LightType: device.LightTypeMatrix, Width: 3, Height: 3}
 			}
 			if _, err := New(config, caps); !errors.Is(err, ErrInvalidConfig) {
@@ -425,6 +436,28 @@ func TestNewAppliesMatrixDefaults(t *testing.T) {
 	}
 	if !reflect.DeepEqual(frame, want) {
 		t.Fatalf("frame = %#v, want %#v", frame, want)
+	}
+}
+
+func TestNewAppliesWaveDefaults(t *testing.T) {
+	effect, err := New(Config{ID: EffectWave}, Capabilities{
+		LightType: device.LightTypeMatrix,
+		Width:     2,
+		Height:    2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	frame, ok := effect.Next(time.Second)
+	if !ok {
+		t.Fatal("Next returned ok=false")
+	}
+	if frame.Width != 2 || frame.Height != 2 || len(frame.Colors) != 4 {
+		t.Fatalf("frame size = %dx%d/%d colors", frame.Width, frame.Height, len(frame.Colors))
+	}
+	if frame.Colors[0].Brightness == 0 && frame.Colors[1].Brightness == 0 && frame.Colors[2].Brightness == 0 && frame.Colors[3].Brightness == 0 {
+		t.Fatalf("wave defaults produced a blank frame: %#v", frame)
 	}
 }
 

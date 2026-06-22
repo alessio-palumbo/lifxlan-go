@@ -50,6 +50,8 @@ const (
 	EffectSnake EffectID = "snake"
 	// EffectWorm identifies the Worm matrix effect.
 	EffectWorm EffectID = "worm"
+	// EffectWave identifies the Wave matrix effect.
+	EffectWave EffectID = "wave"
 	// EffectConcentricFrames identifies the ConcentricFrames matrix effect.
 	EffectConcentricFrames EffectID = "concentric_frames"
 )
@@ -270,6 +272,43 @@ func init() {
 				return nil, err
 			}
 			return NewWorm(WormConfig{Capabilities: caps, Size: size, Color: color, Cycles: cycles}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectWave,
+		Label:       "Wave",
+		Description: "Displace matrix columns upward as a wave front crosses the frame.",
+		DeviceKinds: matrixLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(Palette{}),
+			amplitudeParamDefinition(),
+			waveWidthParamDefinition(),
+			wavesParamDefinition(),
+			cyclesParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			amplitude, err := intParam(config.Params, "amplitude")
+			if err != nil {
+				return nil, err
+			}
+			width, err := intParam(config.Params, "width")
+			if err != nil {
+				return nil, err
+			}
+			waves, err := intParam(config.Params, "waves")
+			if err != nil {
+				return nil, err
+			}
+			cycles, err := intParam(config.Params, "cycles")
+			if err != nil {
+				return nil, err
+			}
+			return NewWave(WaveConfig{Capabilities: caps, Palette: palette, Amplitude: amplitude, Width: width, Waves: waves, Cycles: cycles}), nil
 		},
 	})
 
@@ -831,6 +870,39 @@ func colorParamDefinition(defaultColor Color) ParamDefinition {
 		Label:   "Color",
 		Kind:    ParamColor,
 		Default: defaultColor,
+	}
+}
+
+func amplitudeParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "amplitude",
+		Label:   "Amplitude",
+		Kind:    ParamNumber,
+		Default: 2,
+		Min:     float64Ptr(1),
+		Step:    float64Ptr(1),
+	}
+}
+
+func waveWidthParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "width",
+		Label:   "Width",
+		Kind:    ParamNumber,
+		Default: 3,
+		Min:     float64Ptr(1),
+		Step:    float64Ptr(1),
+	}
+}
+
+func wavesParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "waves",
+		Label:   "Waves",
+		Kind:    ParamNumber,
+		Default: 1,
+		Min:     float64Ptr(1),
+		Step:    float64Ptr(1),
 	}
 }
 

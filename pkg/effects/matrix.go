@@ -268,6 +268,136 @@ func (w *Worm) done(stepsPerCycle int) bool {
 	return w.cfg.Cycles > 0 && w.step >= w.cfg.Cycles*stepsPerCycle
 }
 
+// WaveConfig configures a Wave effect.
+type WaveConfig struct {
+	Capabilities Capabilities
+	Initial      *Frame
+	Palette      Palette
+	Amplitude    int
+	Width        int
+	Waves        int
+	Cycles       int
+}
+
+// Wave displaces matrix columns upward as a wave front moves across the frame.
+type Wave struct {
+	cfg  WaveConfig
+	step int
+	base []Color
+}
+
+// NewWave returns a Wave effect.
+func NewWave(cfg WaveConfig) *Wave {
+	return &Wave{cfg: cfg}
+}
+
+// Next returns the next wave frame.
+func (w *Wave) Next(dt time.Duration) (Frame, bool) {
+	width, height := frameDimensions(w.cfg.Capabilities)
+	waveWidth := waveWidth(w.cfg.Width)
+	amplitude := waveAmplitude(w.cfg.Amplitude, height)
+	waves := waveCount(w.cfg.Waves)
+	radius := waveWidth / 2
+	stepsPerCycle := width + 2*radius
+	if w.done(stepsPerCycle) {
+		return Frame{}, false
+	}
+	if w.base == nil {
+		w.resetState(width, height)
+	}
+
+	colors := append([]Color(nil), w.base...)
+	for wave := range waves {
+		center := (w.step+wave*stepsPerCycle/waves)%stepsPerCycle - radius
+		for offset := -radius; offset <= radius; offset++ {
+			x := center + offset
+			if x < 0 || x >= width {
+				continue
+			}
+			shift := amplitude - abs(offset)
+			if shift <= 0 {
+				continue
+			}
+			w.displaceColumn(colors, width, height, x, shift)
+		}
+	}
+
+	w.step++
+	return matrixFrame(colors, width, height, dt), true
+}
+
+// Reset resets the effect.
+func (w *Wave) Reset() {
+	w.step = 0
+	w.base = nil
+}
+
+func (w *Wave) resetState(width, height int) {
+	if w.cfg.Initial != nil && w.cfg.Initial.Width == width && w.cfg.Initial.Height == height && len(w.cfg.Initial.Colors) >= width*height {
+		w.base = append([]Color(nil), w.cfg.Initial.Colors[:width*height]...)
+		return
+	}
+	w.base = seaGradient(width, height, w.cfg.Palette)
+}
+
+func (w *Wave) displaceColumn(colors []Color, width, height, x, shift int) {
+	for y := range height {
+		sourceY := min(y+shift, height-1)
+		colors[y*width+x] = w.base[sourceY*width+x]
+	}
+}
+
+func (w *Wave) done(stepsPerCycle int) bool {
+	return w.cfg.Cycles > 0 && w.step >= w.cfg.Cycles*stepsPerCycle
+}
+
+func seaGradient(width, height int, palette Palette) []Color {
+	colors := make([]Color, width*height)
+	source := palette.GradientStops(max(height, 1))
+	if len(source) == 0 || (len(palette.Base) == 0 && len(palette.Accents) == 0 && len(palette.Backgrounds) == 0) {
+		source = []Color{
+			{Hue: 205, Saturation: 95, Brightness: 8, Kelvin: 3500},
+			{Hue: 190, Saturation: 90, Brightness: 14, Kelvin: 3500},
+			{Hue: 175, Saturation: 80, Brightness: 18, Kelvin: 3500},
+		}
+	}
+	for y := range height {
+		color := source[y%len(source)]
+		for x := range width {
+			colors[y*width+x] = color
+		}
+	}
+	return colors
+}
+
+func waveWidth(width int) int {
+	if width <= 0 {
+		return 3
+	}
+	if width%2 == 0 {
+		width++
+	}
+	return width
+}
+
+func waveAmplitude(amplitude, height int) int {
+	if amplitude <= 0 {
+		amplitude = 2
+	}
+	return min(amplitude, max(height-1, 1))
+}
+
+func waveCount(waves int) int {
+	return max(waves, 1)
+}
+
+func abs(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
 // ConcentricFramesConfig configures a ConcentricFrames effect.
 type ConcentricFramesConfig struct {
 	Capabilities Capabilities

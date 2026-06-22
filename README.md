@@ -158,7 +158,7 @@ deviceFrames, err := effects.AdaptFrameToSurface(frames[0].Frame, surface, effec
 The resulting `DeviceFrame` values contain colors, duration, send width, chain index, and orientation metadata.
 They can be serialized into a timeline, rendered in a preview, or converted to LAN messages later.
 
-Available effects include `Solid`, `Gradient`, `Sweep`, `Waterfall`, `Rockets`, `Snake`, `Worm`, and `ConcentricFrames`.
+Available effects include `Solid`, `Gradient`, `Sweep`, `Waterfall`, `Rockets`, `Snake`, `Worm`, `Wave`, and `ConcentricFrames`.
 
 The older `pkg/matrix` effect helpers are kept for compatibility, but new code
 should prefer `pkg/effects` plus `pkg/effects/adapters`. The newer API separates
