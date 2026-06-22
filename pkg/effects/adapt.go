@@ -13,6 +13,8 @@ var (
 	ErrEmptyFrame = errors.New("empty frame")
 	// ErrInvalidFrame is returned when a frame has invalid dimensions or too few colors.
 	ErrInvalidFrame = errors.New("invalid frame")
+	// ErrInvalidDeviceState is returned when cached device state cannot form a frame.
+	ErrInvalidDeviceState = errors.New("invalid device state")
 )
 
 // ReductionStrategy defines how many logical colors collapse into one color.
