@@ -155,7 +155,7 @@ func (s *Snake) Next(dt time.Duration) (Frame, bool) {
 		s.set[slot] = true
 		setPixel(s.colors, width, s.cache[slot].X, s.cache[slot].Y, s.cfg.Color)
 	} else {
-		slot := pos - size
+		slot := pos % snakeSize
 		if s.set[slot] {
 			clearPixel(s.colors, width, s.cache[slot])
 			s.set[slot] = false

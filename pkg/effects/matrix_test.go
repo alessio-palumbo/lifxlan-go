@@ -74,6 +74,34 @@ func TestSnakeFrames(t *testing.T) {
 	}
 }
 
+func TestSnakeDrainsTailInPathOrder(t *testing.T) {
+	effect := NewSnake(SnakeConfig{
+		Capabilities: matrixCaps(4, 2),
+		Size:         3,
+		Color:        color(10),
+		Cycles:       1,
+	})
+
+	got := Render(effect, time.Second, 12*time.Second)
+	want := []FrameAt{
+		{At: 0, Frame: testMatrixFrame(4, 2, []pixelColor{{0, 0, color(10)}})},
+		{At: time.Second, Frame: testMatrixFrame(4, 2, []pixelColor{{0, 0, color(10)}, {1, 0, color(10)}})},
+		{At: 2 * time.Second, Frame: testMatrixFrame(4, 2, []pixelColor{{0, 0, color(10)}, {1, 0, color(10)}, {2, 0, color(10)}})},
+		{At: 3 * time.Second, Frame: testMatrixFrame(4, 2, []pixelColor{{1, 0, color(10)}, {2, 0, color(10)}, {3, 0, color(10)}})},
+		{At: 4 * time.Second, Frame: testMatrixFrame(4, 2, []pixelColor{{2, 0, color(10)}, {3, 0, color(10)}, {3, 1, color(10)}})},
+		{At: 5 * time.Second, Frame: testMatrixFrame(4, 2, []pixelColor{{3, 0, color(10)}, {3, 1, color(10)}, {2, 1, color(10)}})},
+		{At: 6 * time.Second, Frame: testMatrixFrame(4, 2, []pixelColor{{3, 1, color(10)}, {2, 1, color(10)}, {1, 1, color(10)}})},
+		{At: 7 * time.Second, Frame: testMatrixFrame(4, 2, []pixelColor{{2, 1, color(10)}, {1, 1, color(10)}, {0, 1, color(10)}})},
+		{At: 8 * time.Second, Frame: testMatrixFrame(4, 2, []pixelColor{{1, 1, color(10)}, {0, 1, color(10)}})},
+		{At: 9 * time.Second, Frame: testMatrixFrame(4, 2, []pixelColor{{0, 1, color(10)}})},
+		{At: 10 * time.Second, Frame: testMatrixFrame(4, 2, nil)},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("frames = %#v, want %#v", got, want)
+	}
+}
+
 func TestWormFrames(t *testing.T) {
 	effect := NewWorm(WormConfig{
 		Capabilities: matrixCaps(3, 2),
