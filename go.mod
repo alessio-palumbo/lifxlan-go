@@ -3,8 +3,8 @@ module github.com/alessio-palumbo/lifxlan-go
 go 1.24.3
 
 require (
-	github.com/alessio-palumbo/lifxprotocol-go v0.3.0
-	github.com/alessio-palumbo/lifxregistry-go v0.3.0
+	github.com/alessio-palumbo/lifxprotocol-go v0.4.0
+	github.com/alessio-palumbo/lifxregistry-go v0.4.0
 	github.com/google/go-cmp v0.7.0
 	github.com/stretchr/testify v1.10.0
 )
