@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/stretchr/testify/assert"
@@ -558,4 +559,96 @@ func TestSetButtons(t *testing.T) {
 			assert.Equal(t, tc.wantUpdated, updated)
 		})
 	}
+}
+
+func TestSetRelayPower(t *testing.T) {
+	tests := map[string]struct {
+		device      *Device
+		msg         *packets.RelayStatePower
+		want        *Device
+		wantUpdated bool
+	}{
+		"adds relay": {
+			device:      &Device{},
+			msg:         &packets.RelayStatePower{RelayIndex: 1, Level: math.MaxUint16},
+			want:        &Device{Relays: []Relay{{Index: 1, PoweredOn: true}}},
+			wantUpdated: true,
+		},
+		"adds relay zero when reported": {
+			device:      &Device{},
+			msg:         &packets.RelayStatePower{RelayIndex: 0, Level: math.MaxUint16},
+			want:        &Device{Relays: []Relay{{Index: 0, PoweredOn: true}}},
+			wantUpdated: true,
+		},
+		"no change": {
+			device:      &Device{Relays: []Relay{{Index: 1, PoweredOn: true}}},
+			msg:         &packets.RelayStatePower{RelayIndex: 1, Level: math.MaxUint16},
+			want:        &Device{Relays: []Relay{{Index: 1, PoweredOn: true}}},
+			wantUpdated: false,
+		},
+		"updates relay": {
+			device:      &Device{Relays: []Relay{{Index: 1, PoweredOn: true}}},
+			msg:         &packets.RelayStatePower{RelayIndex: 1, Level: 0},
+			want:        &Device{Relays: []Relay{{Index: 1}}},
+			wantUpdated: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			updated := tc.device.SetRelayPower(tc.msg)
+			assert.Equal(t, tc.want, tc.device)
+			assert.Equal(t, tc.wantUpdated, updated)
+		})
+	}
+}
+
+func TestSetButtonConfig(t *testing.T) {
+	msg := &packets.ButtonStateConfig{
+		HapticDurationMs: 250,
+		BacklightOnColor: packets.ButtonBacklightHsbk{
+			Hue: math.MaxUint16, Saturation: math.MaxUint16, Brightness: math.MaxUint16, Kelvin: 3500,
+		},
+		BacklightOffColor: packets.ButtonBacklightHsbk{Kelvin: 3500},
+	}
+	want := &Device{ButtonConfig: ButtonConfig{
+		HapticDurationMs:  250,
+		BacklightOnColor:  Color{Hue: 360, Saturation: 100, Brightness: 100, Kelvin: 3500},
+		BacklightOffColor: Color{Kelvin: 3500},
+	}, ButtonConfigKnown: true}
+
+	d := &Device{}
+	assert.True(t, d.SetButtonConfig(msg))
+	assert.Equal(t, want, d)
+	assert.False(t, d.SetButtonConfig(msg))
+}
+
+func TestStateMessagesForSwitch(t *testing.T) {
+	switchDevice := &Device{Type: DeviceTypeSwitch, Buttons: []Button{{}, {}}}
+	assert.Equal(t, []packets.Payload{
+		&packets.RelayGetPower{RelayIndex: 0},
+		&packets.RelayGetPower{RelayIndex: 1},
+	}, payloads(switchDevice.HighFreqStateMessages()))
+
+	assert.Contains(t, payloads(switchDevice.LowFreqStateMessages()), &packets.ButtonGet{})
+	assert.Contains(t, payloads(switchDevice.LowFreqStateMessages()), &packets.ButtonGetConfig{})
+}
+
+func TestStateMessagesForHybridDoesNotPollRelays(t *testing.T) {
+	hybrid := &Device{Type: DeviceTypeHybrid, LightType: LightTypeMatrix, Buttons: []Button{{}, {}}, MatrixProperties: MatrixProperties{ChainLength: 1, StatePackets: 1, Width: 8}}
+
+	for _, payload := range payloads(hybrid.HighFreqStateMessages()) {
+		_, ok := payload.(*packets.RelayGetPower)
+		assert.False(t, ok)
+	}
+	assert.Contains(t, payloads(hybrid.LowFreqStateMessages()), &packets.ButtonGet{})
+	assert.Contains(t, payloads(hybrid.LowFreqStateMessages()), &packets.ButtonGetConfig{})
+}
+
+func payloads(msgs []*protocol.Message) []packets.Payload {
+	out := make([]packets.Payload, 0, len(msgs))
+	for _, msg := range msgs {
+		out = append(out, msg.Payload)
+	}
+	return out
 }

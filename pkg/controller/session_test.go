@@ -184,6 +184,27 @@ func TestSession(t *testing.T) {
 		assert.Equal(t, int(8), session.deviceSnapshot().MatrixProperties.Width)
 		assert.Equal(t, int(2), session.deviceSnapshot().MatrixProperties.ChainLength)
 
+		// Updates relay state
+		session.inbound <- protocol.NewMessage(&packets.RelayStatePower{RelayIndex: 1, Level: math.MaxUint16})
+		time.Sleep(10 * time.Millisecond)
+		assert.Equal(t, []device.Relay{{Index: 1, PoweredOn: true}}, session.deviceSnapshot().Relays)
+
+		// Updates button config
+		session.inbound <- protocol.NewMessage(&packets.ButtonStateConfig{
+			HapticDurationMs: 250,
+			BacklightOnColor: packets.ButtonBacklightHsbk{
+				Hue: math.MaxUint16, Saturation: math.MaxUint16, Brightness: math.MaxUint16, Kelvin: 3500,
+			},
+			BacklightOffColor: packets.ButtonBacklightHsbk{Kelvin: 3500},
+		})
+		time.Sleep(10 * time.Millisecond)
+		assert.Equal(t, device.ButtonConfig{
+			HapticDurationMs:  250,
+			BacklightOnColor:  device.Color{Hue: 360, Saturation: 100, Brightness: 100, Kelvin: 3500},
+			BacklightOffColor: device.Color{Kelvin: 3500},
+		}, session.deviceSnapshot().ButtonConfig)
+		assert.True(t, session.deviceSnapshot().ButtonConfigKnown)
+
 		// Updates LastSeeenAt
 		nowBeforeUpdate := time.Now()
 		session.inbound <- protocol.NewMessage(&packets.DeviceStateUnhandled{})
@@ -250,6 +271,7 @@ func Test_preflightHandshake(t *testing.T) {
 				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
 				protocol.NewMessage(&packets.TileStateDeviceChain{TileDevicesCount: 1, TileDevices: [16]packets.TileStateDevice{{Width: 7, Height: 5}}}),
 				protocol.NewMessage(&packets.ButtonState{ButtonsCount: 4, Buttons: [8]packets.Button{{}, {}, {}, {}}}),
+				protocol.NewMessage(&packets.ButtonStateConfig{HapticDurationMs: 250, BacklightOnColor: packets.ButtonBacklightHsbk{Kelvin: 3500}, BacklightOffColor: packets.ButtonBacklightHsbk{Kelvin: 3500}}),
 			},
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0, Type: device.DeviceTypeHybrid,
@@ -267,6 +289,12 @@ func Test_preflightHandshake(t *testing.T) {
 					{Actions: []packets.ButtonAction{}},
 					{Actions: []packets.ButtonAction{}},
 				},
+				ButtonConfig: device.ButtonConfig{
+					HapticDurationMs:  250,
+					BacklightOnColor:  device.Color{Kelvin: 3500},
+					BacklightOffColor: device.Color{Kelvin: 3500},
+				},
+				ButtonConfigKnown: true,
 			},
 		},
 		"matrix > 64 zones": {
@@ -298,6 +326,7 @@ func Test_preflightHandshake(t *testing.T) {
 				protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'L'}}),
 				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
 				protocol.NewMessage(&packets.ButtonState{ButtonsCount: 2, Buttons: [8]packets.Button{{}, {}}}),
+				protocol.NewMessage(&packets.ButtonStateConfig{HapticDurationMs: 250, BacklightOnColor: packets.ButtonBacklightHsbk{Kelvin: 3500}, BacklightOffColor: packets.ButtonBacklightHsbk{Kelvin: 3500}}),
 			},
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0,
@@ -307,6 +336,12 @@ func Test_preflightHandshake(t *testing.T) {
 					{Actions: []packets.ButtonAction{}},
 					{Actions: []packets.ButtonAction{}},
 				},
+				ButtonConfig: device.ButtonConfig{
+					HapticDurationMs:  250,
+					BacklightOnColor:  device.Color{Kelvin: 3500},
+					BacklightOffColor: device.Color{Kelvin: 3500},
+				},
+				ButtonConfigKnown: true,
 			},
 		},
 		"times out with missing fields": {

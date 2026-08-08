@@ -193,6 +193,14 @@ func (s *deviceSession) recvloop() {
 				if updated := s.device.SetButtons(p); updated {
 					s.device.LastUpdatedAt = time.Now()
 				}
+			case *packets.ButtonStateConfig:
+				if updated := s.device.SetButtonConfig(p); updated {
+					s.device.LastUpdatedAt = time.Now()
+				}
+			case *packets.RelayStatePower:
+				if updated := s.device.SetRelayPower(p); updated {
+					s.device.LastUpdatedAt = time.Now()
+				}
 			case *packets.DeviceStatePower:
 				poweredOn := p.Level > 0
 				if shouldUpdate(s.device.PoweredOn, poweredOn) {
@@ -253,6 +261,7 @@ func (s *deviceSession) preflightHandshake(timeout, wait time.Duration) {
 
 						if s.device.Type == device.DeviceTypeHybrid || s.device.Type == device.DeviceTypeSwitch {
 							retryMsgs = append(retryMsgs, protocol.NewMessage(&packets.ButtonGet{}))
+							retryMsgs = append(retryMsgs, protocol.NewMessage(&packets.ButtonGetConfig{}))
 						}
 
 						switch s.device.LightType {
@@ -311,5 +320,8 @@ var messageDoneFuncs = map[packets.Payload]func(*device.Device) bool{
 	},
 	&packets.ButtonGet{}: func(d *device.Device) bool {
 		return d.Type == device.DeviceTypeLight || len(d.Buttons) > 0
+	},
+	&packets.ButtonGetConfig{}: func(d *device.Device) bool {
+		return d.Type == device.DeviceTypeLight || d.ButtonConfigKnown
 	},
 }

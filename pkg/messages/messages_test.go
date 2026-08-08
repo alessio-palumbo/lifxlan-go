@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
@@ -120,4 +121,31 @@ func TestSetColor(t *testing.T) {
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+func TestRelayMessages(t *testing.T) {
+	assert.Equal(t, protocol.NewMessage(&packets.RelayGetPower{RelayIndex: 2}), GetRelayPower(2))
+	assert.Equal(t, protocol.NewMessage(&packets.RelaySetPower{RelayIndex: 2, Level: math.MaxUint16}), SetRelayPower(2, true))
+	assert.Equal(t, protocol.NewMessage(&packets.RelaySetPower{RelayIndex: 2, Level: 0}), SetRelayPower(2, false))
+	assert.Equal(t, protocol.NewMessage(&packets.RelaySetPower{RelayIndex: 2, Level: 42}), SetRelayPowerLevel(2, 42))
+}
+
+func TestButtonConfigMessages(t *testing.T) {
+	on := device.Color{Hue: 180, Saturation: 100, Brightness: 50, Kelvin: 3500}
+	off := device.Color{Brightness: 10, Kelvin: 2700}
+
+	assert.Equal(t, protocol.NewMessage(&packets.ButtonGetConfig{}), GetButtonConfig())
+	assert.Equal(t, protocol.NewMessage(&packets.ButtonSetConfig{
+		HapticDurationMs: 250,
+		BacklightOnColor: packets.ButtonBacklightHsbk{
+			Hue:        32768,
+			Saturation: math.MaxUint16,
+			Brightness: 32768,
+			Kelvin:     3500,
+		},
+		BacklightOffColor: packets.ButtonBacklightHsbk{
+			Brightness: 6554,
+			Kelvin:     2700,
+		},
+	}), SetButtonConfig(250, on, off))
 }

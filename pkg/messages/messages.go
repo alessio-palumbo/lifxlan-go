@@ -55,3 +55,41 @@ func SetColor(h, s, b *float64, k *uint16, d time.Duration, waveform enums.Light
 	}
 	return protocol.NewMessage(m)
 }
+
+// GetRelayPower requests the current power level for a switch relay.
+func GetRelayPower(index int) *protocol.Message {
+	return protocol.NewMessage(&packets.RelayGetPower{RelayIndex: uint8(index)})
+}
+
+// SetRelayPower sets a switch relay to either on or off.
+func SetRelayPower(index int, poweredOn bool) *protocol.Message {
+	level := uint16(0)
+	if poweredOn {
+		level = math.MaxUint16
+	}
+	return SetRelayPowerLevel(index, level)
+}
+
+// SetRelayPowerLevel sets a switch relay power level directly.
+func SetRelayPowerLevel(index int, level uint16) *protocol.Message {
+	return protocol.NewMessage(&packets.RelaySetPower{RelayIndex: uint8(index), Level: level})
+}
+
+// GetButtonConfig requests switch button configuration, including haptic and backlight colors.
+func GetButtonConfig() *protocol.Message {
+	return protocol.NewMessage(&packets.ButtonGetConfig{})
+}
+
+// SetButtonConfig sets switch haptic duration and backlight colors for on/off states.
+func SetButtonConfig(hapticDurationMs uint16, backlightOn, backlightOff device.Color) *protocol.Message {
+	return protocol.NewMessage(&packets.ButtonSetConfig{
+		HapticDurationMs:  hapticDurationMs,
+		BacklightOnColor:  buttonBacklightColor(backlightOn),
+		BacklightOffColor: buttonBacklightColor(backlightOff),
+	})
+}
+
+func buttonBacklightColor(c device.Color) packets.ButtonBacklightHsbk {
+	dc := c.ToDeviceColor()
+	return packets.ButtonBacklightHsbk(dc)
+}

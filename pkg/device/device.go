@@ -165,7 +165,10 @@ type Device struct {
 	MultizoneProperties MultizoneProperties
 	ColorProperties     ColorProperties
 
-	Buttons []Button
+	Buttons           []Button
+	Relays            []Relay
+	ButtonConfig      ButtonConfig
+	ButtonConfigKnown bool
 
 	// High Frequency updated fields.
 	Color         Color
@@ -199,6 +202,17 @@ type ColorProperties struct {
 
 type Button struct {
 	Actions []packets.ButtonAction
+}
+
+type Relay struct {
+	Index     int
+	PoweredOn bool
+}
+
+type ButtonConfig struct {
+	HapticDurationMs  uint16
+	BacklightOnColor  Color
+	BacklightOffColor Color
 }
 
 type TemperatureRange struct {
@@ -326,13 +340,17 @@ func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZo
 	return true
 }
 
+// SetButtons caches switch button action configuration from ButtonState.
+// For relay-capable switches, the button count is also used as the upper bound
+// for relay power polling because the current registry/protocol data does not
+// expose a relay count directly.
 func (d *Device) SetButtons(p *packets.ButtonState) (updated bool) {
 	bCount := int(p.ButtonsCount)
 	if bCount != len(d.Buttons) {
 		updated = true
 		d.Buttons = make([]Button, bCount)
 		for i := range bCount {
-			d.Buttons[i].Actions = p.Buttons[i].Actions[:p.Buttons[i].ActionsCount]
+			d.Buttons[i].Actions = slices.Clone(p.Buttons[i].Actions[:p.Buttons[i].ActionsCount])
 		}
 		return
 	}
@@ -354,15 +372,64 @@ func (d *Device) SetButtons(p *packets.ButtonState) (updated bool) {
 				dButton.Actions[j] = pButton.Actions[j]
 			}
 		}
+		d.Buttons[i] = dButton
 	}
 	return
 }
 
+// SetRelayPower caches an observed relay power response.
+// Relay indexes are stored exactly as reported by the device. Relays is not an
+// authoritative relay-count source; out-of-range relay probes may produce
+// device-specific sentinel or clamped responses.
+func (d *Device) SetRelayPower(p *packets.RelayStatePower) (updated bool) {
+	idx := int(p.RelayIndex)
+
+	relay := Relay{
+		Index:     idx,
+		PoweredOn: p.Level > 0,
+	}
+	for i := range d.Relays {
+		if d.Relays[i].Index == idx {
+			if d.Relays[i] != relay {
+				d.Relays[i] = relay
+				return true
+			}
+			return false
+		}
+	}
+
+	d.Relays = append(d.Relays, relay)
+	slices.SortFunc(d.Relays, func(a, b Relay) int {
+		return a.Index - b.Index
+	})
+	return true
+}
+
+// SetButtonConfig caches switch haptic and backlight color configuration.
+// ButtonConfigKnown distinguishes an observed zero-valued config from one that
+// has not been received yet.
+func (d *Device) SetButtonConfig(p *packets.ButtonStateConfig) (updated bool) {
+	cfg := ButtonConfig{
+		HapticDurationMs:  p.HapticDurationMs,
+		BacklightOnColor:  NewColor(buttonBacklightToLightHsbk(p.BacklightOnColor)),
+		BacklightOffColor: NewColor(buttonBacklightToLightHsbk(p.BacklightOffColor)),
+	}
+	if !d.ButtonConfigKnown || d.ButtonConfig != cfg {
+		d.ButtonConfig = cfg
+		d.ButtonConfigKnown = true
+		return true
+	}
+	return false
+}
+
 // HighFreqStateMessages returns a list of messages to gather state that
 // change often and should be polled frequently.
-// Messages differes according to device type.
-// TODO Handle switches.
+// Messages differ according to device type.
 func (d *Device) HighFreqStateMessages() []*protocol.Message {
+	if d.Type == DeviceTypeSwitch {
+		return d.relayStateMessages()
+	}
+
 	switch d.LightType {
 	case LightTypeMultiZone:
 		return []*protocol.Message{
@@ -409,8 +476,29 @@ func (d *Device) LowFreqStateMessages() []*protocol.Message {
 	}
 	if d.Type != DeviceTypeLight {
 		msg = append(msg, protocol.NewMessage(&packets.ButtonGet{}))
+		msg = append(msg, protocol.NewMessage(&packets.ButtonGetConfig{}))
 	}
 	return msg
+}
+
+func (d *Device) relayStateMessages() []*protocol.Message {
+	if len(d.Buttons) > 0 {
+		msgs := make([]*protocol.Message, 0, len(d.Buttons))
+		for i := range d.Buttons {
+			msgs = append(msgs, protocol.NewMessage(&packets.RelayGetPower{RelayIndex: uint8(i)}))
+		}
+		return msgs
+	}
+
+	msgs := make([]*protocol.Message, 0, len(d.Relays))
+	for _, relay := range d.Relays {
+		msgs = append(msgs, protocol.NewMessage(&packets.RelayGetPower{RelayIndex: uint8(relay.Index)}))
+	}
+	return msgs
+}
+
+func buttonBacklightToLightHsbk(c packets.ButtonBacklightHsbk) packets.LightHsbk {
+	return packets.LightHsbk(c)
 }
 
 // SortDevices sorts devices by label and if equal, by Serial.
