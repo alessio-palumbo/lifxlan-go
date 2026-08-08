@@ -30,10 +30,11 @@ const (
 // Controller manages discovery and message routing for multiple
 // devices on the LAN.
 type Controller struct {
-	client   Client
-	logger   *slog.Logger
-	recvDone chan struct{}
-	cfg      *Config
+	client       Client
+	clientConfig *client.Config
+	logger       *slog.Logger
+	recvDone     chan struct{}
+	cfg          *Config
 
 	closeOnce sync.Once
 	wg        sync.WaitGroup
@@ -106,7 +107,7 @@ func New(opts ...Option) (*Controller, error) {
 	ctrl.cfg.setLivenessTimeout()
 
 	if ctrl.client == nil {
-		c, err := client.NewClient(nil)
+		c, err := client.NewClient(ctrl.clientConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create client: %w", err)
 		}

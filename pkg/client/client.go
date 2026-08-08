@@ -32,23 +32,30 @@ type Config struct {
 	// Source must be greater than 1 or some devices on older firmware
 	// might either ignore (0) or broadcast the response (1).
 	Source uint32
+
+	// BroadcastAddr overrides automatic broadcast interface selection.
+	// If Port is 0, the default LIFX UDP port is used.
+	BroadcastAddr *net.UDPAddr
+	// BroadcastInterfaceName selects a broadcast-capable IPv4 interface by name.
+	BroadcastInterfaceName string
+	// BroadcastInterfaceIndex selects a broadcast-capable IPv4 interface by index.
+	BroadcastInterfaceIndex int
 }
 
 // HandlerFunc processes a received message and address.
 type HandlerFunc func(*protocol.Message, *net.UDPAddr)
 
+// BroadcastInterface describes one interface usable for subnet broadcast.
+type BroadcastInterface struct {
+	Index     int
+	Name      string
+	IP        net.IP
+	Broadcast net.IP
+	Flags     net.Flags
+}
+
 // NewClient returns an instance of Client with an initialised UDP connection.
 func NewClient(cfg *Config) (*Client, error) {
-	addr := &net.UDPAddr{Port: 0, IP: net.IPv4zero}
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-	bAddr, err := resolveBroadcastUDPAddress(lifxPort)
-	if err != nil {
-		return nil, err
-	}
-
 	source := defaultSource
 	if cfg != nil {
 		if cfg.Source != 0 {
@@ -57,6 +64,17 @@ func NewClient(cfg *Config) (*Client, error) {
 			}
 			source = cfg.Source
 		}
+	}
+
+	bAddr, err := resolveBroadcastUDPAddress(lifxPort, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	addr := &net.UDPAddr{Port: 0, IP: net.IPv4zero}
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Client{
@@ -133,45 +151,102 @@ func (c *Client) SetConnDeadline(t time.Time) error {
 	return c.conn.SetDeadline(t)
 }
 
-// resolveBroadcastUDPAddress computes and returns the subnet-specific UDP
-// broadcast address for the first suitable network interface.
-// It uses the interface's IPv4 address and netmask to calculate the address.
-func resolveBroadcastUDPAddress(port int) (*net.UDPAddr, error) {
+// BroadcastInterfaces returns broadcast-capable IPv4 interfaces that can be
+// used for LIFX discovery.
+func BroadcastInterfaces() ([]BroadcastInterface, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, fmt.Errorf("could not list interfaces: %w", err)
 	}
+	return broadcastInterfacesFrom(ifaces, func(iface net.Interface) ([]net.Addr, error) {
+		return iface.Addrs()
+	}), nil
+}
 
+// resolveBroadcastUDPAddress computes and returns the UDP broadcast address for
+// cfg. Without an override it preserves the historical behavior: first suitable
+// network interface wins.
+func resolveBroadcastUDPAddress(port int, cfg *Config) (*net.UDPAddr, error) {
+	if cfg != nil && cfg.BroadcastAddr != nil {
+		return broadcastUDPAddr(cfg.BroadcastAddr.IP, cfg.BroadcastAddr.Port, port), nil
+	}
+
+	candidates, err := BroadcastInterfaces()
+	if err != nil {
+		return nil, err
+	}
+	return resolveBroadcastUDPAddressFromCandidates(port, cfg, candidates)
+}
+
+func resolveBroadcastUDPAddressFromCandidates(port int, cfg *Config, candidates []BroadcastInterface) (*net.UDPAddr, error) {
+	if cfg != nil {
+		if cfg.BroadcastInterfaceName != "" {
+			for _, candidate := range candidates {
+				if candidate.Name == cfg.BroadcastInterfaceName {
+					return broadcastUDPAddr(candidate.Broadcast, port, port), nil
+				}
+			}
+			return nil, fmt.Errorf("broadcast interface %q not found", cfg.BroadcastInterfaceName)
+		}
+		if cfg.BroadcastInterfaceIndex > 0 {
+			for _, candidate := range candidates {
+				if candidate.Index == cfg.BroadcastInterfaceIndex {
+					return broadcastUDPAddr(candidate.Broadcast, port, port), nil
+				}
+			}
+			return nil, fmt.Errorf("broadcast interface index %d not found", cfg.BroadcastInterfaceIndex)
+		}
+	}
+
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no suitable broadcast interface found")
+	}
+	return broadcastUDPAddr(candidates[0].Broadcast, port, port), nil
+}
+
+func broadcastInterfacesFrom(ifaces []net.Interface, addrs func(net.Interface) ([]net.Addr, error)) []BroadcastInterface {
+	var out []BroadcastInterface
 	for _, iface := range ifaces {
 		if iface.Flags&broadcastUpIface != broadcastUpIface {
 			continue
 		}
 
-		addrs, err := iface.Addrs()
+		ifaceAddrs, err := addrs(iface)
 		if err != nil {
 			// skip bad interface
 			continue
 		}
 
-		for _, addr := range addrs {
+		for _, addr := range ifaceAddrs {
 			ipnet, ok := addr.(*net.IPNet)
-			if !ok || ipnet.IP.To4() == nil {
+			if !ok || ipnet.IP.To4() == nil || len(ipnet.Mask) != net.IPv4len {
 				continue
 			}
 
 			ip := ipnet.IP.To4()
-			mask := ipnet.Mask
-			broadcast := make(net.IP, 4)
-			for i := range 4 {
-				broadcast[i] = ip[i] | ^mask[i]
+			broadcast := make(net.IP, net.IPv4len)
+			for i := range net.IPv4len {
+				broadcast[i] = ip[i] | ^ipnet.Mask[i]
 			}
 
-			return &net.UDPAddr{
-				IP:   broadcast,
-				Port: port,
-			}, nil
+			out = append(out, BroadcastInterface{
+				Index:     iface.Index,
+				Name:      iface.Name,
+				IP:        append(net.IP(nil), ip...),
+				Broadcast: broadcast,
+				Flags:     iface.Flags,
+			})
 		}
 	}
+	return out
+}
 
-	return nil, fmt.Errorf("no suitable broadcast interface found")
+func broadcastUDPAddr(ip net.IP, port, defaultPort int) *net.UDPAddr {
+	if port == 0 {
+		port = defaultPort
+	}
+	if ipv4 := ip.To4(); ipv4 != nil {
+		ip = ipv4
+	}
+	return &net.UDPAddr{IP: append(net.IP(nil), ip...), Port: port}
 }

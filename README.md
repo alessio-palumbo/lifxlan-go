@@ -187,6 +187,39 @@ Then you can send it using the controller:
 err = controller.Send(deviceAddr, msg)
 ```
 
+## 🌐 Multi-Network Discovery
+
+By default, lifxlan-go keeps its existing automatic behavior and broadcasts on the first suitable IPv4 interface.
+For machines connected to multiple networks, applications can list broadcast-capable interfaces and let users choose one.
+
+```go
+ifaces, err := client.BroadcastInterfaces()
+if err != nil {
+	panic(err)
+}
+for _, iface := range ifaces {
+	fmt.Printf("%s %s -> %s\n", iface.Name, iface.IP, iface.Broadcast)
+}
+```
+
+Use no option for automatic selection, or pass a selected interface when creating the controller.
+
+```go
+ctrl, err := controller.New(controller.WithClientConfig(&client.Config{
+	BroadcastInterfaceName: "en0",
+}))
+```
+
+Advanced callers can also provide an exact broadcast address. If the port is zero, the default LIFX UDP port is used.
+
+```go
+c, err := client.NewClient(&client.Config{
+	BroadcastAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 1, 255)},
+})
+```
+
+If an application changes the selected interface at runtime, close the current controller and create a new one so discovery and device sessions are rebuilt for the selected network.
+
 ## 🔧 Using the Client Directly
 
 If you prefer low-level control or want to use your own device management logic, you can use the Client directly without the higher-level Controller.

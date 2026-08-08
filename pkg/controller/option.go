@@ -4,15 +4,31 @@ import (
 	"io"
 	"log/slog"
 	"time"
+
+	lanclient "github.com/alessio-palumbo/lifxlan-go/pkg/client"
 )
 
 // Option overrides configurable Controller's options.
 type Option func(*Controller) error
 
 // WithClient sets the Controller's client to the given interface.
+// It is mutually exclusive with WithClientConfig; if both options are supplied,
+// the last option wins.
 func WithClient(c Client) Option {
 	return func(ctrl *Controller) error {
 		ctrl.client = c
+		ctrl.clientConfig = nil
+		return nil
+	}
+}
+
+// WithClientConfig configures the Controller's default UDP client.
+// It is mutually exclusive with WithClient; if both options are supplied,
+// the last option wins.
+func WithClientConfig(cfg *lanclient.Config) Option {
+	return func(ctrl *Controller) error {
+		ctrl.client = nil
+		ctrl.clientConfig = cfg
 		return nil
 	}
 }

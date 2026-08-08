@@ -39,6 +39,29 @@ func TestController(t *testing.T) {
 		assert.Equal(t, 5*time.Second, ctrl.cfg.preflightHandshakeTimeout)
 	})
 
+	t.Run("Creates default client from client config", func(t *testing.T) {
+		ctrl, err := New(WithClientConfig(&client.Config{
+			BroadcastAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 9},
+		}))
+		require.NoError(t, err)
+		defer ctrl.Close()
+
+		_, ok := ctrl.client.(*client.Client)
+		assert.True(t, ok)
+	})
+
+	t.Run("Uses custom client when it is configured after client config", func(t *testing.T) {
+		mockClient := newMockClient()
+		ctrl, err := New(
+			WithClientConfig(&client.Config{BroadcastAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 9}}),
+			WithClient(mockClient),
+		)
+		require.NoError(t, err)
+		defer ctrl.Close()
+
+		assert.Same(t, mockClient, ctrl.client)
+	})
+
 	t.Run("Uses configured logger", func(t *testing.T) {
 		mockClient := newMockClient()
 		var logs bytes.Buffer
