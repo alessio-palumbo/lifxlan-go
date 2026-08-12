@@ -52,6 +52,17 @@ type relativePropertyWord struct {
 
 // relativePropertyWords maps action words to relative property changes.
 // If no explicit number is provided in the input, the configured delta is used.
+var relativePropertyModifiers = map[string]float64{
+	"less": -1,
+	"more": 1,
+}
+
+var relativePropertyPhraseWords = map[string]relativePropertyKind{
+	"intense":   relativePropertySaturation,
+	"saturated": relativePropertySaturation,
+	"vivid":     relativePropertySaturation,
+}
+
 var relativePropertyWords = map[string]relativePropertyWord{
 	"dim":      {Kind: relativePropertyBrightness, Delta: -10},
 	"darken":   {Kind: relativePropertyBrightness, Delta: -10},

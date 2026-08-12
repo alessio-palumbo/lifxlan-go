@@ -48,6 +48,20 @@ func (p *CommandParser) classifyTokens(words []string, selectorsMatches map[int]
 			continue
 		}
 
+		if multiplier, ok := relativePropertyModifiers[w]; ok {
+			if next, ok := peekWord(words, i+1); ok {
+				if _, ok := relativePropertyPhraseWords[next]; ok {
+					t.Raw = w + " " + next
+					t.Kind = tokenRelativeProperty
+					t.Value = int(multiplier)
+					t.Suffix = next
+					out = append(out, t)
+					i++
+					continue
+				}
+			}
+		}
+
 		if _, ok := propertyWords[w]; ok {
 			t.Kind = tokenProperty
 			out = append(out, t)
@@ -127,4 +141,11 @@ func tokenTypeForSuffix(word string, suffixes ...string) (int, string, bool) {
 		}
 	}
 	return 0, "", false
+}
+
+func peekWord(words []string, i int) (string, bool) {
+	if i >= len(words) {
+		return "", false
+	}
+	return words[i], true
 }

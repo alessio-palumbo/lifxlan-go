@@ -137,6 +137,27 @@ func Test_buildIntentAtoms(t *testing.T) {
 				{Kind: intentAtomSelector, Targets: selectors["luna"], PrevKind: intentAtomAction},
 			},
 		},
+		"relative saturation phrase after selector": {
+			tokens: []token{
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "more vivid", Kind: tokenRelativeProperty, Value: 1, Suffix: "vivid"},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomSelector, Targets: selectors["luna"], NextKind: intentAtomAction},
+				{Kind: intentAtomAction, Action: &action{SaturationDelta: ptr(float64(10))}, PrevKind: intentAtomSelector},
+			},
+		},
+		"relative saturation phrase before selector with explicit amount": {
+			tokens: []token{
+				{Raw: "less intense", Kind: tokenRelativeProperty, Value: -1, Suffix: "intense"},
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "20%", Kind: tokenNumber, Value: 20},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomAction, Action: &action{SaturationDelta: ptr(float64(-20))}, NextKind: intentAtomSelector},
+				{Kind: intentAtomSelector, Targets: selectors["luna"], PrevKind: intentAtomAction},
+			},
+		},
 		"single target, multiple actions": {
 			tokens: []token{
 				{Raw: "luna", Kind: tokenSelector},

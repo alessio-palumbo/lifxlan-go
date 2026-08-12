@@ -323,6 +323,34 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		"relative saturation phrase increases": {
+			input: "luna more vivid",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true,
+							Color: packets.LightHsbk{Saturation: 45875},
+						}),
+					},
+				},
+			},
+		},
+		"relative saturation phrase with explicit amount": {
+			input: "luna less intense 20%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true,
+							Color: packets.LightHsbk{Saturation: 26214},
+						}),
+					},
+				},
+			},
+		},
 		"multiple property words with terminating token": {
 			input: "set 000000000000 to 10% sat, 180 hue, 4000k and switch off. turn on luna to 10% brightness and 5000 kelvin",
 			want: []Command{

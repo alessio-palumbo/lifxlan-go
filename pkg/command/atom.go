@@ -132,7 +132,11 @@ func (p *CommandParser) buildIntentAtoms(tokens []token) []intentAtom {
 
 		case tokenRelativeProperty:
 			a.Kind = intentAtomAction
-			word := relativePropertyWords[t.Raw]
+			word, ok := relativePropertyToken(t)
+			if !ok {
+				a.Kind = intentAtomUnknown
+				break
+			}
 			delta := word.Delta
 			if v, consumed, ok := relativeActionAmount(tokens, i+1); ok {
 				if delta < 0 {
@@ -200,6 +204,20 @@ func relativeActionAmount(tokens []token, i int) (int, int, bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+func relativePropertyToken(t token) (relativePropertyWord, bool) {
+	if word, ok := relativePropertyWords[t.Raw]; ok {
+		return word, true
+	}
+	if t.Suffix == "" {
+		return relativePropertyWord{}, false
+	}
+	kind, ok := relativePropertyPhraseWords[t.Suffix]
+	if !ok {
+		return relativePropertyWord{}, false
+	}
+	return relativePropertyWord{Kind: kind, Delta: float64(t.Value) * 10}, true
 }
 
 func (w relativePropertyWord) setDelta(delta float64, a *intentAtom) {

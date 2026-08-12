@@ -77,6 +77,16 @@ func Test_classifyTokens(t *testing.T) {
 				{Raw: "30%", Kind: tokenNumber, Value: 30},
 			},
 		},
+		"relative saturation phrase": {
+			words: []string{"luna", "more", "vivid"},
+			selectors: map[int]*selectorMatch{
+				0: {Match: "luna", Span: 1},
+			},
+			want: []token{
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "more vivid", Kind: tokenRelativeProperty, Value: 1, Suffix: "vivid"},
+			},
+		},
 		"with duration suffix": {
 			words: []string{"turn", "luna", "red", "in", "10s"},
 			selectors: map[int]*selectorMatch{
