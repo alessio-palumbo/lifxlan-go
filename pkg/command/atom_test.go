@@ -188,6 +188,16 @@ func Test_buildIntentAtoms(t *testing.T) {
 				{Kind: intentAtomAction, Action: &action{Saturation: ptr(float64(0)), Kelvin: ptr(uint16(2700))}, PrevKind: intentAtomSelector},
 			},
 		},
+		"styled color phrase": {
+			tokens: []token{
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "pastel blue", Kind: tokenColor},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomSelector, Targets: selectors["luna"], NextKind: intentAtomAction},
+				{Kind: intentAtomAction, Action: &action{Hue: ptr(float64(250)), Saturation: ptr(float64(35))}, PrevKind: intentAtomSelector},
+			},
+		},
 		"single target, multiple actions": {
 			tokens: []token{
 				{Raw: "luna", Kind: tokenSelector},

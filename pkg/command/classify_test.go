@@ -107,6 +107,16 @@ func Test_classifyTokens(t *testing.T) {
 				{Raw: "warm white", Kind: tokenColor},
 			},
 		},
+		"styled color phrase": {
+			words: []string{"luna", "pastel", "blue"},
+			selectors: map[int]*selectorMatch{
+				0: {Match: "luna", Span: 1},
+			},
+			want: []token{
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "pastel blue", Kind: tokenColor},
+			},
+		},
 		"with duration suffix": {
 			words: []string{"turn", "luna", "red", "in", "10s"},
 			selectors: map[int]*selectorMatch{

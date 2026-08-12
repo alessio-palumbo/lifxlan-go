@@ -323,6 +323,48 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		"styled pastel color": {
+			input: "luna pastel blue",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
+							Color: packets.LightHsbk{Hue: device.ConvertExternalToDeviceValue(250, 360), Saturation: device.ConvertExternalToDeviceValue(35, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"styled soft color with brightness": {
+			input: "luna soft pink brightness 40%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true, SetBrightness: true,
+							Color: packets.LightHsbk{Hue: device.ConvertExternalToDeviceValue(325, 360), Saturation: device.ConvertExternalToDeviceValue(45, 100), Brightness: device.ConvertExternalToDeviceValue(40, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"soft white keeps white temperature meaning": {
+			input: "luna soft white",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true,
+							Color: packets.LightHsbk{Saturation: 0, Kelvin: 3000},
+						}),
+					},
+				},
+			},
+		},
 		"relative temperature cooler with explicit amount clamps to range": {
 			input: "filo cooler 500%",
 			want: []Command{

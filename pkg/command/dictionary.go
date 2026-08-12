@@ -29,6 +29,40 @@ var colorWords = map[string]func(*intentAtom){
 	"random":        func(a *intentAtom) { a.setSaturation(100); a.setHue(float64(rand.IntN(360))) },
 }
 
+var styledColorSaturations = map[string]float64{
+	"pastel": 35,
+	"soft":   45,
+	"muted":  50,
+	"washed": 25,
+	"vivid":  100,
+	"strong": 100,
+	"deep":   90,
+	"rich":   90,
+}
+
+var styledColorHues = map[string]float64{
+	"red":    0,
+	"orange": 36,
+	"yellow": 60,
+	"green":  120,
+	"cyan":   180,
+	"blue":   250,
+	"purple": 280,
+	"pink":   325,
+}
+
+func init() {
+	for style, saturation := range styledColorSaturations {
+		for color, hue := range styledColorHues {
+			style, saturation, color, hue := style, saturation, color, hue
+			colorWords[style+" "+color] = func(a *intentAtom) {
+				a.setSaturation(saturation)
+				a.setHue(hue)
+			}
+		}
+	}
+}
+
 // propertyWords returns an intentAtom setter for any supported property word.
 var propertyWords = map[string]func(int, *intentAtom){
 	"brightness": func(v int, a *intentAtom) { a.setBrightness(normalizePercent(v)) },
