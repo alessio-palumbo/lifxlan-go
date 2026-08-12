@@ -2,6 +2,7 @@ package command
 
 import (
 	"testing"
+	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
@@ -486,6 +487,34 @@ func TestParse(t *testing.T) {
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
 							Cycles: 1, Period: 1, SetSaturation: true,
 							Color: packets.LightHsbk{Saturation: 9830},
+						}),
+					},
+				},
+			},
+		},
+		"minute duration suffix": {
+			input: "luna blue in 2m",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: uint32((2 * time.Minute).Milliseconds()), SetHue: true, SetSaturation: true,
+							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
+						}),
+					},
+				},
+			},
+		},
+		"minute duration word": {
+			input: "luna blue in 2 minutes",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: uint32((2 * time.Minute).Milliseconds()), SetHue: true, SetSaturation: true,
+							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
 						}),
 					},
 				},

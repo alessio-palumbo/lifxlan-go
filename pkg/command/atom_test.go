@@ -258,6 +258,23 @@ func Test_buildIntentAtoms(t *testing.T) {
 				{Kind: intentAtomAction, Action: &action{Duration: ptr(5 * time.Second)}, PrevKind: intentAtomAction},
 			},
 		},
+		"minute duration suffix": {
+			tokens: []token{
+				{Raw: "5m", Kind: tokenNumberD, Value: 5, Suffix: "m"},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomAction, Action: &action{Duration: ptr(5 * time.Minute)}},
+			},
+		},
+		"minute duration word": {
+			tokens: []token{
+				{Raw: "2", Kind: tokenNumber, Value: 2},
+				{Raw: "minutes", Kind: tokenDuration},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomAction, Action: &action{Duration: ptr(2 * time.Minute)}},
+			},
+		},
 		"multiple property words with terminating token": {
 			tokens: []token{
 				{Raw: "000000000000", Kind: tokenSelector},

@@ -147,11 +147,11 @@ var durationWords = map[string]func(int, *intentAtom){
 	"secs":    func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Second) },
 	"seconds": func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Second) },
 
-	"m":       func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Second) },
-	"min":     func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Second) },
-	"mins":    func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Second) },
-	"minute":  func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Second) },
-	"minutes": func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Second) },
+	"m":       func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Minute) },
+	"min":     func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Minute) },
+	"mins":    func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Minute) },
+	"minute":  func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Minute) },
+	"minutes": func(v int, a *intentAtom) { a.setDuration(time.Duration(v) * time.Minute) },
 }
 
 // normalizePercent returns a normalized percent value.
