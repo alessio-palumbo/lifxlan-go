@@ -273,6 +273,7 @@ You can:
 ## 🧠 Command Parsing
 
 The command parser converts user text into executable protocol messages.
+See [`pkg/command/README.md`](pkg/command/README.md) for the supported grammar and current limitations.
 This allows applications to support natural commands like:
 
 ```
