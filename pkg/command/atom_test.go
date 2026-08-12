@@ -178,6 +178,16 @@ func Test_buildIntentAtoms(t *testing.T) {
 				{Kind: intentAtomSelector, Targets: selectors["luna"], PrevKind: intentAtomAction},
 			},
 		},
+		"white temperature phrase": {
+			tokens: []token{
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "warm white", Kind: tokenColor},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomSelector, Targets: selectors["luna"], NextKind: intentAtomAction},
+				{Kind: intentAtomAction, Action: &action{Saturation: ptr(float64(0)), Kelvin: ptr(uint16(2700))}, PrevKind: intentAtomSelector},
+			},
+		},
 		"single target, multiple actions": {
 			tokens: []token{
 				{Raw: "luna", Kind: tokenSelector},

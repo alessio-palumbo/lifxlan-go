@@ -281,6 +281,48 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		"white sets saturation to zero": {
+			input: "luna white",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true,
+							Color: packets.LightHsbk{Saturation: 0},
+						}),
+					},
+				},
+			},
+		},
+		"warm white sets visible temperature": {
+			input: "luna warm white",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true,
+							Color: packets.LightHsbk{Saturation: 0, Kelvin: 2700},
+						}),
+					},
+				},
+			},
+		},
+		"daylight sets visible temperature": {
+			input: "luna daylight",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true,
+							Color: packets.LightHsbk{Saturation: 0, Kelvin: 5600},
+						}),
+					},
+				},
+			},
+		},
 		"relative temperature cooler with explicit amount clamps to range": {
 			input: "filo cooler 500%",
 			want: []Command{

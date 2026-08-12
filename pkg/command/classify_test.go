@@ -97,6 +97,16 @@ func Test_classifyTokens(t *testing.T) {
 				{Raw: "less warm", Kind: tokenRelativeProperty, Value: -1, Suffix: "warm"},
 			},
 		},
+		"white temperature phrase": {
+			words: []string{"luna", "warm", "white"},
+			selectors: map[int]*selectorMatch{
+				0: {Match: "luna", Span: 1},
+			},
+			want: []token{
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "warm white", Kind: tokenColor},
+			},
+		},
 		"with duration suffix": {
 			words: []string{"turn", "luna", "red", "in", "10s"},
 			selectors: map[int]*selectorMatch{

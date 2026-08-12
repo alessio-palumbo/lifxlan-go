@@ -48,6 +48,17 @@ func (p *CommandParser) classifyTokens(words []string, selectorsMatches map[int]
 			continue
 		}
 
+		if next, ok := peekWord(words, i+1); ok {
+			phrase := w + " " + next
+			if _, ok := colorWords[phrase]; ok {
+				t.Raw = phrase
+				t.Kind = tokenColor
+				out = append(out, t)
+				i++
+				continue
+			}
+		}
+
 		if multiplier, ok := relativePropertyModifiers[w]; ok {
 			if next, ok := peekWord(words, i+1); ok {
 				if _, ok := relativePropertyPhraseWords[next]; ok {

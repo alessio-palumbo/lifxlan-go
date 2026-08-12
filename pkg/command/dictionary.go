@@ -9,18 +9,24 @@ import (
 
 // colorWords returns an intentAtom setter for any supported color word.
 var colorWords = map[string]func(*intentAtom){
-	"white":  func(a *intentAtom) { a.setSaturation(100) },
-	"red":    func(a *intentAtom) { a.setSaturation(100); a.setHue(0) },
-	"orange": func(a *intentAtom) { a.setSaturation(100); a.setHue(36) },
-	"yellow": func(a *intentAtom) { a.setSaturation(100); a.setHue(60) },
-	"green":  func(a *intentAtom) { a.setSaturation(100); a.setHue(120) },
-	"cyan":   func(a *intentAtom) { a.setSaturation(100); a.setHue(180) },
-	"blue":   func(a *intentAtom) { a.setSaturation(100); a.setHue(250) },
-	"purple": func(a *intentAtom) { a.setSaturation(100); a.setHue(280) },
-	"pink":   func(a *intentAtom) { a.setSaturation(100); a.setHue(325) },
-	"cool":   func(a *intentAtom) { a.setSaturation(100); a.setHue(325) },
-	"warm":   func(a *intentAtom) { a.setSaturation(100); a.setHue(325) },
-	"random": func(a *intentAtom) { a.setSaturation(100); a.setHue(float64(rand.IntN(360))) },
+	"white":         func(a *intentAtom) { a.setSaturation(0) },
+	"candlelight":   func(a *intentAtom) { a.setSaturation(0); a.setKelvin(2200) },
+	"warm white":    func(a *intentAtom) { a.setSaturation(0); a.setKelvin(2700) },
+	"soft white":    func(a *intentAtom) { a.setSaturation(0); a.setKelvin(3000) },
+	"neutral white": func(a *intentAtom) { a.setSaturation(0); a.setKelvin(4000) },
+	"daylight":      func(a *intentAtom) { a.setSaturation(0); a.setKelvin(5600) },
+	"cool white":    func(a *intentAtom) { a.setSaturation(0); a.setKelvin(6500) },
+	"red":           func(a *intentAtom) { a.setSaturation(100); a.setHue(0) },
+	"orange":        func(a *intentAtom) { a.setSaturation(100); a.setHue(36) },
+	"yellow":        func(a *intentAtom) { a.setSaturation(100); a.setHue(60) },
+	"green":         func(a *intentAtom) { a.setSaturation(100); a.setHue(120) },
+	"cyan":          func(a *intentAtom) { a.setSaturation(100); a.setHue(180) },
+	"blue":          func(a *intentAtom) { a.setSaturation(100); a.setHue(250) },
+	"purple":        func(a *intentAtom) { a.setSaturation(100); a.setHue(280) },
+	"pink":          func(a *intentAtom) { a.setSaturation(100); a.setHue(325) },
+	"cool":          func(a *intentAtom) { a.setSaturation(100); a.setHue(325) },
+	"warm":          func(a *intentAtom) { a.setSaturation(100); a.setHue(325) },
+	"random":        func(a *intentAtom) { a.setSaturation(100); a.setHue(float64(rand.IntN(360))) },
 }
 
 // propertyWords returns an intentAtom setter for any supported property word.
