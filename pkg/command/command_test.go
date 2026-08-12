@@ -17,10 +17,10 @@ func TestParse(t *testing.T) {
 		serial3 = device.Serial([8]byte{0, 0, 0, 0, 0, 3})
 
 		devices = []device.Device{
-			{Serial: serial0, Label: "moon", Group: "tv", Location: "home"},
-			{Serial: serial1, Label: "luna", Group: "living room", Location: "home"},
-			{Serial: serial2, Label: "neon", Group: "living room", Location: "home"},
-			{Serial: serial3, Label: "filo", Group: "tv", Location: "home"},
+			{Serial: serial0, Label: "moon", Group: "tv", Location: "home", Color: device.Color{Brightness: 5, Kelvin: 3500}},
+			{Serial: serial1, Label: "luna", Group: "living room", Location: "home", Color: device.Color{Brightness: 50, Kelvin: 3500}},
+			{Serial: serial2, Label: "neon", Group: "living room", Location: "home", Color: device.Color{Brightness: 95, Kelvin: 3500}},
+			{Serial: serial3, Label: "filo", Group: "tv", Location: "home", Color: device.Color{Brightness: 20, Kelvin: 3500}},
 		}
 	)
 
@@ -197,6 +197,71 @@ func TestParse(t *testing.T) {
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
 							Cycles: 1, Period: 1, SetBrightness: true,
 							Color: packets.LightHsbk{Brightness: 19661},
+						}),
+					},
+				},
+			},
+		},
+		"relative brightness verb before selector with explicit amount": {
+			input: "dim luna 30%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetBrightness: true,
+							Color: packets.LightHsbk{Brightness: 13107},
+						}),
+					},
+				},
+			},
+		},
+		"relative brightness adjective after selector with default amount": {
+			input: "luna brighter",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetBrightness: true,
+							Color: packets.LightHsbk{Brightness: 39321},
+						}),
+					},
+				},
+			},
+		},
+		"relative brightness splits commands per target": {
+			input: "living room brighter 10%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetBrightness: true,
+							Color: packets.LightHsbk{Brightness: 39321},
+						}),
+					},
+				},
+				{
+					Targets: []device.Serial{serial2},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetBrightness: true,
+							Color: packets.LightHsbk{Brightness: 65535},
+						}),
+					},
+				},
+			},
+		},
+		"relative brightness clamps above zero": {
+			input: "moon dim 10%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial0},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetBrightness: true,
+							Color: packets.LightHsbk{Brightness: 655},
 						}),
 					},
 				},

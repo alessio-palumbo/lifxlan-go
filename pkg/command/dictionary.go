@@ -21,10 +21,9 @@ var colorWords = map[string]func(*intentAtom){
 	"random": func(a *intentAtom) { a.setSaturation(100); a.setHue(float64(rand.IntN(360))) },
 }
 
-// colorWords returns an intentAtom setter for any supported property word.
+// propertyWords returns an intentAtom setter for any supported property word.
 var propertyWords = map[string]func(int, *intentAtom){
 	"brightness": func(v int, a *intentAtom) { a.setBrightness(normalizePercent(v)) },
-	"dim":        func(v int, a *intentAtom) { a.setBrightness(normalizePercent(v)) },
 
 	"saturation": func(v int, a *intentAtom) { a.setSaturation(normalizePercent(v)) },
 	"sat":        func(v int, a *intentAtom) { a.setSaturation(normalizePercent(v)) },
@@ -34,6 +33,29 @@ var propertyWords = map[string]func(int, *intentAtom){
 	"temperature": func(v int, a *intentAtom) { a.setKelvin(normalizeKelvin(v)) },
 	"kelvin":      func(v int, a *intentAtom) { a.setKelvin(normalizeKelvin(v)) },
 	"k":           func(v int, a *intentAtom) { a.setKelvin(normalizeKelvin(v)) },
+}
+
+type relativePropertyKind int
+
+const (
+	relativePropertyBrightness relativePropertyKind = iota
+)
+
+type relativePropertyWord struct {
+	Kind  relativePropertyKind
+	Delta float64
+}
+
+// relativePropertyWords maps action words to relative property changes.
+// If no explicit number is provided in the input, the configured delta is used.
+var relativePropertyWords = map[string]relativePropertyWord{
+	"dim":      {Kind: relativePropertyBrightness, Delta: -10},
+	"darken":   {Kind: relativePropertyBrightness, Delta: -10},
+	"darker":   {Kind: relativePropertyBrightness, Delta: -10},
+	"lower":    {Kind: relativePropertyBrightness, Delta: -10},
+	"brighten": {Kind: relativePropertyBrightness, Delta: 10},
+	"brighter": {Kind: relativePropertyBrightness, Delta: 10},
+	"raise":    {Kind: relativePropertyBrightness, Delta: 10},
 }
 
 // durationWords returns an intentAtom setter for any supported duration word.
@@ -57,6 +79,10 @@ var durationWords = map[string]func(int, *intentAtom){
 // normalizePercent returns a normalized percent value.
 func normalizePercent(v int) float64 {
 	return float64(max(0, min(v, 100)))
+}
+
+func normalizeRelativeBrightness(v float64) float64 {
+	return max(1, min(v, 100))
 }
 
 // normalizeHue returns a hue value within boundaries.

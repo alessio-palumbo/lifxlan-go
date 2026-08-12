@@ -105,6 +105,38 @@ func Test_buildIntentAtoms(t *testing.T) {
 				{Kind: intentAtomSelector, Targets: selectors["luna"], PrevKind: intentAtomSelector},
 			},
 		},
+		"relative brightness before selector with explicit amount": {
+			tokens: []token{
+				{Raw: "dim", Kind: tokenRelativeProperty},
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "30%", Kind: tokenNumber, Value: 30},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomAction, Action: &action{BrightnessDelta: ptr(float64(-30))}, NextKind: intentAtomSelector},
+				{Kind: intentAtomSelector, Targets: selectors["luna"], PrevKind: intentAtomAction},
+			},
+		},
+		"relative brightness after selector with default amount": {
+			tokens: []token{
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "brighter", Kind: tokenRelativeProperty},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomSelector, Targets: selectors["luna"], NextKind: intentAtomAction},
+				{Kind: intentAtomAction, Action: &action{BrightnessDelta: ptr(float64(10))}, PrevKind: intentAtomSelector},
+			},
+		},
+		"relative brightness with amount before selector": {
+			tokens: []token{
+				{Raw: "brighten", Kind: tokenRelativeProperty},
+				{Raw: "20%", Kind: tokenNumber, Value: 20},
+				{Raw: "luna", Kind: tokenSelector},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomAction, Action: &action{BrightnessDelta: ptr(float64(20))}, NextKind: intentAtomSelector},
+				{Kind: intentAtomSelector, Targets: selectors["luna"], PrevKind: intentAtomAction},
+			},
+		},
 		"single target, multiple actions": {
 			tokens: []token{
 				{Raw: "luna", Kind: tokenSelector},

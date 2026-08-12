@@ -66,6 +66,17 @@ func Test_classifyTokens(t *testing.T) {
 				{Raw: "home", Kind: tokenSelector},
 			},
 		},
+		"relative brightness word": {
+			words: []string{"dim", "desk", "30%"},
+			selectors: map[int]*selectorMatch{
+				1: {Match: "desk", Span: 1},
+			},
+			want: []token{
+				{Raw: "dim", Kind: tokenRelativeProperty},
+				{Raw: "desk", Kind: tokenSelector},
+				{Raw: "30%", Kind: tokenNumber, Value: 30},
+			},
+		},
 		"with duration suffix": {
 			words: []string{"turn", "luna", "red", "in", "10s"},
 			selectors: map[int]*selectorMatch{

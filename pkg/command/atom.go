@@ -48,6 +48,13 @@ func (i *intentAtom) setBrightness(v float64) {
 	i.Action.Brightness = &v
 }
 
+func (i *intentAtom) setBrightnessDelta(v float64) {
+	if i.Action == nil {
+		i.Action = new(action)
+	}
+	i.Action.BrightnessDelta = &v
+}
+
 func (i *intentAtom) setSaturation(v float64) {
 	if i.Action == nil {
 		i.Action = new(action)
@@ -109,6 +116,22 @@ func (p *CommandParser) buildIntentAtoms(tokens []token) []intentAtom {
 				i++
 			}
 
+		case tokenRelativeProperty:
+			a.Kind = intentAtomAction
+			word := relativePropertyWords[t.Raw]
+			delta := word.Delta
+			if v, consumed, ok := relativeActionAmount(tokens, i+1); ok {
+				if delta < 0 {
+					delta = -float64(v)
+				} else {
+					delta = float64(v)
+				}
+				if consumed == 1 {
+					i++
+				}
+			}
+			word.setDelta(delta, &a)
+
 		case tokenNumber:
 			if nextToken, ok := peek(tokens, i+1); ok {
 				switch nextToken.Kind {
@@ -149,4 +172,25 @@ func (p *CommandParser) buildIntentAtoms(tokens []token) []intentAtom {
 	}
 
 	return intentAtoms
+}
+
+func relativeActionAmount(tokens []token, i int) (int, int, bool) {
+	if t, ok := peek(tokens, i); ok {
+		if t.Kind == tokenNumber {
+			return t.Value, 1, true
+		}
+		if t.Kind == tokenSelector {
+			if next, ok := peek(tokens, i+1); ok && next.Kind == tokenNumber {
+				return next.Value, 0, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+func (w relativePropertyWord) setDelta(delta float64, a *intentAtom) {
+	switch w.Kind {
+	case relativePropertyBrightness:
+		a.setBrightnessDelta(delta)
+	}
 }

@@ -116,6 +116,18 @@ func Test_buildintent(t *testing.T) {
 				},
 			},
 		},
+		"relative brightness action before selector": {
+			atoms: []intentAtom{
+				{Kind: intentAtomAction, Action: &action{BrightnessDelta: ptr(float64(-10))}, NextKind: intentAtomSelector},
+				{Kind: intentAtomSelector, Targets: selectors["luna"], PrevKind: intentAtomAction},
+			},
+			want: []intent{
+				{
+					Targets: []*device.Device{{Serial: serial1}},
+					Action:  &action{BrightnessDelta: ptr(float64(-10))},
+				},
+			},
+		},
 		"single target, multiple actions": {
 			atoms: []intentAtom{
 				{Kind: intentAtomSelector, Targets: selectors["luna"], NextKind: intentAtomAction},

@@ -14,12 +14,13 @@ type intent struct {
 
 // action contain a set of optional command actions.
 type action struct {
-	Power      *bool
-	Hue        *float64
-	Brightness *float64
-	Saturation *float64
-	Kelvin     *uint16
-	Duration   *time.Duration
+	Power           *bool
+	Hue             *float64
+	Brightness      *float64
+	BrightnessDelta *float64
+	Saturation      *float64
+	Kelvin          *uint16
+	Duration        *time.Duration
 }
 
 // Mergeaction applies an action to any unset field
@@ -35,6 +36,9 @@ func (m *intent) Mergeaction(a *action) {
 	}
 	if m.Action.Brightness == nil && a.Brightness != nil {
 		m.Action.Brightness = a.Brightness
+	}
+	if m.Action.BrightnessDelta == nil && a.BrightnessDelta != nil {
+		m.Action.BrightnessDelta = a.BrightnessDelta
 	}
 	if m.Action.Saturation == nil && a.Saturation != nil {
 		m.Action.Saturation = a.Saturation

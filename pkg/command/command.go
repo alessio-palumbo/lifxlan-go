@@ -150,27 +150,46 @@ func (p *CommandParser) buildCommands(intents []intent) []Command {
 			continue
 		}
 
-		a := c.Action
-		cmd := Command{Targets: dedupeSerials(c.Targets)}
-		if a.Brightness != nil || a.Hue != nil || a.Saturation != nil || a.Kelvin != nil {
-			d := time.Millisecond
-			if a.Duration != nil {
-				d = *a.Duration
-			}
-			cmd.Msgs = append(cmd.Msgs, messages.SetColor(a.Hue, a.Saturation, a.Brightness, a.Kelvin, d, 0))
-		}
-		if a.Power != nil {
-			if *a.Power {
-				cmd.Msgs = append(cmd.Msgs, messages.SetPowerOn())
-			} else {
-				cmd.Msgs = append(cmd.Msgs, messages.SetPowerOff())
-			}
+		if c.Action.BrightnessDelta != nil {
+			cmds = append(cmds, p.buildRelativeBrightnessCommands(c)...)
+			continue
 		}
 
-		cmds = append(cmds, cmd)
+		cmds = append(cmds, buildCommand(c.Action, c.Targets))
 	}
 
 	return cmds
+}
+
+func (p *CommandParser) buildRelativeBrightnessCommands(c intent) []Command {
+	var cmds []Command
+	for _, target := range c.Targets {
+		a := *c.Action
+		brightness := normalizeRelativeBrightness(target.Color.Brightness + *c.Action.BrightnessDelta)
+		a.Brightness = &brightness
+		a.BrightnessDelta = nil
+		cmds = append(cmds, buildCommand(&a, []*device.Device{target}))
+	}
+	return cmds
+}
+
+func buildCommand(a *action, targets []*device.Device) Command {
+	cmd := Command{Targets: dedupeSerials(targets)}
+	if a.Brightness != nil || a.Hue != nil || a.Saturation != nil || a.Kelvin != nil {
+		d := time.Millisecond
+		if a.Duration != nil {
+			d = *a.Duration
+		}
+		cmd.Msgs = append(cmd.Msgs, messages.SetColor(a.Hue, a.Saturation, a.Brightness, a.Kelvin, d, 0))
+	}
+	if a.Power != nil {
+		if *a.Power {
+			cmd.Msgs = append(cmd.Msgs, messages.SetPowerOn())
+		} else {
+			cmd.Msgs = append(cmd.Msgs, messages.SetPowerOff())
+		}
+	}
+	return cmd
 }
 
 // selectorsFromDevices parses a list of device.Device and sets a mapping that

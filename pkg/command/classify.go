@@ -17,6 +17,7 @@ const (
 	tokenNumberD
 	tokenDuration
 	tokenProperty
+	tokenRelativeProperty
 	tokenSelector
 	tokenSeparator
 )
@@ -49,6 +50,12 @@ func (p *CommandParser) classifyTokens(words []string, selectorsMatches map[int]
 
 		if _, ok := propertyWords[w]; ok {
 			t.Kind = tokenProperty
+			out = append(out, t)
+			continue
+		}
+
+		if _, ok := relativePropertyWords[w]; ok {
+			t.Kind = tokenRelativeProperty
 			out = append(out, t)
 			continue
 		}
