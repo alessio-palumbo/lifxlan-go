@@ -3,6 +3,8 @@ package command
 import (
 	"math/rand/v2"
 	"time"
+
+	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 )
 
 // colorWords returns an intentAtom setter for any supported color word.
@@ -39,6 +41,8 @@ type relativePropertyKind int
 
 const (
 	relativePropertyBrightness relativePropertyKind = iota
+	relativePropertySaturation
+	relativePropertyKelvin
 )
 
 type relativePropertyWord struct {
@@ -56,6 +60,22 @@ var relativePropertyWords = map[string]relativePropertyWord{
 	"brighten": {Kind: relativePropertyBrightness, Delta: 10},
 	"brighter": {Kind: relativePropertyBrightness, Delta: 10},
 	"raise":    {Kind: relativePropertyBrightness, Delta: 10},
+
+	"muted":  {Kind: relativePropertySaturation, Delta: -10},
+	"pastel": {Kind: relativePropertySaturation, Delta: -10},
+	"soften": {Kind: relativePropertySaturation, Delta: -10},
+	"softer": {Kind: relativePropertySaturation, Delta: -10},
+	"washed": {Kind: relativePropertySaturation, Delta: -10},
+	"deeper": {Kind: relativePropertySaturation, Delta: 10},
+	"rich":   {Kind: relativePropertySaturation, Delta: 10},
+	"richer": {Kind: relativePropertySaturation, Delta: 10},
+	"strong": {Kind: relativePropertySaturation, Delta: 10},
+	"vivid":  {Kind: relativePropertySaturation, Delta: 10},
+
+	"cool":   {Kind: relativePropertyKelvin, Delta: -500},
+	"cooler": {Kind: relativePropertyKelvin, Delta: -500},
+	"warm":   {Kind: relativePropertyKelvin, Delta: 500},
+	"warmer": {Kind: relativePropertyKelvin, Delta: 500},
 }
 
 // durationWords returns an intentAtom setter for any supported duration word.
@@ -83,6 +103,18 @@ func normalizePercent(v int) float64 {
 
 func normalizeRelativeBrightness(v float64) float64 {
 	return max(1, min(v, 100))
+}
+
+func normalizeRelativePercent(v float64) float64 {
+	return max(0, min(v, 100))
+}
+
+func normalizeRelativeKelvin(v int, r device.TemperatureRange) uint16 {
+	minKelvin, maxKelvin := r.Min, r.Max
+	if minKelvin == 0 || maxKelvin == 0 {
+		minKelvin, maxKelvin = 1500, 9000
+	}
+	return uint16(max(minKelvin, min(v, maxKelvin)))
 }
 
 // normalizeHue returns a hue value within boundaries.

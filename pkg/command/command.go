@@ -150,8 +150,8 @@ func (p *CommandParser) buildCommands(intents []intent) []Command {
 			continue
 		}
 
-		if c.Action.BrightnessDelta != nil {
-			cmds = append(cmds, p.buildRelativeBrightnessCommands(c)...)
+		if c.Action.hasRelativeProperties() {
+			cmds = append(cmds, p.buildRelativePropertyCommands(c)...)
 			continue
 		}
 
@@ -161,13 +161,25 @@ func (p *CommandParser) buildCommands(intents []intent) []Command {
 	return cmds
 }
 
-func (p *CommandParser) buildRelativeBrightnessCommands(c intent) []Command {
+func (p *CommandParser) buildRelativePropertyCommands(c intent) []Command {
 	var cmds []Command
 	for _, target := range c.Targets {
 		a := *c.Action
-		brightness := normalizeRelativeBrightness(target.Color.Brightness + *c.Action.BrightnessDelta)
-		a.Brightness = &brightness
-		a.BrightnessDelta = nil
+		if c.Action.BrightnessDelta != nil {
+			brightness := normalizeRelativeBrightness(target.Color.Brightness + *c.Action.BrightnessDelta)
+			a.Brightness = &brightness
+			a.BrightnessDelta = nil
+		}
+		if c.Action.SaturationDelta != nil {
+			saturation := normalizeRelativePercent(target.Color.Saturation + *c.Action.SaturationDelta)
+			a.Saturation = &saturation
+			a.SaturationDelta = nil
+		}
+		if c.Action.KelvinDelta != nil {
+			kelvin := normalizeRelativeKelvin(int(target.Color.Kelvin)+*c.Action.KelvinDelta, target.ColorProperties.TemperatureRange)
+			a.Kelvin = &kelvin
+			a.KelvinDelta = nil
+		}
 		cmds = append(cmds, buildCommand(&a, []*device.Device{target}))
 	}
 	return cmds

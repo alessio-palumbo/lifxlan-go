@@ -62,11 +62,25 @@ func (i *intentAtom) setSaturation(v float64) {
 	i.Action.Saturation = &v
 }
 
+func (i *intentAtom) setSaturationDelta(v float64) {
+	if i.Action == nil {
+		i.Action = new(action)
+	}
+	i.Action.SaturationDelta = &v
+}
+
 func (i *intentAtom) setKelvin(v uint16) {
 	if i.Action == nil {
 		i.Action = new(action)
 	}
 	i.Action.Kelvin = &v
+}
+
+func (i *intentAtom) setKelvinDelta(v int) {
+	if i.Action == nil {
+		i.Action = new(action)
+	}
+	i.Action.KelvinDelta = &v
 }
 
 func (i *intentAtom) setDuration(v time.Duration) {
@@ -192,5 +206,9 @@ func (w relativePropertyWord) setDelta(delta float64, a *intentAtom) {
 	switch w.Kind {
 	case relativePropertyBrightness:
 		a.setBrightnessDelta(delta)
+	case relativePropertySaturation:
+		a.setSaturationDelta(delta)
+	case relativePropertyKelvin:
+		a.setKelvinDelta(int(delta))
 	}
 }

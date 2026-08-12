@@ -19,7 +19,9 @@ type action struct {
 	Brightness      *float64
 	BrightnessDelta *float64
 	Saturation      *float64
+	SaturationDelta *float64
 	Kelvin          *uint16
+	KelvinDelta     *int
 	Duration        *time.Duration
 }
 
@@ -43,8 +45,14 @@ func (m *intent) Mergeaction(a *action) {
 	if m.Action.Saturation == nil && a.Saturation != nil {
 		m.Action.Saturation = a.Saturation
 	}
+	if m.Action.SaturationDelta == nil && a.SaturationDelta != nil {
+		m.Action.SaturationDelta = a.SaturationDelta
+	}
 	if m.Action.Kelvin == nil && a.Kelvin != nil {
 		m.Action.Kelvin = a.Kelvin
+	}
+	if m.Action.KelvinDelta == nil && a.KelvinDelta != nil {
+		m.Action.KelvinDelta = a.KelvinDelta
 	}
 	if m.Action.Duration == nil && a.Duration != nil {
 		m.Action.Duration = a.Duration
@@ -106,4 +114,8 @@ func peek(tokens []token, i int) (token, bool) {
 		return token{}, false
 	}
 	return tokens[i], true
+}
+
+func (a *action) hasRelativeProperties() bool {
+	return a.BrightnessDelta != nil || a.SaturationDelta != nil || a.KelvinDelta != nil
 }

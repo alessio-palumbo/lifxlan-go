@@ -17,10 +17,10 @@ func TestParse(t *testing.T) {
 		serial3 = device.Serial([8]byte{0, 0, 0, 0, 0, 3})
 
 		devices = []device.Device{
-			{Serial: serial0, Label: "moon", Group: "tv", Location: "home", Color: device.Color{Brightness: 5, Kelvin: 3500}},
-			{Serial: serial1, Label: "luna", Group: "living room", Location: "home", Color: device.Color{Brightness: 50, Kelvin: 3500}},
-			{Serial: serial2, Label: "neon", Group: "living room", Location: "home", Color: device.Color{Brightness: 95, Kelvin: 3500}},
-			{Serial: serial3, Label: "filo", Group: "tv", Location: "home", Color: device.Color{Brightness: 20, Kelvin: 3500}},
+			{Serial: serial0, Label: "moon", Group: "tv", Location: "home", Color: device.Color{Brightness: 5, Saturation: 40, Kelvin: 3500}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: serial1, Label: "luna", Group: "living room", Location: "home", Color: device.Color{Brightness: 50, Saturation: 60, Kelvin: 3500}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: serial2, Label: "neon", Group: "living room", Location: "home", Color: device.Color{Brightness: 95, Saturation: 95, Kelvin: 8700}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: serial3, Label: "filo", Group: "tv", Location: "home", Color: device.Color{Brightness: 20, Saturation: 5, Kelvin: 2600}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
 		}
 	)
 
@@ -262,6 +262,62 @@ func TestParse(t *testing.T) {
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
 							Cycles: 1, Period: 1, SetBrightness: true,
 							Color: packets.LightHsbk{Brightness: 655},
+						}),
+					},
+				},
+			},
+		},
+		"relative temperature warmer": {
+			input: "luna warmer",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetKelvin: true,
+							Color: packets.LightHsbk{Kelvin: 4000},
+						}),
+					},
+				},
+			},
+		},
+		"relative temperature cooler with explicit amount clamps to range": {
+			input: "filo cooler 500%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial3},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetKelvin: true,
+							Color: packets.LightHsbk{Kelvin: 2500},
+						}),
+					},
+				},
+			},
+		},
+		"relative saturation softer": {
+			input: "luna softer",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true,
+							Color: packets.LightHsbk{Saturation: 32768},
+						}),
+					},
+				},
+			},
+		},
+		"relative saturation vivid clamps to max": {
+			input: "neon vivid 20%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial2},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true,
+							Color: packets.LightHsbk{Saturation: 65535},
 						}),
 					},
 				},
