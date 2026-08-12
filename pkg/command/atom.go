@@ -213,11 +213,12 @@ func relativePropertyToken(t token) (relativePropertyWord, bool) {
 	if t.Suffix == "" {
 		return relativePropertyWord{}, false
 	}
-	kind, ok := relativePropertyPhraseWords[t.Suffix]
+	word, ok := relativePropertyPhraseWords[t.Suffix]
 	if !ok {
 		return relativePropertyWord{}, false
 	}
-	return relativePropertyWord{Kind: kind, Delta: float64(t.Value) * 10}, true
+	word.Delta *= float64(t.Value)
+	return word, true
 }
 
 func (w relativePropertyWord) setDelta(delta float64, a *intentAtom) {

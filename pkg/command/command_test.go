@@ -351,6 +351,62 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		"relative brightness phrase increases": {
+			input: "luna more bright",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetBrightness: true,
+							Color: packets.LightHsbk{Brightness: 39321},
+						}),
+					},
+				},
+			},
+		},
+		"relative temperature phrase decreases warmth": {
+			input: "luna less warm",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetKelvin: true,
+							Color: packets.LightHsbk{Kelvin: 3000},
+						}),
+					},
+				},
+			},
+		},
+		"relative temperature phrase reverses cooling": {
+			input: "luna less cool 1000",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetKelvin: true,
+							Color: packets.LightHsbk{Kelvin: 4500},
+						}),
+					},
+				},
+			},
+		},
+		"relative saturation phrase reverses pastel": {
+			input: "filo less pastel",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial3},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true,
+							Color: packets.LightHsbk{Saturation: 9830},
+						}),
+					},
+				},
+			},
+		},
 		"multiple property words with terminating token": {
 			input: "set 000000000000 to 10% sat, 180 hue, 4000k and switch off. turn on luna to 10% brightness and 5000 kelvin",
 			want: []Command{

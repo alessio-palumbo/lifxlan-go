@@ -158,6 +158,26 @@ func Test_buildIntentAtoms(t *testing.T) {
 				{Kind: intentAtomSelector, Targets: selectors["luna"], PrevKind: intentAtomAction},
 			},
 		},
+		"relative brightness phrase": {
+			tokens: []token{
+				{Raw: "luna", Kind: tokenSelector},
+				{Raw: "less bright", Kind: tokenRelativeProperty, Value: -1, Suffix: "bright"},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomSelector, Targets: selectors["luna"], NextKind: intentAtomAction},
+				{Kind: intentAtomAction, Action: &action{BrightnessDelta: ptr(float64(-10))}, PrevKind: intentAtomSelector},
+			},
+		},
+		"relative temperature phrase reverses base meaning": {
+			tokens: []token{
+				{Raw: "less cool", Kind: tokenRelativeProperty, Value: -1, Suffix: "cool"},
+				{Raw: "luna", Kind: tokenSelector},
+			},
+			want: []intentAtom{
+				{Kind: intentAtomAction, Action: &action{KelvinDelta: ptr(500)}, NextKind: intentAtomSelector},
+				{Kind: intentAtomSelector, Targets: selectors["luna"], PrevKind: intentAtomAction},
+			},
+		},
 		"single target, multiple actions": {
 			tokens: []token{
 				{Raw: "luna", Kind: tokenSelector},

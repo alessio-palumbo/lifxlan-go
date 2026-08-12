@@ -57,10 +57,18 @@ var relativePropertyModifiers = map[string]float64{
 	"more": 1,
 }
 
-var relativePropertyPhraseWords = map[string]relativePropertyKind{
-	"intense":   relativePropertySaturation,
-	"saturated": relativePropertySaturation,
-	"vivid":     relativePropertySaturation,
+var relativePropertyPhraseWords = map[string]relativePropertyWord{
+	"bright":    {Kind: relativePropertyBrightness, Delta: 10},
+	"cool":      {Kind: relativePropertyKelvin, Delta: -500},
+	"deep":      {Kind: relativePropertySaturation, Delta: 10},
+	"intense":   {Kind: relativePropertySaturation, Delta: 10},
+	"muted":     {Kind: relativePropertySaturation, Delta: -10},
+	"pastel":    {Kind: relativePropertySaturation, Delta: -10},
+	"saturated": {Kind: relativePropertySaturation, Delta: 10},
+	"soft":      {Kind: relativePropertySaturation, Delta: -10},
+	"strong":    {Kind: relativePropertySaturation, Delta: 10},
+	"vivid":     {Kind: relativePropertySaturation, Delta: 10},
+	"warm":      {Kind: relativePropertyKelvin, Delta: 500},
 }
 
 var relativePropertyWords = map[string]relativePropertyWord{
@@ -73,7 +81,6 @@ var relativePropertyWords = map[string]relativePropertyWord{
 	"raise":    {Kind: relativePropertyBrightness, Delta: 10},
 
 	"muted":  {Kind: relativePropertySaturation, Delta: -10},
-	"pastel": {Kind: relativePropertySaturation, Delta: -10},
 	"soften": {Kind: relativePropertySaturation, Delta: -10},
 	"softer": {Kind: relativePropertySaturation, Delta: -10},
 	"washed": {Kind: relativePropertySaturation, Delta: -10},
