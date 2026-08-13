@@ -116,7 +116,7 @@ func (p *CommandParser) tokenize(input string) []string {
 
 	// Clean up any non alphanumeric character, including leading and trailing punctuation.
 	f := func(c rune) bool {
-		return !unicode.IsLetter(c) && !unicode.IsNumber(c)
+		return !unicode.IsLetter(c) && !unicode.IsNumber(c) && c != '%'
 	}
 
 	// Split input into words
@@ -155,7 +155,7 @@ func (p *CommandParser) buildCommands(intents []intent) []Command {
 			continue
 		}
 
-		cmds = append(cmds, buildCommand(c.Action, c.Targets))
+		cmds = append(cmds, buildCommandsForTargets(c.Action, c.Targets)...)
 	}
 
 	return cmds
@@ -180,13 +180,51 @@ func (p *CommandParser) buildRelativePropertyCommands(c intent) []Command {
 			a.Kelvin = &kelvin
 			a.KelvinDelta = nil
 		}
-		cmds = append(cmds, buildCommand(&a, []*device.Device{target}))
+		cmds = append(cmds, buildCommandsForTargets(&a, []*device.Device{target})...)
 	}
 	return cmds
 }
 
-func buildCommand(a *action, targets []*device.Device) Command {
+func buildCommandsForTargets(a *action, targets []*device.Device) []Command {
+	if !shouldInferPowerOn(a) {
+		return nonEmptyCommands(buildCommand(a, targets, false))
+	}
+
+	var offTargets, onTargets []*device.Device
+	for _, target := range targets {
+		if target.PoweredOn {
+			onTargets = append(onTargets, target)
+		} else {
+			offTargets = append(offTargets, target)
+		}
+	}
+
+	var cmds []Command
+	if len(offTargets) > 0 {
+		cmds = append(cmds, nonEmptyCommands(buildCommand(a, offTargets, true))...)
+	}
+	if len(onTargets) > 0 {
+		cmds = append(cmds, nonEmptyCommands(buildCommand(a, onTargets, false))...)
+	}
+	return cmds
+}
+
+func shouldInferPowerOn(a *action) bool {
+	return a.Power == nil && a.changesVisibleState()
+}
+
+func nonEmptyCommands(cmd Command) []Command {
+	if len(cmd.Msgs) == 0 || len(cmd.Targets) == 0 {
+		return nil
+	}
+	return []Command{cmd}
+}
+
+func buildCommand(a *action, targets []*device.Device, inferPowerOn bool) Command {
 	cmd := Command{Targets: dedupeSerials(targets)}
+	if inferPowerOn || (a.Power != nil && *a.Power) {
+		cmd.Msgs = append(cmd.Msgs, messages.SetPowerOn())
+	}
 	if a.Brightness != nil || a.Hue != nil || a.Saturation != nil || a.Kelvin != nil {
 		d := time.Millisecond
 		if a.Duration != nil {
@@ -194,12 +232,8 @@ func buildCommand(a *action, targets []*device.Device) Command {
 		}
 		cmd.Msgs = append(cmd.Msgs, messages.SetColor(a.Hue, a.Saturation, a.Brightness, a.Kelvin, d, 0))
 	}
-	if a.Power != nil {
-		if *a.Power {
-			cmd.Msgs = append(cmd.Msgs, messages.SetPowerOn())
-		} else {
-			cmd.Msgs = append(cmd.Msgs, messages.SetPowerOff())
-		}
+	if a.Power != nil && !*a.Power {
+		cmd.Msgs = append(cmd.Msgs, messages.SetPowerOff())
 	}
 	return cmd
 }

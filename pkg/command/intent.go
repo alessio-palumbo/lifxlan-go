@@ -23,12 +23,15 @@ type action struct {
 	Kelvin          *uint16
 	KelvinDelta     *int
 	Duration        *time.Duration
+
+	InferredBrightnessCount int
 }
 
 // Mergeaction applies an action to any unset field
 func (m *intent) Mergeaction(a *action) {
 	if m.Action == nil {
 		m.Action = a
+		return
 	}
 	if m.Action.Power == nil && a.Power != nil {
 		m.Action.Power = a.Power
@@ -36,8 +39,21 @@ func (m *intent) Mergeaction(a *action) {
 	if m.Action.Hue == nil && a.Hue != nil {
 		m.Action.Hue = a.Hue
 	}
-	if m.Action.Brightness == nil && a.Brightness != nil {
-		m.Action.Brightness = a.Brightness
+	if a.InferredBrightnessCount > 0 {
+		if m.Action.Brightness != nil && m.Action.InferredBrightnessCount == 0 {
+			return
+		}
+		m.Action.InferredBrightnessCount += a.InferredBrightnessCount
+		if m.Action.Brightness == nil {
+			m.Action.Brightness = a.Brightness
+		} else if m.Action.InferredBrightnessCount > 1 {
+			m.Action.Brightness = nil
+		}
+	} else if a.Brightness != nil {
+		if m.Action.Brightness == nil || m.Action.InferredBrightnessCount > 0 {
+			m.Action.Brightness = a.Brightness
+			m.Action.InferredBrightnessCount = 0
+		}
 	}
 	if m.Action.BrightnessDelta == nil && a.BrightnessDelta != nil {
 		m.Action.BrightnessDelta = a.BrightnessDelta
@@ -118,4 +134,8 @@ func peek(tokens []token, i int) (token, bool) {
 
 func (a *action) hasRelativeProperties() bool {
 	return a.BrightnessDelta != nil || a.SaturationDelta != nil || a.KelvinDelta != nil
+}
+
+func (a *action) changesVisibleState() bool {
+	return a.Brightness != nil || a.BrightnessDelta != nil || a.Hue != nil || a.Saturation != nil || a.SaturationDelta != nil || a.Kelvin != nil || a.KelvinDelta != nil
 }

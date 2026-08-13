@@ -18,10 +18,10 @@ func TestParse(t *testing.T) {
 		serial3 = device.Serial([8]byte{0, 0, 0, 0, 0, 3})
 
 		devices = []device.Device{
-			{Serial: serial0, Label: "moon", Group: "tv", Location: "home", Color: device.Color{Brightness: 5, Saturation: 40, Kelvin: 3500}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
-			{Serial: serial1, Label: "luna", Group: "living room", Location: "home", Color: device.Color{Brightness: 50, Saturation: 60, Kelvin: 3500}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
-			{Serial: serial2, Label: "neon", Group: "living room", Location: "home", Color: device.Color{Brightness: 95, Saturation: 95, Kelvin: 8700}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
-			{Serial: serial3, Label: "filo", Group: "tv", Location: "home", Color: device.Color{Brightness: 20, Saturation: 5, Kelvin: 2600}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: serial0, Label: "moon", Group: "tv", Location: "home", Color: device.Color{Brightness: 5, Saturation: 40, Kelvin: 3500}, PoweredOn: true, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: serial1, Label: "luna", Group: "living room", Location: "home", Color: device.Color{Brightness: 50, Saturation: 60, Kelvin: 3500}, PoweredOn: true, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: serial2, Label: "neon", Group: "living room", Location: "home", Color: device.Color{Brightness: 95, Saturation: 95, Kelvin: 8700}, PoweredOn: true, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: serial3, Label: "filo", Group: "tv", Location: "home", Color: device.Color{Brightness: 20, Saturation: 5, Kelvin: 2600}, PoweredOn: true, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
 		}
 	)
 
@@ -198,6 +198,124 @@ func TestParse(t *testing.T) {
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
 							Cycles: 1, Period: 1, SetBrightness: true,
 							Color: packets.LightHsbk{Brightness: 19661},
+						}),
+					},
+				},
+			},
+		},
+		"bare percentage after target infers brightness": {
+			input: "luna 35%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetBrightness: true,
+							Color: packets.LightHsbk{Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"bare percentage after filler infers brightness": {
+			input: "luna at 35%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetBrightness: true,
+							Color: packets.LightHsbk{Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"bare percentage combines with color": {
+			input: "blue luna 20%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true, SetBrightness: true,
+							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535, Brightness: device.ConvertExternalToDeviceValue(20, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"bare percentage combines with white temperature": {
+			input: "luna warm white at 35%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true, SetBrightness: true,
+							Color: packets.LightHsbk{Saturation: 0, Kelvin: 2700, Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"turn filler with bare percentage": {
+			input: "turn luna warm white at 35%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true, SetBrightness: true,
+							Color: packets.LightHsbk{Saturation: 0, Kelvin: 2700, Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"explicit brightness keeps percentage meaning": {
+			input: "luna brightness 35%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetBrightness: true,
+							Color: packets.LightHsbk{Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"explicit saturation keeps percentage meaning": {
+			input: "luna saturation 35%",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true,
+							Color: packets.LightHsbk{Saturation: device.ConvertExternalToDeviceValue(35, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"bare percentage without target is ignored": {
+			input: "35%",
+		},
+		"multiple bare percentages are ambiguous": {
+			input: "luna 35% 40%",
+		},
+		"kelvin number is not bare brightness": {
+			input: "luna 4000k",
+			want: []Command{
+				{
+					Targets: []device.Serial{serial1},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetKelvin: true,
+							Color: packets.LightHsbk{Kelvin: 4000},
 						}),
 					},
 				},
@@ -536,11 +654,213 @@ func TestParse(t *testing.T) {
 				{
 					Targets: []device.Serial{serial1},
 					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.DeviceSetPower{Level: 65535}),
 						protocol.NewMessage(&packets.LightSetWaveformOptional{
 							Cycles: 1, Period: 1, SetBrightness: true, SetKelvin: true,
 							Color: packets.LightHsbk{Brightness: 6554, Kelvin: 5000},
 						}),
-						protocol.NewMessage(&packets.DeviceSetPower{Level: 65535}),
+					},
+				},
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			cmdParser := NewCommandParser(devices)
+			got := cmdParser.Parse(tc.input)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestParseInferredPower(t *testing.T) {
+	var (
+		deskSerial  = device.Serial([8]byte{0, 0, 0, 0, 0, 10})
+		shelfSerial = device.Serial([8]byte{0, 0, 0, 0, 0, 11})
+		floorSerial = device.Serial([8]byte{0, 0, 0, 0, 0, 12})
+		stripSerial = device.Serial([8]byte{0, 0, 0, 0, 0, 13})
+		barSerial   = device.Serial([8]byte{0, 0, 0, 0, 0, 14})
+		spotSerial  = device.Serial([8]byte{0, 0, 0, 0, 0, 15})
+
+		devices = []device.Device{
+			{Serial: deskSerial, Label: "desk", Group: "office", Location: "work", PoweredOn: false, Color: device.Color{Brightness: 50, Saturation: 60, Kelvin: 3500}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: shelfSerial, Label: "shelf", Group: "office", Location: "work", PoweredOn: true, Color: device.Color{Brightness: 70, Saturation: 50, Kelvin: 4000}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: floorSerial, Label: "floor", Group: "studio", Location: "work", PoweredOn: false, Color: device.Color{Brightness: 30, Saturation: 40, Kelvin: 3000}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: stripSerial, Label: "strip", Group: "studio", Location: "work", PoweredOn: false, Color: device.Color{Brightness: 35, Saturation: 45, Kelvin: 3200}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: barSerial, Label: "bar", Group: "kitchen", Location: "home", PoweredOn: true, Color: device.Color{Brightness: 80, Saturation: 50, Kelvin: 4000}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+			{Serial: spotSerial, Label: "spot", Group: "kitchen", Location: "home", PoweredOn: true, Color: device.Color{Brightness: 85, Saturation: 55, Kelvin: 4100}, ColorProperties: device.ColorProperties{TemperatureRange: device.TemperatureRange{Min: 2500, Max: 9000}}},
+		}
+
+		powerOn = protocol.NewMessage(&packets.DeviceSetPower{Level: 65535})
+	)
+
+	testCases := map[string]struct {
+		input string
+		want  []Command
+	}{
+		"off device brightness": {
+			input: "desk brightness 35%",
+			want: []Command{{
+				Targets: []device.Serial{deskSerial},
+				Msgs: []*protocol.Message{
+					powerOn,
+					protocol.NewMessage(&packets.LightSetWaveformOptional{
+						Cycles: 1, Period: 1, SetBrightness: true,
+						Color: packets.LightHsbk{Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+					}),
+				},
+			}},
+		},
+		"off device named color": {
+			input: "desk blue",
+			want: []Command{{
+				Targets: []device.Serial{deskSerial},
+				Msgs: []*protocol.Message{
+					powerOn,
+					protocol.NewMessage(&packets.LightSetWaveformOptional{
+						Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
+						Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
+					}),
+				},
+			}},
+		},
+		"off device white temperature": {
+			input: "desk warm white",
+			want: []Command{{
+				Targets: []device.Serial{deskSerial},
+				Msgs: []*protocol.Message{
+					powerOn,
+					protocol.NewMessage(&packets.LightSetWaveformOptional{
+						Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true,
+						Color: packets.LightHsbk{Saturation: 0, Kelvin: 2700},
+					}),
+				},
+			}},
+		},
+		"off device relative brightness": {
+			input: "desk dim",
+			want: []Command{{
+				Targets: []device.Serial{deskSerial},
+				Msgs: []*protocol.Message{
+					powerOn,
+					protocol.NewMessage(&packets.LightSetWaveformOptional{
+						Cycles: 1, Period: 1, SetBrightness: true,
+						Color: packets.LightHsbk{Brightness: device.ConvertExternalToDeviceValue(40, 100)},
+					}),
+				},
+			}},
+		},
+		"on device visual action": {
+			input: "shelf blue",
+			want: []Command{{
+				Targets: []device.Serial{shelfSerial},
+				Msgs: []*protocol.Message{
+					protocol.NewMessage(&packets.LightSetWaveformOptional{
+						Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
+						Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
+					}),
+				},
+			}},
+		},
+		"explicit on with visual action": {
+			input: "desk on blue",
+			want: []Command{{
+				Targets: []device.Serial{deskSerial},
+				Msgs: []*protocol.Message{
+					powerOn,
+					protocol.NewMessage(&packets.LightSetWaveformOptional{
+						Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
+						Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
+					}),
+				},
+			}},
+		},
+		"explicit off with visual action": {
+			input: "desk off blue",
+			want: []Command{{
+				Targets: []device.Serial{deskSerial},
+				Msgs: []*protocol.Message{
+					protocol.NewMessage(&packets.LightSetWaveformOptional{
+						Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
+						Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
+					}),
+					protocol.NewMessage(&packets.DeviceSetPower{Level: 0}),
+				},
+			}},
+		},
+		"turn filler without action": {
+			input: "turn desk",
+		},
+		"mixed group splits by power state": {
+			input: "office warm white at 35%",
+			want: []Command{
+				{
+					Targets: []device.Serial{deskSerial},
+					Msgs: []*protocol.Message{
+						powerOn,
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true, SetBrightness: true,
+							Color: packets.LightHsbk{Saturation: 0, Kelvin: 2700, Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+						}),
+					},
+				},
+				{
+					Targets: []device.Serial{shelfSerial},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true, SetBrightness: true,
+							Color: packets.LightHsbk{Saturation: 0, Kelvin: 2700, Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+						}),
+					},
+				},
+			},
+		},
+		"all off group stays grouped": {
+			input: "studio warm white at 35%",
+			want: []Command{{
+				Targets: []device.Serial{floorSerial, stripSerial},
+				Msgs: []*protocol.Message{
+					powerOn,
+					protocol.NewMessage(&packets.LightSetWaveformOptional{
+						Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true, SetBrightness: true,
+						Color: packets.LightHsbk{Saturation: 0, Kelvin: 2700, Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+					}),
+				},
+			}},
+		},
+		"all on group stays grouped": {
+			input: "kitchen warm white at 35%",
+			want: []Command{{
+				Targets: []device.Serial{barSerial, spotSerial},
+				Msgs: []*protocol.Message{
+					protocol.NewMessage(&packets.LightSetWaveformOptional{
+						Cycles: 1, Period: 1, SetSaturation: true, SetKelvin: true, SetBrightness: true,
+						Color: packets.LightHsbk{Saturation: 0, Kelvin: 2700, Brightness: device.ConvertExternalToDeviceValue(35, 100)},
+					}),
+				},
+			}},
+		},
+		"sequential commands use each target power state": {
+			input: "desk blue then shelf blue",
+			want: []Command{
+				{
+					Targets: []device.Serial{deskSerial},
+					Msgs: []*protocol.Message{
+						powerOn,
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
+							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
+						}),
+					},
+				},
+				{
+					Targets: []device.Serial{shelfSerial},
+					Msgs: []*protocol.Message{
+						protocol.NewMessage(&packets.LightSetWaveformOptional{
+							Cycles: 1, Period: 1, SetHue: true, SetSaturation: true,
+							Color: packets.LightHsbk{Hue: 45510, Saturation: 65535},
+						}),
 					},
 				},
 			},

@@ -48,6 +48,14 @@ func (i *intentAtom) setBrightness(v float64) {
 	i.Action.Brightness = &v
 }
 
+func (i *intentAtom) setInferredBrightness(v float64) {
+	if i.Action == nil {
+		i.Action = new(action)
+	}
+	i.Action.Brightness = &v
+	i.Action.InferredBrightnessCount = 1
+}
+
 func (i *intentAtom) setBrightnessDelta(v float64) {
 	if i.Action == nil {
 		i.Action = new(action)
@@ -146,6 +154,8 @@ func (p *CommandParser) buildIntentAtoms(tokens []token) []intentAtom {
 				}
 				if consumed == 1 {
 					i++
+				} else if consumed == 2 {
+					tokens[i+2].Kind = tokenUnknown
 				}
 			}
 			word.setDelta(delta, &a)
@@ -162,6 +172,10 @@ func (p *CommandParser) buildIntentAtoms(tokens []token) []intentAtom {
 					durationWords[nextToken.Raw](t.Value, &a)
 					i++
 				}
+			}
+			if a.Kind == intentAtomUnknown && isPercentToken(t) {
+				a.Kind = intentAtomAction
+				a.setInferredBrightness(normalizePercent(t.Value))
 			}
 
 		case tokenNumberD:
@@ -199,7 +213,7 @@ func relativeActionAmount(tokens []token, i int) (int, int, bool) {
 		}
 		if t.Kind == tokenSelector {
 			if next, ok := peek(tokens, i+1); ok && next.Kind == tokenNumber {
-				return next.Value, 0, true
+				return next.Value, 2, true
 			}
 		}
 	}

@@ -3,6 +3,7 @@
 `pkg/command` converts short user-facing text commands into LIFX protocol messages.
 It does not send messages, manage devices, keep UI state, or remember previous commands.
 Callers provide the current device list, parse text into `Command` values, then decide how to send the generated messages.
+Because relative commands and power inference use `device.Device` state, callers should pass current device state when constructing the parser.
 
 ```go
 parser := command.NewCommandParser(devices)
@@ -39,6 +40,12 @@ Multiple commands can be separated with punctuation or `then`:
 desk blue then bedroom off
 ```
 
+Filler words such as `turn` and `at` carry no meaning by themselves:
+
+```text
+turn desk warm white at 35%
+```
+
 ## Absolute Actions
 
 Supported absolute actions include power, hue/color, brightness, saturation, kelvin, and duration.
@@ -52,6 +59,17 @@ desk 4000k
 desk saturation 50%
 desk red in 2s
 ```
+
+A single bare percentage in an otherwise valid targeted command is treated as brightness:
+
+```text
+desk 35%
+desk at 35%
+desk warm white at 35%
+blue desk 20%
+```
+
+Multiple bare percentages are treated as ambiguous and are not inferred as brightness. Explicit properties keep their normal meaning, so `desk saturation 35%` still sets saturation.
 
 Named color words set hue and saturation. Styled color phrases set hue from the color word and saturation from the style word:
 
@@ -121,6 +139,18 @@ desk less cool
 ```
 
 Relative Kelvin changes do not modify saturation. If a bulb is currently showing a saturated color, `warmer` and `cooler` may update state without a visible change. Use `warm white`, `cool white`, or another white-temperature word when the user intent is a visible white temperature.
+
+## Power Inference
+
+Visual state changes automatically include a power-on message for targets whose supplied `device.Device.PoweredOn` is `false`. Visual changes include brightness, hue/color, saturation, Kelvin, white-temperature words, styled colors, and relative brightness/saturation/Kelvin changes.
+
+```text
+desk blue
+desk warm white at 35%
+desk brighter
+```
+
+If all targets need the same messages, they stay grouped. If a selector contains mixed powered-on and powered-off devices, parsing may return separate `Command` values so off devices receive power-on while already-on devices do not receive redundant power messages. Explicit `off` wins and never infers power-on; explicit `on` does not duplicate power-on.
 
 ## Current Limits
 

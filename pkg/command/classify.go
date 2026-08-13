@@ -154,6 +154,10 @@ func tokenTypeForSuffix(word string, suffixes ...string) (int, string, bool) {
 	return 0, "", false
 }
 
+func isPercentToken(t token) bool {
+	return strings.HasSuffix(t.Raw, "%")
+}
+
 func peekWord(words []string, i int) (string, bool) {
 	if i >= len(words) {
 		return "", false
