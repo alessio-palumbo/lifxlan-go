@@ -54,6 +54,8 @@ const (
 	EffectWave EffectID = "wave"
 	// EffectConcentricFrames identifies the ConcentricFrames matrix effect.
 	EffectConcentricFrames EffectID = "concentric_frames"
+	// EffectFlow identifies the Flow effect.
+	EffectFlow EffectID = "flow"
 )
 
 var (
@@ -174,6 +176,28 @@ func init() {
 				return nil, err
 			}
 			return NewSweep(SweepConfig{Capabilities: caps, Palette: palette}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectFlow,
+		Label:       "Flow",
+		Description: "Travel a brightness crest across the surface with scrolling palette colors.",
+		DeviceKinds: flowLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			flowAxisParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			axis, err := flowAxisParam(config.Params, "axis")
+			if err != nil {
+				return nil, err
+			}
+			return NewFlow(FlowConfig{Capabilities: caps, Palette: palette, Axis: axis}), nil
 		},
 	})
 
@@ -643,6 +667,19 @@ func directionParam(params map[string]any, key string) (Direction, error) {
 	}
 }
 
+func flowAxisParam(params map[string]any, key string) (FlowAxis, error) {
+	choice, err := ChoiceParam(params, key)
+	if err != nil {
+		return FlowAxisHorizontal, err
+	}
+	switch FlowAxis(choice) {
+	case FlowAxisHorizontal, FlowAxisVertical, FlowAxisDiagonal:
+		return FlowAxis(choice), nil
+	default:
+		return FlowAxisHorizontal, fmt.Errorf("%w: parameter %q has invalid choice %q", ErrInvalidConfig, key, choice)
+	}
+}
+
 func requiredParam(params map[string]any, key string) (any, error) {
 	value, ok := params[key]
 	if !ok || value == nil {
@@ -948,6 +985,20 @@ func directionParamDefinition() ParamDefinition {
 			{Value: "outwards", Label: "Outwards"},
 			{Value: "in_out", Label: "In Out"},
 			{Value: "out_in", Label: "Out In"},
+		},
+	}
+}
+
+func flowAxisParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "axis",
+		Label:   "Axis",
+		Kind:    ParamChoiceKind,
+		Default: string(FlowAxisHorizontal),
+		Choices: []ParamChoice{
+			{Value: string(FlowAxisHorizontal), Label: "Horizontal"},
+			{Value: string(FlowAxisVertical), Label: "Vertical"},
+			{Value: string(FlowAxisDiagonal), Label: "Diagonal"},
 		},
 	}
 }
