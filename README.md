@@ -58,6 +58,69 @@ logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 ctrl, err := controller.New(controller.WithLogger(logger))
 ```
 
+## Target Selection
+
+`pkg/device` includes small selector helpers for apps that let users refer to
+devices by serial, label, group, location, or `all`.
+
+```go
+devices := ctrl.GetDevices()
+serials := device.ResolveSelectorSerials("desk, office", devices)
+
+for _, serial := range serials {
+	err := ctrl.Send(serial, messages.SetPowerOn())
+	if err != nil {
+		return err
+	}
+}
+```
+
+Selectors are comma-separated, case-insensitive exact matches. Results preserve
+selector order, preserve device discovery order inside each selector, and
+de-duplicate serials.
+
+## State Snapshot And Restore
+
+Controllers can capture and restore the current light state for one or more
+devices. This is useful when an app runs a temporary scene, effect, or
+choreography and wants to put lights back afterwards.
+
+```go
+ctx := context.Background()
+serials := device.ResolveSelectorSerials("desk, office", ctrl.GetDevices())
+
+snapshot, err := ctrl.CaptureStateSnapshot(ctx, serials, controller.SnapshotOptions{
+	Timeout: 3 * time.Second,
+})
+if err != nil {
+	return err
+}
+
+defer ctrl.RestoreStateSnapshot(context.Background(), snapshot, controller.RestoreOptions{
+	Duration: 500 * time.Millisecond,
+	Attempts: 2,
+})
+```
+
+Snapshot capture requests the state needed for each light type: power and color
+for single-zone lights, zone colors for multizone lights, and matrix chain colors
+for matrix lights. Restore replays the matching protocol messages later.
+
+The library handles the LIFX-specific state shape, while applications still own
+policy decisions such as when a snapshot is stale, how long to wait before
+starting an effect, and whether to retry restoration.
+
+## Color Helpers
+
+`device.Color` stores hue, saturation, and brightness as user-facing
+percentages/degrees. Helpers are available for common brightness rules:
+
+```go
+device.ClampBrightness(value)        // clamp to [0, 100]
+device.ClampVisibleBrightness(value) // clamp to [1, 100]
+device.ScaleBrightness(value, 0.5)   // scale and keep a visible brightness
+```
+
 ## Effects
 
 The `pkg/effects` package generates deterministic, target-free frames that can be used live or rendered offline.
