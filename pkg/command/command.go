@@ -44,9 +44,6 @@ import (
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 )
 
-// selectorAll selects all the devices as targets.
-var selectorAll = "all"
-
 // nextCommandToken defines a break input.
 var nextCommandToken = "next"
 
@@ -267,7 +264,7 @@ func (p *CommandParser) selectorsFromDevices(devices []device.Device) {
 			p.selectorsLabels[location] = d.Location
 		}
 
-		p.selectors[selectorAll] = append(p.selectors[selectorAll], d)
+		p.selectors[device.SelectorAll] = append(p.selectors[device.SelectorAll], d)
 	}
 }
 
