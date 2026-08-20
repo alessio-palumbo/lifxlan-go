@@ -104,12 +104,13 @@ func (f *Flow) FrameAtPhase(phase float64, duration time.Duration) Frame {
 	}
 
 	head := phase * float64(span)
+	offset := int(math.Floor(head))
 	colors := make([]Color, 0, size)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			position := flowPosition(axis, x, y)
 
-			color := stops[wrapIndex(position+int(head), len(stops))]
+			color := stops[wrapIndex(position+offset, len(stops))]
 			color.Brightness = scaleBrightness(color.Brightness, f.level(head, position, span))
 			colors = append(colors, color)
 		}

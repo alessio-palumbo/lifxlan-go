@@ -187,6 +187,8 @@ func init() {
 		Params: []ParamDefinition{
 			paletteParamDefinition(defaultPalette),
 			flowAxisParamDefinition(),
+			flowPeriodParamDefinition(),
+			flowFloorParamDefinition(),
 		},
 		New: func(config Config, caps Capabilities) (Effect, error) {
 			palette, err := paletteParam(config.Params, "palette")
@@ -197,7 +199,15 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			return NewFlow(FlowConfig{Capabilities: caps, Palette: palette, Axis: axis}), nil
+			period, err := DurationParam(config.Params, "period")
+			if err != nil {
+				return nil, err
+			}
+			floor, err := NumberParam(config.Params, "floor")
+			if err != nil {
+				return nil, err
+			}
+			return NewFlow(FlowConfig{Capabilities: caps, Palette: palette, Axis: axis, Period: period, Floor: floor}), nil
 		},
 	})
 
@@ -1000,6 +1010,27 @@ func flowAxisParamDefinition() ParamDefinition {
 			{Value: string(FlowAxisVertical), Label: "Vertical"},
 			{Value: string(FlowAxisDiagonal), Label: "Diagonal"},
 		},
+	}
+}
+
+func flowPeriodParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "period",
+		Label:   "Period",
+		Kind:    ParamDuration,
+		Default: defaultFlowPeriod,
+	}
+}
+
+func flowFloorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "floor",
+		Label:   "Floor",
+		Kind:    ParamNumber,
+		Default: defaultFlowFloor,
+		Min:     float64Ptr(0.01),
+		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.05),
 	}
 }
 

@@ -109,6 +109,9 @@ func TestFlowRunsBackwards(t *testing.T) {
 	if !sameFrame(flow.FrameAtPhase(-0.25, time.Second), flow.FrameAtPhase(0.75, time.Second)) {
 		t.Fatal("negative phase should wrap to the equivalent forward position")
 	}
+	if !sameFrame(flow.FrameAtPhase(-0.1, time.Second), flow.FrameAtPhase(0.9, time.Second)) {
+		t.Fatal("fractional negative phase should wrap to the equivalent forward position")
+	}
 }
 
 func TestFlowAxisChangesTravel(t *testing.T) {
@@ -174,12 +177,24 @@ func TestFlowIsRegistered(t *testing.T) {
 	effect, err := New(Config{ID: EffectFlow, Params: map[string]any{
 		"palette": flowPalette(),
 		"axis":    string(FlowAxisDiagonal),
+		"period":  500 * time.Millisecond,
+		"floor":   0.5,
 	}}, matrixCapabilities(8, 8))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, ok := effect.(*Flow); !ok {
+	flow, ok := effect.(*Flow)
+	if !ok {
 		t.Fatalf("registry returned %T, want *Flow", effect)
+	}
+	if flow.cfg.Axis != FlowAxisDiagonal {
+		t.Fatalf("axis = %q, want %q", flow.cfg.Axis, FlowAxisDiagonal)
+	}
+	if flow.cfg.Period != 500*time.Millisecond {
+		t.Fatalf("period = %s, want 500ms", flow.cfg.Period)
+	}
+	if flow.cfg.Floor != 0.5 {
+		t.Fatalf("floor = %v, want 0.5", flow.cfg.Floor)
 	}
 
 	if _, err := New(Config{ID: EffectFlow, Params: map[string]any{
@@ -187,6 +202,13 @@ func TestFlowIsRegistered(t *testing.T) {
 		"axis":    "sideways",
 	}}, matrixCapabilities(8, 8)); err == nil {
 		t.Fatal("an unknown axis should be rejected")
+	}
+
+	if _, err := New(Config{ID: EffectFlow, Params: map[string]any{
+		"palette": flowPalette(),
+		"floor":   2,
+	}}, matrixCapabilities(8, 8)); err == nil {
+		t.Fatal("a floor above 1 should be rejected")
 	}
 }
 

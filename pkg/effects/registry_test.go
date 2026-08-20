@@ -44,6 +44,7 @@ func TestDefinitionsDeterministicAndIncludeBuiltins(t *testing.T) {
 		EffectWorm,
 		EffectWave,
 		EffectConcentricFrames,
+		EffectFlow,
 	} {
 		if !slices.Contains(ids, id) {
 			t.Fatalf("missing built-in definition %q from %#v", id, ids)
