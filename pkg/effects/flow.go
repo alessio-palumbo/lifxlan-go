@@ -14,11 +14,6 @@ const (
 	// a dimmed surface reads as motion; over an unlit one it reads as a lone dot
 	// crossing a dead strip.
 	defaultFlowFloor = 0.3
-	// minVisibleBrightness keeps a powered-on device from being driven to something
-	// indistinguishable from off, so brightness is treated as 1-100 rather than
-	// 0-100.
-	minVisibleBrightness = 1
-	maxBrightness        = 100
 )
 
 // FlowAxis is the axis a crest travels along. It is deliberately not called a
@@ -174,14 +169,7 @@ func flowSpan(axis FlowAxis, width, height int) int {
 }
 
 func scaleBrightness(brightness, level float64) float64 {
-	scaled := brightness * level
-	if scaled < minVisibleBrightness {
-		return minVisibleBrightness
-	}
-	if scaled > maxBrightness {
-		return maxBrightness
-	}
-	return scaled
+	return device.ScaleBrightness(brightness, level)
 }
 
 // flowLightTypes lists the surfaces a travelling crest makes sense on. A single

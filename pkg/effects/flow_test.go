@@ -59,10 +59,10 @@ func TestFlowNeverGoesBelowVisible(t *testing.T) {
 	for step := 0; step < 8; step++ {
 		frame := flow.FrameAtPhase(float64(step)/8, time.Second)
 		for i, color := range frame.Colors {
-			if color.Brightness < minVisibleBrightness {
+			if color.Brightness < device.MinVisibleBrightness {
 				t.Fatalf("phase %d cell %d has brightness %v, below the visible floor", step, i, color.Brightness)
 			}
-			if color.Brightness > maxBrightness {
+			if color.Brightness > device.MaxBrightness {
 				t.Fatalf("phase %d cell %d has brightness %v, above 100", step, i, color.Brightness)
 			}
 		}

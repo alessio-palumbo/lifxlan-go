@@ -7,6 +7,16 @@ import (
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
 
+const (
+	// MinBrightness is the minimum protocol brightness percentage.
+	MinBrightness = 0
+	// MinVisibleBrightness is the minimum brightness percentage that should still
+	// read as visibly powered on.
+	MinVisibleBrightness = 1
+	// MaxBrightness is the maximum protocol brightness percentage.
+	MaxBrightness = 100
+)
+
 // Color represent a HSBK Color.
 type Color struct {
 	Hue        float64
@@ -42,6 +52,23 @@ func (c Color) String() string {
 		return fmt.Sprintf("Brightness: %f%% Kelvin: %d", c.Brightness, c.Kelvin)
 	}
 	return fmt.Sprintf("Brightness: %f%%, Hue: %f, Saturation: %f%%", c.Brightness, c.Hue, c.Saturation)
+}
+
+// ClampBrightness clamps value to the valid protocol brightness percentage range.
+func ClampBrightness(value float64) float64 {
+	return max(MinBrightness, min(value, MaxBrightness))
+}
+
+// ClampVisibleBrightness clamps value to a brightness percentage that still reads
+// as visibly powered on.
+func ClampVisibleBrightness(value float64) float64 {
+	return max(MinVisibleBrightness, min(value, MaxBrightness))
+}
+
+// ScaleBrightness scales brightness by factor and clamps it to the visible
+// brightness range.
+func ScaleBrightness(brightness, factor float64) float64 {
+	return ClampVisibleBrightness(brightness * factor)
 }
 
 // HSBToRGB converts the color from Hue, Saturation, Brightness (HSB) format

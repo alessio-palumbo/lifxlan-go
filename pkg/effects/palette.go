@@ -1,5 +1,7 @@
 package effects
 
+import "github.com/alessio-palumbo/lifxlan-go/pkg/device"
+
 // DefaultColor is used when a palette does not define a requested color.
 var DefaultColor = Color{Hue: 220, Saturation: 100, Brightness: 100, Kelvin: 3500}
 
@@ -78,7 +80,7 @@ func WithBrightness(c Color, brightness float64) Color {
 
 // ClampPercent clamps value to the valid percentage range used by Color fields.
 func ClampPercent(value float64) float64 {
-	return max(0, min(value, 100))
+	return device.ClampBrightness(value)
 }
 
 func firstOr(colors []Color, fallback Color) Color {

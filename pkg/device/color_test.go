@@ -40,6 +40,78 @@ func TestNewColor(t *testing.T) {
 	}
 }
 
+func TestBrightnessHelpers(t *testing.T) {
+	tests := map[string]struct {
+		value       float64
+		wantClamp   float64
+		wantVisible float64
+	}{
+		"negative": {
+			value:       -1,
+			wantClamp:   0,
+			wantVisible: 1,
+		},
+		"zero": {
+			value:       0,
+			wantClamp:   0,
+			wantVisible: 1,
+		},
+		"in range": {
+			value:       42,
+			wantClamp:   42,
+			wantVisible: 42,
+		},
+		"above range": {
+			value:       101,
+			wantClamp:   100,
+			wantVisible: 100,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := ClampBrightness(tt.value); got != tt.wantClamp {
+				t.Fatalf("ClampBrightness = %v, want %v", got, tt.wantClamp)
+			}
+			if got := ClampVisibleBrightness(tt.value); got != tt.wantVisible {
+				t.Fatalf("ClampVisibleBrightness = %v, want %v", got, tt.wantVisible)
+			}
+		})
+	}
+}
+
+func TestScaleBrightness(t *testing.T) {
+	tests := map[string]struct {
+		brightness float64
+		factor     float64
+		want       float64
+	}{
+		"scales": {
+			brightness: 80,
+			factor:     0.5,
+			want:       40,
+		},
+		"keeps visible floor": {
+			brightness: 2,
+			factor:     0.01,
+			want:       1,
+		},
+		"clamps maximum": {
+			brightness: 80,
+			factor:     2,
+			want:       100,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := ScaleBrightness(tt.brightness, tt.factor); got != tt.want {
+				t.Fatalf("ScaleBrightness = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestToDeviceColor(t *testing.T) {
 	tests := []struct {
 		color    Color

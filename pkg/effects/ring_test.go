@@ -84,10 +84,10 @@ func TestRingUsesFloorAndVisibleBrightness(t *testing.T) {
 	frame := ring.FrameAtPhase(0.25, time.Second)
 
 	for i, color := range frame.Colors {
-		if color.Brightness < minVisibleBrightness {
+		if color.Brightness < device.MinVisibleBrightness {
 			t.Fatalf("cell %d has brightness %v, below visible floor", i, color.Brightness)
 		}
-		if color.Brightness > maxBrightness {
+		if color.Brightness > device.MaxBrightness {
 			t.Fatalf("cell %d has brightness %v, above 100", i, color.Brightness)
 		}
 	}
