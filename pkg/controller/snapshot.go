@@ -6,11 +6,16 @@ import (
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/messages"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
+	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
 
 const (
 	defaultSnapshotTimeout      = 3 * time.Second
 	defaultSnapshotPollInterval = 250 * time.Millisecond
+	defaultRestoreAttempts      = 1
+	defaultRestoreRetryDelay    = 120 * time.Millisecond
 )
 
 // SnapshotOptions configures state snapshot capture.
@@ -21,6 +26,17 @@ type SnapshotOptions struct {
 	// PollInterval is how often missing restorable state is requested. Zero uses
 	// the default poll interval.
 	PollInterval time.Duration
+}
+
+// RestoreOptions configures state snapshot restore.
+type RestoreOptions struct {
+	// Duration is the transition duration for color and light power restore.
+	Duration time.Duration
+	// Attempts is how many times each snapshot device is restored. Zero uses one
+	// attempt.
+	Attempts int
+	// RetryDelay is the delay between restore attempts. Zero uses the default.
+	RetryDelay time.Duration
 }
 
 // CaptureStateSnapshot requests and captures restorable cached state for serials.
@@ -63,6 +79,21 @@ func (c *Controller) CaptureStateSnapshot(ctx context.Context, serials []device.
 	}
 }
 
+// RestoreStateSnapshot restores color and power from snapshot.
+func (c *Controller) RestoreStateSnapshot(ctx context.Context, snapshot device.StateSnapshot, opts RestoreOptions) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	opts = normalizeRestoreOptions(opts)
+
+	for _, state := range snapshot.Devices {
+		if err := c.restoreDeviceState(ctx, state, opts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func normalizeSnapshotOptions(opts SnapshotOptions) SnapshotOptions {
 	if opts.Timeout <= 0 {
 		opts.Timeout = defaultSnapshotTimeout
@@ -71,6 +102,109 @@ func normalizeSnapshotOptions(opts SnapshotOptions) SnapshotOptions {
 		opts.PollInterval = defaultSnapshotPollInterval
 	}
 	return opts
+}
+
+func normalizeRestoreOptions(opts RestoreOptions) RestoreOptions {
+	if opts.Attempts <= 0 {
+		opts.Attempts = defaultRestoreAttempts
+	}
+	if opts.RetryDelay <= 0 {
+		opts.RetryDelay = defaultRestoreRetryDelay
+	}
+	return opts
+}
+
+func (c *Controller) restoreDeviceState(ctx context.Context, state device.DeviceStateSnapshot, opts RestoreOptions) error {
+	for attempt := 0; attempt < opts.Attempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := c.restoreDeviceStateOnce(state, opts.Duration); err != nil {
+			return err
+		}
+		if attempt == opts.Attempts-1 {
+			break
+		}
+		timer := time.NewTimer(opts.RetryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return nil
+}
+
+func (c *Controller) restoreDeviceStateOnce(state device.DeviceStateSnapshot, duration time.Duration) error {
+	if err := c.restoreSnapshotColors(state, duration); err != nil {
+		return err
+	}
+	return c.restoreSnapshotPower(state, duration)
+}
+
+func (c *Controller) restoreSnapshotColors(state device.DeviceStateSnapshot, duration time.Duration) error {
+	switch state.LightType {
+	case device.LightTypeMatrix:
+		if len(state.MatrixChains) > 0 {
+			return c.restoreMatrixSnapshotColors(state.Serial, state.MatrixWidth, state.MatrixChains, duration)
+		}
+	case device.LightTypeMultiZone:
+		if len(state.Zones) > 0 {
+			return c.sendSnapshotMessages(state.Serial, messages.SetMultizoneExtendedColors(0, state.Zones, duration)...)
+		}
+	}
+
+	hue := state.Color.Hue
+	saturation := state.Color.Saturation
+	brightness := state.Color.Brightness
+	kelvin := state.Color.Kelvin
+	return c.Send(state.Serial, messages.SetColor(&hue, &saturation, &brightness, &kelvin, duration, 0))
+}
+
+func (c *Controller) restoreMatrixSnapshotColors(serial device.Serial, width int, chains [][]packets.LightHsbk, duration time.Duration) error {
+	for chainIndex, colors := range chains {
+		if len(colors) == 0 {
+			continue
+		}
+		sendWidth := matrixRestoreWidth(width, len(colors))
+		if err := c.sendSnapshotMessages(serial, messages.SetMatrixColorsFromSlice(chainIndex, 1, sendWidth, colors, duration)...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Controller) restoreSnapshotPower(state device.DeviceStateSnapshot, duration time.Duration) error {
+	if state.PoweredOn {
+		if duration > 0 {
+			return c.Send(state.Serial, messages.SetPowerOn(duration))
+		}
+		return c.Send(state.Serial, messages.SetPowerOn())
+	}
+	if duration > 0 {
+		return c.Send(state.Serial, messages.SetPowerOff(duration))
+	}
+	return c.Send(state.Serial, messages.SetPowerOff())
+}
+
+func (c *Controller) sendSnapshotMessages(serial device.Serial, msgs ...*protocol.Message) error {
+	for _, msg := range msgs {
+		if err := c.Send(serial, msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func matrixRestoreWidth(width, colorCount int) int {
+	if width > 0 {
+		return width
+	}
+	if colorCount == 64 {
+		return 8
+	}
+	return max(colorCount, 1)
 }
 
 func uniqueSerials(serials []device.Serial) []device.Serial {

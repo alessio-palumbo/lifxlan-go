@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
 
@@ -174,6 +175,142 @@ func TestCaptureStateSnapshotRejectsEmptySerials(t *testing.T) {
 	}
 }
 
+func TestRestoreStateSnapshotRestoresSingleZoneColorThenPower(t *testing.T) {
+	mockClient := newMockClient()
+	serial := snapshotSerial(1)
+	ctrl := newSnapshotController(mockClient, device.Device{Serial: serial, Address: snapshotAddr(1)})
+	snapshot := device.StateSnapshot{Devices: []device.DeviceStateSnapshot{{
+		Serial:    serial,
+		PoweredOn: false,
+		Color:     device.Color{Hue: 120, Saturation: 80, Brightness: 60, Kelvin: 3500},
+		LightType: device.LightTypeSingleZone,
+	}}}
+
+	if err := ctrl.RestoreStateSnapshot(context.Background(), snapshot, RestoreOptions{Duration: 500 * time.Millisecond}); err != nil {
+		t.Fatal(err)
+	}
+
+	colorMsg := nextSent(t, mockClient)
+	colorPayload, ok := colorMsg.Payload.(*packets.LightSetWaveformOptional)
+	if !ok {
+		t.Fatalf("first payload = %T, want LightSetWaveformOptional", colorMsg.Payload)
+	}
+	if !colorPayload.SetHue || !colorPayload.SetSaturation || !colorPayload.SetBrightness || !colorPayload.SetKelvin {
+		t.Fatalf("color restore did not set all HSBK fields: %#v", colorPayload)
+	}
+	if colorPayload.Period != 500 {
+		t.Fatalf("color period = %d, want 500", colorPayload.Period)
+	}
+
+	powerMsg := nextSent(t, mockClient)
+	powerPayload, ok := powerMsg.Payload.(*packets.LightSetPower)
+	if !ok {
+		t.Fatalf("second payload = %T, want LightSetPower", powerMsg.Payload)
+	}
+	if powerPayload.Level != 0 || powerPayload.Duration != 500 {
+		t.Fatalf("power payload = %#v, want off duration 500", powerPayload)
+	}
+}
+
+func TestRestoreStateSnapshotRestoresMultiZoneColors(t *testing.T) {
+	mockClient := newMockClient()
+	serial := snapshotSerial(1)
+	ctrl := newSnapshotController(mockClient, device.Device{Serial: serial, Address: snapshotAddr(1)})
+	zoneColor := packets.LightHsbk{Hue: 1, Saturation: 2, Brightness: 3, Kelvin: 3500}
+	snapshot := device.StateSnapshot{Devices: []device.DeviceStateSnapshot{{
+		Serial:    serial,
+		PoweredOn: true,
+		LightType: device.LightTypeMultiZone,
+		Zones:     []packets.LightHsbk{zoneColor},
+	}}}
+
+	if err := ctrl.RestoreStateSnapshot(context.Background(), snapshot, RestoreOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	zoneMsg := nextSent(t, mockClient)
+	zonePayload, ok := zoneMsg.Payload.(*packets.MultiZoneExtendedSetColorZones)
+	if !ok {
+		t.Fatalf("first payload = %T, want MultiZoneExtendedSetColorZones", zoneMsg.Payload)
+	}
+	if zonePayload.Index != 0 || zonePayload.ColorsCount != 1 || zonePayload.Colors[0] != zoneColor {
+		t.Fatalf("zone payload = %#v", zonePayload)
+	}
+
+	powerMsg := nextSent(t, mockClient)
+	powerPayload, ok := powerMsg.Payload.(*packets.DeviceSetPower)
+	if !ok {
+		t.Fatalf("second payload = %T, want DeviceSetPower", powerMsg.Payload)
+	}
+	if powerPayload.Level != 65535 {
+		t.Fatalf("power level = %d, want 65535", powerPayload.Level)
+	}
+}
+
+func TestRestoreStateSnapshotRestoresMatrixChains(t *testing.T) {
+	mockClient := newMockClient()
+	serial := snapshotSerial(1)
+	ctrl := newSnapshotController(mockClient, device.Device{Serial: serial, Address: snapshotAddr(1)})
+	colors := make([]packets.LightHsbk, 64)
+	colors[0] = packets.LightHsbk{Hue: 1, Saturation: 2, Brightness: 3, Kelvin: 3500}
+	snapshot := device.StateSnapshot{Devices: []device.DeviceStateSnapshot{{
+		Serial:       serial,
+		PoweredOn:    true,
+		LightType:    device.LightTypeMatrix,
+		MatrixChains: [][]packets.LightHsbk{colors},
+	}}}
+
+	if err := ctrl.RestoreStateSnapshot(context.Background(), snapshot, RestoreOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	matrixMsg := nextSent(t, mockClient)
+	matrixPayload, ok := matrixMsg.Payload.(*packets.TileSet64)
+	if !ok {
+		t.Fatalf("first payload = %T, want TileSet64", matrixMsg.Payload)
+	}
+	if matrixPayload.TileIndex != 0 || matrixPayload.Length != 1 || matrixPayload.Rect.Width != 8 || matrixPayload.Colors[0] != colors[0] {
+		t.Fatalf("matrix payload = %#v", matrixPayload)
+	}
+	assertSentPayload(t, mockClient, uint16(packets.PayloadTypeDeviceSetPower))
+}
+
+func TestRestoreStateSnapshotRepeatsAttempts(t *testing.T) {
+	mockClient := newMockClient()
+	serial := snapshotSerial(1)
+	ctrl := newSnapshotController(mockClient, device.Device{Serial: serial, Address: snapshotAddr(1)})
+	snapshot := device.StateSnapshot{Devices: []device.DeviceStateSnapshot{{
+		Serial:    serial,
+		PoweredOn: true,
+		Color:     device.Color{Kelvin: 3500},
+		LightType: device.LightTypeSingleZone,
+	}}}
+
+	if err := ctrl.RestoreStateSnapshot(context.Background(), snapshot, RestoreOptions{Attempts: 2, RetryDelay: time.Millisecond}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := sentCount(mockClient); got != 4 {
+		t.Fatalf("sent messages = %d, want 4", got)
+	}
+}
+
+func TestRestoreStateSnapshotHonorsContextCancellation(t *testing.T) {
+	mockClient := newMockClient()
+	serial := snapshotSerial(1)
+	ctrl := newSnapshotController(mockClient, device.Device{Serial: serial, Address: snapshotAddr(1)})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := ctrl.RestoreStateSnapshot(ctx, device.StateSnapshot{Devices: []device.DeviceStateSnapshot{{Serial: serial}}}, RestoreOptions{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	if got := sentCount(mockClient); got != 0 {
+		t.Fatalf("sent messages = %d, want 0", got)
+	}
+}
+
 func newSnapshotController(mockClient *mockClient, devices ...device.Device) *Controller {
 	ctrl := &Controller{
 		client:   mockClient,
@@ -239,6 +376,29 @@ func waitSentPayload(mockClient *mockClient, payloadType uint16, timeout time.Du
 			}
 		case <-deadline.C:
 			return false
+		}
+	}
+}
+
+func nextSent(t *testing.T, mockClient *mockClient) *protocol.Message {
+	t.Helper()
+	select {
+	case msg := <-mockClient.sends:
+		return msg
+	case <-time.After(20 * time.Millisecond):
+		t.Fatal("timed out waiting for sent message")
+	}
+	return nil
+}
+
+func sentCount(mockClient *mockClient) int {
+	count := 0
+	for {
+		select {
+		case <-mockClient.sends:
+			count++
+		default:
+			return count
 		}
 	}
 }
