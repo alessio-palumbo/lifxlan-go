@@ -190,5 +190,8 @@ func flowLightTypes() []device.LightType {
 	return []device.LightType{device.LightTypeMultiZone, device.LightTypeMatrix}
 }
 
-// compile-time check that Flow satisfies the Effect contract.
-var _ Effect = (*Flow)(nil)
+// compile-time checks that Flow satisfies the effect contracts.
+var (
+	_ Effect      = (*Flow)(nil)
+	_ PhaseEffect = (*Flow)(nil)
+)

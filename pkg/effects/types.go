@@ -20,6 +20,16 @@ type Effect interface {
 	Reset()
 }
 
+// PhaseEffect can return a deterministic frame for an absolute cycle position.
+//
+// Whole phases address the same point in the effect cycle, and negative phases
+// wrap. This is useful for offline timeline generation where frames may be
+// requested out of order or more than once for the same timestamp.
+type PhaseEffect interface {
+	Effect
+	FrameAtPhase(phase float64, duration time.Duration) Frame
+}
+
 // Frame is a target-free logical color frame.
 type Frame struct {
 	Colors   []Color

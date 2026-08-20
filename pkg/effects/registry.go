@@ -56,6 +56,8 @@ const (
 	EffectConcentricFrames EffectID = "concentric_frames"
 	// EffectFlow identifies the Flow effect.
 	EffectFlow EffectID = "flow"
+	// EffectRing identifies the Ring matrix effect.
+	EffectRing EffectID = "ring"
 )
 
 var (
@@ -230,6 +232,38 @@ func init() {
 				return nil, err
 			}
 			return NewWaterfall(WaterfallConfig{Capabilities: caps, Colors: paletteColors(palette), Cycles: cycles}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectRing,
+		Label:       "Ring",
+		Description: "Expand a soft ring from the center of a matrix surface.",
+		DeviceKinds: matrixLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			ringPeriodParamDefinition(),
+			ringWidthParamDefinition(),
+			ringFloorParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			period, err := DurationParam(config.Params, "period")
+			if err != nil {
+				return nil, err
+			}
+			width, err := NumberParam(config.Params, "width")
+			if err != nil {
+				return nil, err
+			}
+			floor, err := NumberParam(config.Params, "floor")
+			if err != nil {
+				return nil, err
+			}
+			return NewRing(RingConfig{Capabilities: caps, Palette: palette, Period: period, Width: width, Floor: floor}), nil
 		},
 	})
 
@@ -1028,6 +1062,38 @@ func flowFloorParamDefinition() ParamDefinition {
 		Label:   "Floor",
 		Kind:    ParamNumber,
 		Default: defaultFlowFloor,
+		Min:     float64Ptr(0.01),
+		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func ringPeriodParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "period",
+		Label:   "Period",
+		Kind:    ParamDuration,
+		Default: defaultRingPeriod,
+	}
+}
+
+func ringWidthParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "width",
+		Label:   "Width",
+		Kind:    ParamNumber,
+		Default: defaultRingWidth,
+		Min:     float64Ptr(0.1),
+		Step:    float64Ptr(0.1),
+	}
+}
+
+func ringFloorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "floor",
+		Label:   "Floor",
+		Kind:    ParamNumber,
+		Default: defaultRingFloor,
 		Min:     float64Ptr(0.01),
 		Max:     float64Ptr(1),
 		Step:    float64Ptr(0.05),

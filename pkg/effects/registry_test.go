@@ -40,6 +40,7 @@ func TestDefinitionsDeterministicAndIncludeBuiltins(t *testing.T) {
 		EffectSweep,
 		EffectWaterfall,
 		EffectRockets,
+		EffectRing,
 		EffectSnake,
 		EffectWorm,
 		EffectWave,
@@ -116,6 +117,13 @@ func TestNewConstructsBuiltInMatrixEffects(t *testing.T) {
 				"cycles":  1,
 			}},
 			want: &Rockets{},
+		},
+		"ring": {
+			config: Config{ID: EffectRing, Params: map[string]any{
+				"palette": Palette{Base: []Color{color(10), color(20)}},
+				"width":   1.5,
+			}},
+			want: &Ring{},
 		},
 		"snake": {
 			config: Config{ID: EffectSnake, Params: map[string]any{
@@ -337,7 +345,7 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			caps := Capabilities{LightType: device.LightTypeSingleZone}
 			switch config.ID {
-			case EffectWaterfall, EffectRockets, EffectSnake, EffectWorm, EffectWave, EffectConcentricFrames:
+			case EffectWaterfall, EffectRockets, EffectRing, EffectSnake, EffectWorm, EffectWave, EffectConcentricFrames:
 				caps = Capabilities{LightType: device.LightTypeMatrix, Width: 3, Height: 3}
 			}
 			if _, err := New(config, caps); !errors.Is(err, ErrInvalidConfig) {
