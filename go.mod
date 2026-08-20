@@ -1,6 +1,6 @@
 module github.com/alessio-palumbo/lifxlan-go
 
-go 1.24.3
+go 1.26
 
 require (
 	github.com/alessio-palumbo/lifxprotocol-go v0.4.0
