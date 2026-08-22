@@ -150,8 +150,10 @@ type Device struct {
 	// Mutable
 
 	// Low Frequency updated fields.
-	Label           string
-	RegistryName    string
+	Label        string
+	RegistryName string
+	// RegistryKnown reports whether ProductID was found in lifxregistry-go.
+	RegistryKnown   bool
 	ProductID       uint32
 	FirmwareVersion string
 	Type            DeviceType
@@ -224,8 +226,17 @@ func NewDevice(address *net.UDPAddr, serial [8]byte) *Device {
 }
 
 func (d *Device) SetProductInfo(pid uint32) {
-	p := registry.ProductsByPID[int(pid)]
 	d.ProductID = pid
+	p, ok := registry.ProductsByPID[int(pid)]
+	d.RegistryKnown = ok
+	if !ok {
+		d.RegistryName = ""
+		d.Type = DeviceTypeLight
+		d.LightType = LightTypeSingleZone
+		d.ColorProperties = defaultColorProperties()
+		return
+	}
+
 	d.RegistryName = p.Name
 
 	if p.Features.Relays {
@@ -254,12 +265,26 @@ func (d *Device) SetProductInfo(pid uint32) {
 	}
 }
 
+func defaultColorProperties() ColorProperties {
+	return ColorProperties{
+		HasColor: true,
+		TemperatureRange: TemperatureRange{
+			Min: 1500,
+			Max: 9000,
+		},
+	}
+}
+
 // SetMatrixProperties sets the matrix size and length properties
 // according to the first tile in the chain.
 // It also initialises the ChainZones slice or resizes it according to the length.
 func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) (updated bool) {
 	if p.TileDevicesCount == 0 {
 		return
+	}
+	if d.ProductID != 0 && !d.RegistryKnown && d.LightType != LightTypeMatrix {
+		d.LightType = LightTypeMatrix
+		updated = true
 	}
 	firstIdx := int(p.StartIndex)
 	w, h, l := int(p.TileDevices[firstIdx].Width), int(p.TileDevices[firstIdx].Height), int(p.TileDevicesCount)
@@ -326,6 +351,13 @@ func (d *Device) SetMatrixState(p *packets.TileState64) (updated bool) {
 }
 
 func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZone) (updated bool) {
+	if p.Count == 0 {
+		return
+	}
+	if d.ProductID != 0 && !d.RegistryKnown && d.LightType != LightTypeMultiZone {
+		d.LightType = LightTypeMultiZone
+		updated = true
+	}
 	if len(d.MultizoneProperties.Zones) != int(p.Count) {
 		d.MultizoneProperties.Zones = make([]packets.LightHsbk, p.Count)
 	}

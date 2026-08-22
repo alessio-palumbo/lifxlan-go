@@ -243,7 +243,7 @@ func Test_preflightHandshake(t *testing.T) {
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0,
 				Label: "SZ", ProductID: 225, FirmwareVersion: "3.90",
-				LightType: device.LightTypeSingleZone, Location: "L", Group: "G",
+				RegistryKnown: true, LightType: device.LightTypeSingleZone, Location: "L", Group: "G",
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 			},
 		},
@@ -258,7 +258,7 @@ func Test_preflightHandshake(t *testing.T) {
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0,
 				Label: "MZ", ProductID: 214, FirmwareVersion: "3.90",
-				LightType: device.LightTypeMultiZone, Location: "L", Group: "G",
+				RegistryKnown: true, LightType: device.LightTypeMultiZone, Location: "L", Group: "G",
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 			},
 		},
@@ -276,7 +276,7 @@ func Test_preflightHandshake(t *testing.T) {
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0, Type: device.DeviceTypeHybrid,
 				Label: "MXS", ProductID: 219, FirmwareVersion: "3.90",
-				LightType: device.LightTypeMatrix, Location: "L", Group: "G",
+				RegistryKnown: true, LightType: device.LightTypeMatrix, Location: "L", Group: "G",
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 				MatrixProperties: device.MatrixProperties{
 					ChainLength: 1, Width: 7, Height: 5, StatePackets: 1, NZones: 35,
@@ -309,7 +309,7 @@ func Test_preflightHandshake(t *testing.T) {
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0,
 				Label: "MXL", ProductID: 201, FirmwareVersion: "3.90",
-				LightType: device.LightTypeMatrix, Location: "L", Group: "G",
+				RegistryKnown: true, LightType: device.LightTypeMatrix, Location: "L", Group: "G",
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 				MatrixProperties: device.MatrixProperties{
 					ChainLength: 1, Width: 16, Height: 8, StatePackets: 2, NZones: 128,
@@ -331,7 +331,7 @@ func Test_preflightHandshake(t *testing.T) {
 			wantDevice: &device.Device{
 				Address: addr0, Serial: serial0,
 				Label: "SW", ProductID: 116, FirmwareVersion: "3.90",
-				Type: device.DeviceTypeSwitch, Location: "L", Group: "G",
+				RegistryKnown: true, Type: device.DeviceTypeSwitch, Location: "L", Group: "G",
 				Buttons: []device.Button{
 					{Actions: []packets.ButtonAction{}},
 					{Actions: []packets.ButtonAction{}},
@@ -344,12 +344,33 @@ func Test_preflightHandshake(t *testing.T) {
 				ButtonConfigKnown: true,
 			},
 		},
+		"unknown matrix product": {
+			msgs: []*protocol.Message{
+				protocol.NewMessage(&packets.DeviceStateLabel{Label: [32]byte{'U', 'M'}}),
+				protocol.NewMessage(&packets.DeviceStateVersion{Product: 999999}),
+				protocol.NewMessage(&packets.DeviceStateHostFirmware{VersionMajor: 3, VersionMinor: 90}),
+				protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'L'}}),
+				protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'G'}}),
+				protocol.NewMessage(&packets.TileStateDeviceChain{TileDevicesCount: 1, TileDevices: [16]packets.TileStateDevice{{Width: 8, Height: 8}}}),
+			},
+			wantDevice: &device.Device{
+				Address: addr0, Serial: serial0,
+				Label: "UM", ProductID: 999999, FirmwareVersion: "3.90",
+				LightType: device.LightTypeMatrix, Location: "L", Group: "G",
+				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
+				MatrixProperties: device.MatrixProperties{
+					ChainLength: 1, Width: 8, Height: 8, StatePackets: 1, NZones: 64,
+					ChainZones:        [][]packets.LightHsbk{make([]packets.LightHsbk, 64)},
+					ChainOrientations: []device.Orientation{device.OrientationRightSideUp},
+				},
+			},
+		},
 		"times out with missing fields": {
 			msgs: []*protocol.Message{
 				protocol.NewMessage(&packets.DeviceStateVersion{Product: 225}),
 			},
 			wantDevice: &device.Device{
-				Address: addr0, Serial: serial0, ProductID: 225, LightType: device.LightTypeSingleZone,
+				Address: addr0, Serial: serial0, ProductID: 225, RegistryKnown: true, LightType: device.LightTypeSingleZone,
 				ColorProperties: device.ColorProperties{HasColor: true, TemperatureRange: device.TemperatureRange{Min: 1500, Max: 9000}},
 			},
 		},
@@ -393,5 +414,43 @@ func Test_preflightHandshake(t *testing.T) {
 				t.Fatal("Got diff in device:\n", diff)
 			}
 		})
+	}
+}
+
+func TestPreflightProbesUnknownProductLightShape(t *testing.T) {
+	addr0 := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}
+	serial0 := device.Serial([8]byte{1, 0, 0, 0, 0, 0, 0, 0})
+	cfg0 := &Config{}
+	mockClient := newMockClient()
+	session := &deviceSession{
+		sender:    mockClient,
+		logger:    discardLogger(),
+		device:    device.NewDevice(addr0, serial0),
+		inbound:   make(chan *protocol.Message, defaultRecvBufferSize),
+		done:      make(chan struct{}),
+		cfg:       cfg0,
+		onTimeout: func(device.Serial) {},
+	}
+	go session.recvloop()
+
+	done := make(chan struct{})
+	go func() {
+		session.preflightHandshake(2*time.Millisecond, time.Millisecond)
+		close(done)
+	}()
+
+	session.inbound <- protocol.NewMessage(&packets.DeviceStateVersion{Product: 999999})
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Millisecond):
+		t.Fatal("Timed out")
+	}
+
+	if !sentPayload(mockClient, uint16(packets.PayloadTypeTileGetDeviceChain)) {
+		t.Fatal("missing TileGetDeviceChain probe")
+	}
+	if !sentPayload(mockClient, uint16(packets.PayloadTypeMultiZoneExtendedGetColorZones)) {
+		t.Fatal("missing MultiZoneExtendedGetColorZones probe")
 	}
 }

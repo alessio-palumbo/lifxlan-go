@@ -18,9 +18,10 @@ func TestSetProductInfo(t *testing.T) {
 		"Single zone light (white only)": {
 			pid: 88,
 			want: &Device{
-				ProductID:    88,
-				RegistryName: "LIFX White",
-				LightType:    LightTypeSingleZone,
+				ProductID:     88,
+				RegistryName:  "LIFX White",
+				RegistryKnown: true,
+				LightType:     LightTypeSingleZone,
 				ColorProperties: ColorProperties{
 					TemperatureRange: TemperatureRange{Min: 2700, Max: 2700},
 				},
@@ -29,9 +30,10 @@ func TestSetProductInfo(t *testing.T) {
 		"Single zone light": {
 			pid: 97,
 			want: &Device{
-				ProductID:    97,
-				RegistryName: "LIFX Colour A19 1200lm",
-				LightType:    LightTypeSingleZone,
+				ProductID:     97,
+				RegistryName:  "LIFX Colour A19 1200lm",
+				RegistryKnown: true,
+				LightType:     LightTypeSingleZone,
 				ColorProperties: ColorProperties{
 					HasColor:         true,
 					TemperatureRange: TemperatureRange{Min: 1500, Max: 9000},
@@ -41,9 +43,10 @@ func TestSetProductInfo(t *testing.T) {
 		"Multizone light": {
 			pid: 117,
 			want: &Device{
-				ProductID:    117,
-				RegistryName: "LIFX Z",
-				LightType:    LightTypeMultiZone,
+				ProductID:     117,
+				RegistryName:  "LIFX Z",
+				RegistryKnown: true,
+				LightType:     LightTypeMultiZone,
 				ColorProperties: ColorProperties{
 					HasColor:         true,
 					TemperatureRange: TemperatureRange{Min: 1500, Max: 9000},
@@ -53,9 +56,10 @@ func TestSetProductInfo(t *testing.T) {
 		"Matrix light": {
 			pid: 55,
 			want: &Device{
-				ProductID:    55,
-				RegistryName: "LIFX Tile",
-				LightType:    LightTypeMatrix,
+				ProductID:     55,
+				RegistryName:  "LIFX Tile",
+				RegistryKnown: true,
+				LightType:     LightTypeMatrix,
 				ColorProperties: ColorProperties{
 					HasColor:         true,
 					TemperatureRange: TemperatureRange{Min: 2500, Max: 9000},
@@ -65,18 +69,20 @@ func TestSetProductInfo(t *testing.T) {
 		"Switch": {
 			pid: 89,
 			want: &Device{
-				ProductID:    89,
-				RegistryName: "LIFX Switch",
-				Type:         DeviceTypeSwitch,
+				ProductID:     89,
+				RegistryName:  "LIFX Switch",
+				RegistryKnown: true,
+				Type:          DeviceTypeSwitch,
 			},
 		},
 		"Hybrid": {
 			pid: 219,
 			want: &Device{
-				ProductID:    219,
-				RegistryName: "LIFX Luna",
-				Type:         DeviceTypeHybrid,
-				LightType:    LightTypeMatrix,
+				ProductID:     219,
+				RegistryName:  "LIFX Luna",
+				RegistryKnown: true,
+				Type:          DeviceTypeHybrid,
+				LightType:     LightTypeMatrix,
 				ColorProperties: ColorProperties{
 					HasColor:         true,
 					TemperatureRange: TemperatureRange{Min: 1500, Max: 9000},
@@ -92,6 +98,19 @@ func TestSetProductInfo(t *testing.T) {
 			assert.Equal(t, tc.want, d)
 		})
 	}
+}
+
+func TestSetProductInfoForUnknownProduct(t *testing.T) {
+	d := &Device{}
+	d.SetProductInfo(999999)
+
+	want := &Device{
+		ProductID:       999999,
+		Type:            DeviceTypeLight,
+		LightType:       LightTypeSingleZone,
+		ColorProperties: defaultColorProperties(),
+	}
+	assert.Equal(t, want, d)
 }
 
 func TestSortDevices(t *testing.T) {
@@ -119,6 +138,49 @@ func TestSortDevices(t *testing.T) {
 			assert.Equal(t, tc.want, tc.devices)
 		})
 	}
+}
+
+func TestSetMatrixPropertiesInfersUnknownProductLightType(t *testing.T) {
+	d := &Device{ProductID: 999999}
+
+	updated := d.SetMatrixProperties(&packets.TileStateDeviceChain{
+		TileDevices:      [16]packets.TileStateDevice{{Width: 8, Height: 8}},
+		TileDevicesCount: 1,
+	})
+
+	assert.True(t, updated)
+	assert.Equal(t, LightTypeMatrix, d.LightType)
+}
+
+func TestSetMultizonePropertiesInfersUnknownProductLightType(t *testing.T) {
+	d := &Device{ProductID: 999999}
+
+	updated := d.SetMultizoneProperties(&packets.MultiZoneExtendedStateMultiZone{
+		Count:       2,
+		ColorsCount: 2,
+		Colors:      [82]packets.LightHsbk{{Hue: 1}, {Hue: 2}},
+	})
+
+	assert.True(t, updated)
+	assert.Equal(t, LightTypeMultiZone, d.LightType)
+}
+
+func TestCapabilityStateDoesNotOverrideKnownRegistryLightType(t *testing.T) {
+	d := &Device{}
+	d.SetProductInfo(97)
+
+	d.SetMatrixProperties(&packets.TileStateDeviceChain{
+		TileDevices:      [16]packets.TileStateDevice{{Width: 8, Height: 8}},
+		TileDevicesCount: 1,
+	})
+	assert.Equal(t, LightTypeSingleZone, d.LightType)
+
+	d.SetMultizoneProperties(&packets.MultiZoneExtendedStateMultiZone{
+		Count:       2,
+		ColorsCount: 2,
+		Colors:      [82]packets.LightHsbk{{Hue: 1}, {Hue: 2}},
+	})
+	assert.Equal(t, LightTypeSingleZone, d.LightType)
 }
 
 func TestSetMatrixProperties(t *testing.T) {

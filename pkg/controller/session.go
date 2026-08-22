@@ -251,6 +251,7 @@ func (s *deviceSession) preflightHandshake(timeout, wait time.Duration) {
 		case <-time.After(wait):
 			// shrink list of required messages after each wait
 			var retryMsgs []*protocol.Message
+			var sendUnknownProductLightShapeProbes bool
 			s.mu.RLock()
 			for _, m := range required {
 				if f := messageDoneFuncs[m.Payload]; f != nil {
@@ -264,6 +265,10 @@ func (s *deviceSession) preflightHandshake(timeout, wait time.Duration) {
 							retryMsgs = append(retryMsgs, protocol.NewMessage(&packets.ButtonGetConfig{}))
 						}
 
+						if !s.device.RegistryKnown {
+							sendUnknownProductLightShapeProbes = true
+						}
+
 						switch s.device.LightType {
 						case device.LightTypeMatrix:
 							retryMsgs = append(retryMsgs, protocol.NewMessage(&packets.TileGetDeviceChain{}))
@@ -274,6 +279,9 @@ func (s *deviceSession) preflightHandshake(timeout, wait time.Duration) {
 				}
 			}
 			s.mu.RUnlock()
+			if sendUnknownProductLightShapeProbes {
+				s.send(unknownProductLightShapeProbeMessages()...)
+			}
 			required = retryMsgs
 		}
 
@@ -287,6 +295,15 @@ func (s *deviceSession) preflightHandshake(timeout, wait time.Duration) {
 			}
 			return
 		}
+	}
+}
+
+func unknownProductLightShapeProbeMessages() []*protocol.Message {
+	// Unknown products may be newer than lifxregistry-go. These probes are
+	// fire-and-forget; unsupported devices reply with DeviceStateUnhandled.
+	return []*protocol.Message{
+		protocol.NewMessage(&packets.TileGetDeviceChain{}),
+		protocol.NewMessage(&packets.MultiZoneExtendedGetColorZones{}),
 	}
 }
 
