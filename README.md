@@ -223,6 +223,18 @@ They can be serialized into a timeline, rendered in a preview, or converted to L
 
 Available effects include `Solid`, `Gradient`, `Sweep`, `Flow`, `Ring`, `Waterfall`, `Rockets`, `Snake`, `Worm`, `Wave`, and `ConcentricFrames`.
 
+`Flow` defaults to a moving brightness crest. For filled matrix-style color
+motion where palette brightness should stay constant, use:
+
+```go
+flow := effects.NewFlow(effects.FlowConfig{
+	Capabilities:   caps,
+	Palette:        palette,
+	Axis:           effects.FlowAxisDiagonal,
+	BrightnessMode: effects.FlowBrightnessConstant,
+})
+```
+
 The older `pkg/matrix` effect helpers are kept for compatibility, but new code
 should prefer `pkg/effects` plus `pkg/effects/adapters`. The newer API separates
 deterministic frame generation from live LAN rendering and also supports offline

@@ -189,6 +189,7 @@ func init() {
 		Params: []ParamDefinition{
 			paletteParamDefinition(defaultPalette),
 			flowAxisParamDefinition(),
+			flowBrightnessModeParamDefinition(),
 			flowPeriodParamDefinition(),
 			flowFloorParamDefinition(),
 		},
@@ -201,6 +202,10 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
+			brightnessMode, err := flowBrightnessModeParam(config.Params, "brightness_mode")
+			if err != nil {
+				return nil, err
+			}
 			period, err := DurationParam(config.Params, "period")
 			if err != nil {
 				return nil, err
@@ -209,7 +214,14 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			return NewFlow(FlowConfig{Capabilities: caps, Palette: palette, Axis: axis, Period: period, Floor: floor}), nil
+			return NewFlow(FlowConfig{
+				Capabilities:   caps,
+				Palette:        palette,
+				Axis:           axis,
+				BrightnessMode: brightnessMode,
+				Period:         period,
+				Floor:          floor,
+			}), nil
 		},
 	})
 
@@ -724,6 +736,19 @@ func flowAxisParam(params map[string]any, key string) (FlowAxis, error) {
 	}
 }
 
+func flowBrightnessModeParam(params map[string]any, key string) (FlowBrightnessMode, error) {
+	choice, err := ChoiceParam(params, key)
+	if err != nil {
+		return FlowBrightnessCrest, err
+	}
+	switch FlowBrightnessMode(choice) {
+	case FlowBrightnessCrest, FlowBrightnessConstant:
+		return FlowBrightnessMode(choice), nil
+	default:
+		return FlowBrightnessCrest, fmt.Errorf("%w: parameter %q has invalid choice %q", ErrInvalidConfig, key, choice)
+	}
+}
+
 func requiredParam(params map[string]any, key string) (any, error) {
 	value, ok := params[key]
 	if !ok || value == nil {
@@ -1043,6 +1068,19 @@ func flowAxisParamDefinition() ParamDefinition {
 			{Value: string(FlowAxisHorizontal), Label: "Horizontal"},
 			{Value: string(FlowAxisVertical), Label: "Vertical"},
 			{Value: string(FlowAxisDiagonal), Label: "Diagonal"},
+		},
+	}
+}
+
+func flowBrightnessModeParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "brightness_mode",
+		Label:   "Brightness Mode",
+		Kind:    ParamChoiceKind,
+		Default: string(FlowBrightnessCrest),
+		Choices: []ParamChoice{
+			{Value: string(FlowBrightnessCrest), Label: "Crest"},
+			{Value: string(FlowBrightnessConstant), Label: "Constant"},
 		},
 	}
 }

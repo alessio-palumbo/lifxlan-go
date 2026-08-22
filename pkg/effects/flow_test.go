@@ -69,6 +69,32 @@ func TestFlowNeverGoesBelowVisible(t *testing.T) {
 	}
 }
 
+func TestFlowConstantBrightnessModePreservesPaletteBrightness(t *testing.T) {
+	palette := Palette{
+		Base: []Color{
+			{Hue: 0, Saturation: 100, Brightness: 25, Kelvin: 3500},
+			{Hue: 120, Saturation: 100, Brightness: 50, Kelvin: 3500},
+			{Hue: 240, Saturation: 100, Brightness: 75, Kelvin: 3500},
+		},
+	}
+	flow := NewFlow(FlowConfig{
+		Capabilities:   matrixCapabilities(5, 5),
+		Palette:        palette,
+		Axis:           FlowAxisDiagonal,
+		Floor:          0.01,
+		BrightnessMode: FlowBrightnessConstant,
+	})
+
+	frame := flow.FrameAtPhase(0.25, time.Second)
+	wantBrightness := map[float64]bool{25: true, 50: true, 75: true}
+
+	for i, color := range frame.Colors {
+		if !wantBrightness[color.Brightness] {
+			t.Fatalf("cell %d brightness = %v, want one of 25, 50, 75", i, color.Brightness)
+		}
+	}
+}
+
 func TestFlowMovesWithPhase(t *testing.T) {
 	flow := NewFlow(FlowConfig{Capabilities: stripCapabilities(16), Palette: flowPalette()})
 
@@ -190,6 +216,9 @@ func TestFlowIsRegistered(t *testing.T) {
 	if flow.cfg.Axis != FlowAxisDiagonal {
 		t.Fatalf("axis = %q, want %q", flow.cfg.Axis, FlowAxisDiagonal)
 	}
+	if flow.cfg.BrightnessMode != FlowBrightnessCrest {
+		t.Fatalf("brightness mode = %q, want %q", flow.cfg.BrightnessMode, FlowBrightnessCrest)
+	}
 	if flow.cfg.Period != 500*time.Millisecond {
 		t.Fatalf("period = %s, want 500ms", flow.cfg.Period)
 	}
@@ -209,6 +238,30 @@ func TestFlowIsRegistered(t *testing.T) {
 		"floor":   2,
 	}}, matrixCapabilities(8, 8)); err == nil {
 		t.Fatal("a floor above 1 should be rejected")
+	}
+}
+
+func TestFlowRegistryAcceptsConstantBrightnessMode(t *testing.T) {
+	effect, err := New(Config{ID: EffectFlow, Params: map[string]any{
+		"palette":         flowPalette(),
+		"brightness_mode": string(FlowBrightnessConstant),
+	}}, matrixCapabilities(8, 8))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	flow, ok := effect.(*Flow)
+	if !ok {
+		t.Fatalf("registry returned %T, want *Flow", effect)
+	}
+	if flow.cfg.BrightnessMode != FlowBrightnessConstant {
+		t.Fatalf("brightness mode = %q, want %q", flow.cfg.BrightnessMode, FlowBrightnessConstant)
+	}
+
+	if _, err := New(Config{ID: EffectFlow, Params: map[string]any{
+		"palette":         flowPalette(),
+		"brightness_mode": "flat",
+	}}, matrixCapabilities(8, 8)); err == nil {
+		t.Fatal("an unknown brightness mode should be rejected")
 	}
 }
 

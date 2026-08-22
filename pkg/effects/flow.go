@@ -31,6 +31,17 @@ const (
 	FlowAxisDiagonal FlowAxis = "diagonal"
 )
 
+// FlowBrightnessMode controls whether Flow modulates brightness or only scrolls
+// palette colors.
+type FlowBrightnessMode string
+
+const (
+	// FlowBrightnessCrest scrolls colors and applies a moving brightness crest.
+	FlowBrightnessCrest FlowBrightnessMode = "crest"
+	// FlowBrightnessConstant scrolls colors without changing their brightness.
+	FlowBrightnessConstant FlowBrightnessMode = "constant"
+)
+
 // FlowConfig configures a Flow effect.
 type FlowConfig struct {
 	Capabilities Capabilities
@@ -44,6 +55,9 @@ type FlowConfig struct {
 	// Floor is how lit the trough stays, as a fraction of the crest. Zero uses
 	// defaultFlowFloor.
 	Floor float64
+	// BrightnessMode controls whether brightness moves as a crest or stays at the
+	// palette color brightness. Empty uses FlowBrightnessCrest.
+	BrightnessMode FlowBrightnessMode
 }
 
 // Flow travels a brightness crest across the surface while palette colors scroll
@@ -67,6 +81,9 @@ func NewFlow(cfg FlowConfig) *Flow {
 	}
 	if cfg.Axis == "" {
 		cfg.Axis = FlowAxisHorizontal
+	}
+	if cfg.BrightnessMode == "" {
+		cfg.BrightnessMode = FlowBrightnessCrest
 	}
 	return &Flow{cfg: cfg}
 }
@@ -106,7 +123,7 @@ func (f *Flow) FrameAtPhase(phase float64, duration time.Duration) Frame {
 			position := flowPosition(axis, x, y)
 
 			color := stops[wrapIndex(position+offset, len(stops))]
-			color.Brightness = scaleBrightness(color.Brightness, f.level(head, position, span))
+			color.Brightness = f.brightness(color.Brightness, head, position, span)
 			colors = append(colors, color)
 		}
 	}
@@ -143,6 +160,13 @@ func (f *Flow) level(head float64, position, span int) float64 {
 	}
 	crest := 0.5 * (1 + math.Cos(2*math.Pi*behind/float64(span)))
 	return f.cfg.Floor + (1-f.cfg.Floor)*crest
+}
+
+func (f *Flow) brightness(brightness, head float64, position, span int) float64 {
+	if f.cfg.BrightnessMode == FlowBrightnessConstant {
+		return brightness
+	}
+	return scaleBrightness(brightness, f.level(head, position, span))
 }
 
 func flowPosition(axis FlowAxis, x, y int) int {
