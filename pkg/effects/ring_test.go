@@ -93,6 +93,25 @@ func TestRingUsesFloorAndVisibleBrightness(t *testing.T) {
 	}
 }
 
+func TestRingKeepsEqualDistanceBackgroundBrightnessEqual(t *testing.T) {
+	ring := NewRing(RingConfig{
+		Capabilities: matrixCapabilities(5, 5),
+		Palette:      ringPalette(),
+		Width:        0.5,
+		Floor:        0.4,
+	})
+
+	frame := ring.FrameAtPhase(0, time.Second)
+
+	corners := []int{0, 4, 20, 24}
+	want := frame.Colors[corners[0]].Brightness
+	for _, index := range corners[1:] {
+		if got := frame.Colors[index].Brightness; got != want {
+			t.Fatalf("corner brightness at index %d = %v, want %v", index, got, want)
+		}
+	}
+}
+
 func TestRingIsRegistered(t *testing.T) {
 	effect, err := New(Config{ID: EffectRing, Params: map[string]any{
 		"palette": ringPalette(),

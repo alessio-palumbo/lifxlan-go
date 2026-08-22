@@ -80,8 +80,9 @@ func (r *Ring) FrameAtPhase(phase float64, duration time.Duration) Frame {
 		for x := 0; x < width; x++ {
 			distance := math.Abs(math.Hypot(float64(x)-cx, float64(y)-cy) - radius)
 			if distance >= r.cfg.Width {
-				background.Brightness = scaleBrightness(background.Brightness, r.cfg.Floor)
-				colors = append(colors, background)
+				color := background
+				color.Brightness = scaleBrightness(color.Brightness, r.cfg.Floor)
+				colors = append(colors, color)
 				continue
 			}
 			level := r.cfg.Floor + (1-r.cfg.Floor)*(1-distance/r.cfg.Width)
