@@ -10,7 +10,8 @@ import (
 const (
 	defaultSparkleDensity = 0.12
 	defaultSparkleDecay   = 2.0
-	defaultSparkleFloor   = 0.18
+	defaultSparkleFloor   = 0.35
+	defaultSparklePeak    = 1.0
 	defaultSparklePeriod  = 2 * time.Second
 )
 
@@ -24,9 +25,15 @@ type SparkleConfig struct {
 	// Decay controls how quickly each sparkle fades. Larger values fade faster.
 	// Zero uses defaultSparkleDecay.
 	Decay float64
-	// Floor is how lit the background stays as a fraction of palette brightness.
-	// Zero uses defaultSparkleFloor.
+	// BackgroundFloor is how lit the background stays as a fraction of palette
+	// brightness. Zero uses defaultSparkleFloor.
+	BackgroundFloor float64
+	// Floor is a compatibility alias for BackgroundFloor.
 	Floor float64
+	// PeakBrightnessFactor scales active sparkle brightness. Values above 1 boost
+	// sparkles above palette brightness, clamped to 100. Zero uses
+	// defaultSparklePeak.
+	PeakBrightnessFactor float64
 	// Seed changes the deterministic sparkle pattern.
 	Seed uint64
 	// Period is how long one full sparkle cycle takes when advanced by Next. Zero
@@ -51,11 +58,21 @@ func NewSparkle(cfg SparkleConfig) *Sparkle {
 	if cfg.Decay <= 0 {
 		cfg.Decay = defaultSparkleDecay
 	}
-	if cfg.Floor <= 0 {
-		cfg.Floor = defaultSparkleFloor
+	if cfg.BackgroundFloor <= 0 {
+		cfg.BackgroundFloor = cfg.Floor
 	}
-	if cfg.Floor > 1 {
-		cfg.Floor = 1
+	if cfg.BackgroundFloor <= 0 {
+		cfg.BackgroundFloor = defaultSparkleFloor
+	}
+	if cfg.BackgroundFloor > 1 {
+		cfg.BackgroundFloor = 1
+	}
+	cfg.Floor = cfg.BackgroundFloor
+	if cfg.PeakBrightnessFactor <= 0 {
+		cfg.PeakBrightnessFactor = defaultSparklePeak
+	}
+	if cfg.PeakBrightnessFactor < 1 {
+		cfg.PeakBrightnessFactor = 1
 	}
 	if cfg.Period <= 0 {
 		cfg.Period = defaultSparklePeriod
@@ -97,7 +114,7 @@ func (s *Sparkle) Reset() {
 
 func (s *Sparkle) colorAt(index int, phase float64) Color {
 	background := s.cfg.Palette.Background()
-	background.Brightness = scaleBrightness(background.Brightness, s.cfg.Floor)
+	background.Brightness = scaleBrightness(background.Brightness, s.cfg.BackgroundFloor)
 
 	start := sparkleUnit(s.cfg.Seed, uint64(index), 0)
 	age := phase - start
@@ -109,9 +126,10 @@ func (s *Sparkle) colorAt(index int, phase float64) Color {
 	}
 
 	progress := age / s.cfg.Density
-	level := math.Pow(1-progress, s.cfg.Decay)
+	fade := math.Pow(1-progress, s.cfg.Decay)
+	level := s.cfg.BackgroundFloor + (s.cfg.PeakBrightnessFactor-s.cfg.BackgroundFloor)*fade
 	color := sparklePaletteColor(s.cfg.Palette, s.cfg.Seed, index)
-	color.Brightness = scaleBrightness(color.Brightness, level)
+	color.Brightness = device.ClampVisibleBrightness(color.Brightness * level)
 	return color
 }
 

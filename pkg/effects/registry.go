@@ -284,7 +284,8 @@ func init() {
 			paletteParamDefinition(defaultPalette),
 			sparkleDensityParamDefinition(),
 			sparkleDecayParamDefinition(),
-			sparkleFloorParamDefinition(),
+			sparkleBackgroundFloorParamDefinition(),
+			sparklePeakBrightnessFactorParamDefinition(),
 			sparkleSeedParamDefinition(),
 			sparklePeriodParamDefinition(),
 		},
@@ -301,7 +302,11 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			floor, err := NumberParam(config.Params, "floor")
+			backgroundFloor, err := NumberParam(config.Params, "background_floor")
+			if err != nil {
+				return nil, err
+			}
+			peakBrightnessFactor, err := NumberParam(config.Params, "peak_brightness_factor")
 			if err != nil {
 				return nil, err
 			}
@@ -314,13 +319,14 @@ func init() {
 				return nil, err
 			}
 			return NewSparkle(SparkleConfig{
-				Capabilities: caps,
-				Palette:      palette,
-				Density:      density,
-				Decay:        decay,
-				Floor:        floor,
-				Seed:         uint64(seed),
-				Period:       period,
+				Capabilities:         caps,
+				Palette:              palette,
+				Density:              density,
+				Decay:                decay,
+				BackgroundFloor:      backgroundFloor,
+				PeakBrightnessFactor: peakBrightnessFactor,
+				Seed:                 uint64(seed),
+				Period:               period,
 			}), nil
 		},
 	})
@@ -1339,14 +1345,26 @@ func sparkleDecayParamDefinition() ParamDefinition {
 	}
 }
 
-func sparkleFloorParamDefinition() ParamDefinition {
+func sparkleBackgroundFloorParamDefinition() ParamDefinition {
 	return ParamDefinition{
-		Key:     "floor",
-		Label:   "Floor",
+		Key:     "background_floor",
+		Label:   "Background Floor",
 		Kind:    ParamNumber,
 		Default: defaultSparkleFloor,
 		Min:     float64Ptr(0.01),
 		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func sparklePeakBrightnessFactorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "peak_brightness_factor",
+		Label:   "Peak Brightness Factor",
+		Kind:    ParamNumber,
+		Default: defaultSparklePeak,
+		Min:     float64Ptr(1),
+		Max:     float64Ptr(2),
 		Step:    float64Ptr(0.05),
 	}
 }

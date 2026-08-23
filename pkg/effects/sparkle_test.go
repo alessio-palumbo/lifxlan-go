@@ -52,12 +52,12 @@ func TestSparkleSeedChangesPattern(t *testing.T) {
 
 func TestSparkleUsesBackgroundFloorAndFadingSparkles(t *testing.T) {
 	sparkle := NewSparkle(SparkleConfig{
-		Capabilities: stripCapabilities(64),
-		Palette:      sparklePalette(),
-		Density:      0.3,
-		Decay:        2,
-		Floor:        0.2,
-		Seed:         9,
+		Capabilities:    stripCapabilities(64),
+		Palette:         sparklePalette(),
+		Density:         0.3,
+		Decay:           2,
+		BackgroundFloor: 0.2,
+		Seed:            9,
 	})
 
 	frame := sparkle.FrameAtPhase(0.4, time.Second)
@@ -80,6 +80,67 @@ func TestSparkleUsesBackgroundFloorAndFadingSparkles(t *testing.T) {
 	}
 	if active == 0 {
 		t.Fatal("expected some active sparkle cells")
+	}
+}
+
+func TestSparklePeakBrightnessReachesInputBrightness(t *testing.T) {
+	sparkle := NewSparkle(SparkleConfig{
+		Capabilities: stripCapabilities(4),
+		Palette: Palette{
+			Base:        []Color{{Hue: 10, Saturation: 100, Brightness: 32, Kelvin: 3500}},
+			Backgrounds: []Color{{Hue: 220, Saturation: 100, Brightness: 40, Kelvin: 3500}},
+		},
+		Density: 0.25,
+		Seed:    11,
+	})
+
+	color := sparkle.colorAt(0, sparkleUnit(11, 0, 0))
+	if color.Brightness != 32 {
+		t.Fatalf("peak brightness = %v, want input brightness", color.Brightness)
+	}
+}
+
+func TestSparklePeakBrightnessCanBoost(t *testing.T) {
+	sparkle := NewSparkle(SparkleConfig{
+		Capabilities:         stripCapabilities(4),
+		Palette:              Palette{Base: []Color{{Hue: 10, Saturation: 100, Brightness: 40, Kelvin: 3500}}},
+		Density:              0.25,
+		PeakBrightnessFactor: 1.5,
+		Seed:                 12,
+	})
+
+	color := sparkle.colorAt(0, sparkleUnit(12, 0, 0))
+	if color.Brightness != 60 {
+		t.Fatalf("boosted peak brightness = %v, want 60", color.Brightness)
+	}
+}
+
+func TestSparkleBackgroundFloorIsPredictable(t *testing.T) {
+	sparkle := NewSparkle(SparkleConfig{
+		Capabilities:    stripCapabilities(4),
+		Palette:         Palette{Backgrounds: []Color{{Hue: 220, Saturation: 100, Brightness: 40, Kelvin: 3500}}},
+		Density:         0.1,
+		BackgroundFloor: 0.5,
+		Seed:            13,
+	})
+
+	color := sparkle.colorAt(0, sparkleUnit(13, 0, 0)+0.2)
+	if color.Hue != 220 || color.Brightness != 20 {
+		t.Fatalf("background = %#v, want predictable floor brightness", color)
+	}
+}
+
+func TestSparkleDimInputPaletteKeepsVisiblePeak(t *testing.T) {
+	sparkle := NewSparkle(SparkleConfig{
+		Capabilities: stripCapabilities(4),
+		Palette:      Palette{Base: []Color{{Hue: 10, Saturation: 100, Brightness: 8, Kelvin: 3500}}},
+		Density:      0.25,
+		Seed:         14,
+	})
+
+	color := sparkle.colorAt(0, sparkleUnit(14, 0, 0))
+	if color.Brightness != 8 {
+		t.Fatalf("dim peak brightness = %v, want input brightness", color.Brightness)
 	}
 }
 
@@ -113,12 +174,13 @@ func TestSparkleNextAdvancesOverItsPeriod(t *testing.T) {
 
 func TestSparkleIsRegistered(t *testing.T) {
 	effect, err := New(Config{ID: EffectSparkle, Params: map[string]any{
-		"palette": sparklePalette(),
-		"density": 0.2,
-		"decay":   3,
-		"floor":   0.4,
-		"seed":    99,
-		"period":  500 * time.Millisecond,
+		"palette":                sparklePalette(),
+		"density":                0.2,
+		"decay":                  3,
+		"background_floor":       0.4,
+		"peak_brightness_factor": 1.2,
+		"seed":                   99,
+		"period":                 500 * time.Millisecond,
 	}}, Capabilities{LightType: device.LightTypeMultiZone, Zones: 16})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -127,8 +189,8 @@ func TestSparkleIsRegistered(t *testing.T) {
 	if !ok {
 		t.Fatalf("registry returned %T, want *Sparkle", effect)
 	}
-	if sparkle.cfg.Density != 0.2 || sparkle.cfg.Decay != 3 || sparkle.cfg.Floor != 0.4 || sparkle.cfg.Seed != 99 {
-		t.Fatalf("config = density %v decay %v floor %v seed %v", sparkle.cfg.Density, sparkle.cfg.Decay, sparkle.cfg.Floor, sparkle.cfg.Seed)
+	if sparkle.cfg.Density != 0.2 || sparkle.cfg.Decay != 3 || sparkle.cfg.BackgroundFloor != 0.4 || sparkle.cfg.PeakBrightnessFactor != 1.2 || sparkle.cfg.Seed != 99 {
+		t.Fatalf("config = density %v decay %v background floor %v peak %v seed %v", sparkle.cfg.Density, sparkle.cfg.Decay, sparkle.cfg.BackgroundFloor, sparkle.cfg.PeakBrightnessFactor, sparkle.cfg.Seed)
 	}
 	if sparkle.cfg.Period != 500*time.Millisecond {
 		t.Fatalf("period = %s, want 500ms", sparkle.cfg.Period)

@@ -394,6 +394,18 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 				"seed": 1.5,
 			},
 		},
+		"invalid sparkle background floor": {
+			ID: EffectSparkle,
+			Params: map[string]any{
+				"background_floor": 2,
+			},
+		},
+		"invalid sparkle peak brightness factor": {
+			ID: EffectSparkle,
+			Params: map[string]any{
+				"peak_brightness_factor": 3,
+			},
+		},
 	}
 
 	for name, config := range tests {
