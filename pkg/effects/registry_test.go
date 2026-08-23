@@ -37,6 +37,7 @@ func TestDefinitionsDeterministicAndIncludeBuiltins(t *testing.T) {
 	for _, id := range []EffectID{
 		EffectSolid,
 		EffectGradient,
+		EffectGradientDrift,
 		EffectSweep,
 		EffectWaterfall,
 		EffectRockets,
@@ -78,6 +79,12 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 			}},
 			want: &Gradient{},
 		},
+		"gradient drift": {
+			config: Config{ID: EffectGradientDrift, Params: map[string]any{
+				"palette": Palette{Base: []Color{color(10)}},
+			}},
+			want: &GradientDrift{},
+		},
 		"sweep": {
 			config: Config{ID: EffectSweep, Params: map[string]any{
 				"palette": Palette{Accents: []Color{color(90)}, Backgrounds: []Color{color(200)}},
@@ -88,7 +95,11 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			effect, err := New(tt.config, Capabilities{LightType: device.LightTypeSingleZone})
+			caps := Capabilities{LightType: device.LightTypeSingleZone}
+			if tt.config.ID == EffectGradientDrift {
+				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
+			}
+			effect, err := New(tt.config, caps)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -339,6 +350,12 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 				"direction": "sideways",
 			},
 		},
+		"invalid gradient drift axis": {
+			ID: EffectGradientDrift,
+			Params: map[string]any{
+				"axis": "sideways",
+			},
+		},
 	}
 
 	for name, config := range tests {
@@ -347,6 +364,8 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 			switch config.ID {
 			case EffectWaterfall, EffectRockets, EffectRing, EffectSnake, EffectWorm, EffectWave, EffectConcentricFrames:
 				caps = Capabilities{LightType: device.LightTypeMatrix, Width: 3, Height: 3}
+			case EffectGradientDrift:
+				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
 			}
 			if _, err := New(config, caps); !errors.Is(err, ErrInvalidConfig) {
 				t.Fatalf("error = %v, want %v", err, ErrInvalidConfig)

@@ -40,6 +40,8 @@ const (
 	EffectSolid EffectID = "solid"
 	// EffectGradient identifies the Gradient effect.
 	EffectGradient EffectID = "gradient"
+	// EffectGradientDrift identifies the GradientDrift effect.
+	EffectGradientDrift EffectID = "gradient_drift"
 	// EffectSweep identifies the Sweep effect.
 	EffectSweep EffectID = "sweep"
 	// EffectWaterfall identifies the Waterfall matrix effect.
@@ -156,6 +158,38 @@ func init() {
 				return nil, err
 			}
 			return NewGradient(GradientConfig{Capabilities: caps, Palette: palette}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectGradientDrift,
+		Label:       "Gradient Drift",
+		Description: "Scroll palette colors across the surface without changing brightness.",
+		DeviceKinds: gradientDriftLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			flowAxisParamDefinition(),
+			flowPeriodParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			axis, err := flowAxisParam(config.Params, "axis")
+			if err != nil {
+				return nil, err
+			}
+			period, err := DurationParam(config.Params, "period")
+			if err != nil {
+				return nil, err
+			}
+			return NewGradientDrift(GradientDriftConfig{
+				Capabilities: caps,
+				Palette:      palette,
+				Axis:         axis,
+				Period:       period,
+			}), nil
 		},
 	})
 

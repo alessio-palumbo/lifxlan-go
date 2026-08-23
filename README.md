@@ -221,7 +221,7 @@ deviceFrames, err := effects.AdaptFrameToSurface(frames[0].Frame, surface, effec
 The resulting `DeviceFrame` values contain colors, duration, send width, chain index, and orientation metadata.
 They can be serialized into a timeline, rendered in a preview, or converted to LAN messages later.
 
-Available effects include `Solid`, `Gradient`, `Sweep`, `Flow`, `Ring`, `Waterfall`, `Rockets`, `Snake`, `Worm`, `Wave`, and `ConcentricFrames`.
+Available effects include `Solid`, `Gradient`, `GradientDrift`, `Sweep`, `Flow`, `Ring`, `Waterfall`, `Rockets`, `Snake`, `Worm`, `Wave`, and `ConcentricFrames`.
 
 `Flow` defaults to a moving brightness crest. For filled matrix-style color
 motion where palette brightness should stay constant, use:
