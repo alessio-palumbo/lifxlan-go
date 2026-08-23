@@ -35,6 +35,7 @@ func TestDefinitionsDeterministicAndIncludeBuiltins(t *testing.T) {
 	}
 
 	for _, id := range []EffectID{
+		EffectComet,
 		EffectSolid,
 		EffectGradient,
 		EffectGradientDrift,
@@ -85,6 +86,12 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 			}},
 			want: &GradientDrift{},
 		},
+		"comet": {
+			config: Config{ID: EffectComet, Params: map[string]any{
+				"palette": Palette{Accents: []Color{color(10)}, Backgrounds: []Color{color(200)}},
+			}},
+			want: &Comet{},
+		},
 		"sweep": {
 			config: Config{ID: EffectSweep, Params: map[string]any{
 				"palette": Palette{Accents: []Color{color(90)}, Backgrounds: []Color{color(200)}},
@@ -96,7 +103,7 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			caps := Capabilities{LightType: device.LightTypeSingleZone}
-			if tt.config.ID == EffectGradientDrift {
+			if tt.config.ID == EffectGradientDrift || tt.config.ID == EffectComet {
 				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
 			}
 			effect, err := New(tt.config, caps)
@@ -356,6 +363,18 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 				"axis": "sideways",
 			},
 		},
+		"invalid comet tail size": {
+			ID: EffectComet,
+			Params: map[string]any{
+				"tail_size": 1.5,
+			},
+		},
+		"invalid comet floor": {
+			ID: EffectComet,
+			Params: map[string]any{
+				"floor": 2,
+			},
+		},
 	}
 
 	for name, config := range tests {
@@ -364,7 +383,7 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 			switch config.ID {
 			case EffectWaterfall, EffectRockets, EffectRing, EffectSnake, EffectWorm, EffectWave, EffectConcentricFrames:
 				caps = Capabilities{LightType: device.LightTypeMatrix, Width: 3, Height: 3}
-			case EffectGradientDrift:
+			case EffectGradientDrift, EffectComet:
 				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
 			}
 			if _, err := New(config, caps); !errors.Is(err, ErrInvalidConfig) {

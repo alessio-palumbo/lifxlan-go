@@ -36,6 +36,8 @@ const (
 )
 
 const (
+	// EffectComet identifies the Comet effect.
+	EffectComet EffectID = "comet"
 	// EffectSolid identifies the Solid effect.
 	EffectSolid EffectID = "solid"
 	// EffectGradient identifies the Gradient effect.
@@ -212,6 +214,56 @@ func init() {
 				return nil, err
 			}
 			return NewSweep(SweepConfig{Capabilities: caps, Palette: palette}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectComet,
+		Label:       "Comet",
+		Description: "Move a bright head with a fading tail across the surface.",
+		DeviceKinds: cometLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			flowAxisParamDefinition(),
+			flowPeriodParamDefinition(),
+			cometHeadSizeParamDefinition(),
+			cometTailSizeParamDefinition(),
+			cometFloorParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			axis, err := flowAxisParam(config.Params, "axis")
+			if err != nil {
+				return nil, err
+			}
+			period, err := DurationParam(config.Params, "period")
+			if err != nil {
+				return nil, err
+			}
+			headSize, err := intParam(config.Params, "head_size")
+			if err != nil {
+				return nil, err
+			}
+			tailSize, err := intParam(config.Params, "tail_size")
+			if err != nil {
+				return nil, err
+			}
+			floor, err := NumberParam(config.Params, "floor")
+			if err != nil {
+				return nil, err
+			}
+			return NewComet(CometConfig{
+				Capabilities: caps,
+				Palette:      palette,
+				Axis:         axis,
+				Period:       period,
+				HeadSize:     headSize,
+				TailSize:     tailSize,
+				Floor:        floor,
+			}), nil
 		},
 	})
 
@@ -1134,6 +1186,40 @@ func flowFloorParamDefinition() ParamDefinition {
 		Label:   "Floor",
 		Kind:    ParamNumber,
 		Default: defaultFlowFloor,
+		Min:     float64Ptr(0.01),
+		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func cometHeadSizeParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "head_size",
+		Label:   "Head Size",
+		Kind:    ParamNumber,
+		Default: defaultCometHeadSize,
+		Min:     float64Ptr(1),
+		Step:    float64Ptr(1),
+	}
+}
+
+func cometTailSizeParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "tail_size",
+		Label:   "Tail Size",
+		Kind:    ParamNumber,
+		Default: defaultCometTailSize,
+		Min:     float64Ptr(1),
+		Step:    float64Ptr(1),
+	}
+}
+
+func cometFloorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "floor",
+		Label:   "Floor",
+		Kind:    ParamNumber,
+		Default: defaultCometFloor,
 		Min:     float64Ptr(0.01),
 		Max:     float64Ptr(1),
 		Step:    float64Ptr(0.05),
