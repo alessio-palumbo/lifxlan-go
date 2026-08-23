@@ -36,6 +36,7 @@ func TestDefinitionsDeterministicAndIncludeBuiltins(t *testing.T) {
 
 	for _, id := range []EffectID{
 		EffectComet,
+		EffectSparkle,
 		EffectSolid,
 		EffectGradient,
 		EffectGradientDrift,
@@ -92,6 +93,12 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 			}},
 			want: &Comet{},
 		},
+		"sparkle": {
+			config: Config{ID: EffectSparkle, Params: map[string]any{
+				"palette": Palette{Base: []Color{color(10)}, Backgrounds: []Color{color(200)}},
+			}},
+			want: &Sparkle{},
+		},
 		"sweep": {
 			config: Config{ID: EffectSweep, Params: map[string]any{
 				"palette": Palette{Accents: []Color{color(90)}, Backgrounds: []Color{color(200)}},
@@ -103,7 +110,7 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			caps := Capabilities{LightType: device.LightTypeSingleZone}
-			if tt.config.ID == EffectGradientDrift || tt.config.ID == EffectComet {
+			if tt.config.ID == EffectGradientDrift || tt.config.ID == EffectComet || tt.config.ID == EffectSparkle {
 				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
 			}
 			effect, err := New(tt.config, caps)
@@ -375,6 +382,18 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 				"floor": 2,
 			},
 		},
+		"invalid sparkle density": {
+			ID: EffectSparkle,
+			Params: map[string]any{
+				"density": 2,
+			},
+		},
+		"invalid sparkle seed": {
+			ID: EffectSparkle,
+			Params: map[string]any{
+				"seed": 1.5,
+			},
+		},
 	}
 
 	for name, config := range tests {
@@ -383,7 +402,7 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 			switch config.ID {
 			case EffectWaterfall, EffectRockets, EffectRing, EffectSnake, EffectWorm, EffectWave, EffectConcentricFrames:
 				caps = Capabilities{LightType: device.LightTypeMatrix, Width: 3, Height: 3}
-			case EffectGradientDrift, EffectComet:
+			case EffectGradientDrift, EffectComet, EffectSparkle:
 				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
 			}
 			if _, err := New(config, caps); !errors.Is(err, ErrInvalidConfig) {

@@ -38,6 +38,8 @@ const (
 const (
 	// EffectComet identifies the Comet effect.
 	EffectComet EffectID = "comet"
+	// EffectSparkle identifies the Sparkle effect.
+	EffectSparkle EffectID = "sparkle"
 	// EffectSolid identifies the Solid effect.
 	EffectSolid EffectID = "solid"
 	// EffectGradient identifies the Gradient effect.
@@ -269,6 +271,56 @@ func init() {
 				HeadSize:     headSize,
 				TailSize:     tailSize,
 				Floor:        floor,
+			}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectSparkle,
+		Label:       "Sparkle",
+		Description: "Light deterministic random-looking cells over a dimmed background.",
+		DeviceKinds: sparkleLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			sparkleDensityParamDefinition(),
+			sparkleDecayParamDefinition(),
+			sparkleFloorParamDefinition(),
+			sparkleSeedParamDefinition(),
+			sparklePeriodParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			density, err := NumberParam(config.Params, "density")
+			if err != nil {
+				return nil, err
+			}
+			decay, err := NumberParam(config.Params, "decay")
+			if err != nil {
+				return nil, err
+			}
+			floor, err := NumberParam(config.Params, "floor")
+			if err != nil {
+				return nil, err
+			}
+			seed, err := intParam(config.Params, "seed")
+			if err != nil {
+				return nil, err
+			}
+			period, err := DurationParam(config.Params, "period")
+			if err != nil {
+				return nil, err
+			}
+			return NewSparkle(SparkleConfig{
+				Capabilities: caps,
+				Palette:      palette,
+				Density:      density,
+				Decay:        decay,
+				Floor:        floor,
+				Seed:         uint64(seed),
+				Period:       period,
 			}), nil
 		},
 	})
@@ -1261,6 +1313,61 @@ func cometFloorParamDefinition() ParamDefinition {
 		Min:     float64Ptr(0.01),
 		Max:     float64Ptr(1),
 		Step:    float64Ptr(0.05),
+	}
+}
+
+func sparkleDensityParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "density",
+		Label:   "Density",
+		Kind:    ParamNumber,
+		Default: defaultSparkleDensity,
+		Min:     float64Ptr(0.01),
+		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.01),
+	}
+}
+
+func sparkleDecayParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "decay",
+		Label:   "Decay",
+		Kind:    ParamNumber,
+		Default: defaultSparkleDecay,
+		Min:     float64Ptr(0.1),
+		Step:    float64Ptr(0.1),
+	}
+}
+
+func sparkleFloorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "floor",
+		Label:   "Floor",
+		Kind:    ParamNumber,
+		Default: defaultSparkleFloor,
+		Min:     float64Ptr(0.01),
+		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func sparkleSeedParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "seed",
+		Label:   "Seed",
+		Kind:    ParamNumber,
+		Default: 1,
+		Min:     float64Ptr(0),
+		Step:    float64Ptr(1),
+	}
+}
+
+func sparklePeriodParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "period",
+		Label:   "Period",
+		Kind:    ParamDuration,
+		Default: defaultSparklePeriod,
 	}
 }
 
