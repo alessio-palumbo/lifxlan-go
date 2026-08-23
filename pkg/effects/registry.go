@@ -171,6 +171,7 @@ func init() {
 		Params: []ParamDefinition{
 			paletteParamDefinition(defaultPalette),
 			flowAxisParamDefinition(),
+			flowSamplingParamDefinition(),
 			flowPeriodParamDefinition(),
 		},
 		New: func(config Config, caps Capabilities) (Effect, error) {
@@ -179,6 +180,10 @@ func init() {
 				return nil, err
 			}
 			axis, err := flowAxisParam(config.Params, "axis")
+			if err != nil {
+				return nil, err
+			}
+			sampling, err := flowSamplingParam(config.Params, "sampling")
 			if err != nil {
 				return nil, err
 			}
@@ -191,6 +196,7 @@ func init() {
 				Palette:      palette,
 				Axis:         axis,
 				Period:       period,
+				Sampling:     sampling,
 			}), nil
 		},
 	})
@@ -276,6 +282,7 @@ func init() {
 			paletteParamDefinition(defaultPalette),
 			flowAxisParamDefinition(),
 			flowBrightnessModeParamDefinition(),
+			flowSamplingParamDefinition(),
 			flowPeriodParamDefinition(),
 			flowFloorParamDefinition(),
 		},
@@ -292,6 +299,10 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
+			sampling, err := flowSamplingParam(config.Params, "sampling")
+			if err != nil {
+				return nil, err
+			}
 			period, err := DurationParam(config.Params, "period")
 			if err != nil {
 				return nil, err
@@ -305,6 +316,7 @@ func init() {
 				Palette:        palette,
 				Axis:           axis,
 				BrightnessMode: brightnessMode,
+				Sampling:       sampling,
 				Period:         period,
 				Floor:          floor,
 			}), nil
@@ -835,6 +847,19 @@ func flowBrightnessModeParam(params map[string]any, key string) (FlowBrightnessM
 	}
 }
 
+func flowSamplingParam(params map[string]any, key string) (FlowSamplingMode, error) {
+	choice, err := ChoiceParam(params, key)
+	if err != nil {
+		return FlowSamplingStep, err
+	}
+	switch FlowSamplingMode(choice) {
+	case FlowSamplingStep, FlowSamplingInterpolate:
+		return FlowSamplingMode(choice), nil
+	default:
+		return FlowSamplingStep, fmt.Errorf("%w: parameter %q has invalid choice %q", ErrInvalidConfig, key, choice)
+	}
+}
+
 func requiredParam(params map[string]any, key string) (any, error) {
 	value, ok := params[key]
 	if !ok || value == nil {
@@ -1167,6 +1192,19 @@ func flowBrightnessModeParamDefinition() ParamDefinition {
 		Choices: []ParamChoice{
 			{Value: string(FlowBrightnessCrest), Label: "Crest"},
 			{Value: string(FlowBrightnessConstant), Label: "Constant"},
+		},
+	}
+}
+
+func flowSamplingParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "sampling",
+		Label:   "Sampling",
+		Kind:    ParamChoiceKind,
+		Default: string(FlowSamplingStep),
+		Choices: []ParamChoice{
+			{Value: string(FlowSamplingStep), Label: "Step"},
+			{Value: string(FlowSamplingInterpolate), Label: "Interpolate"},
 		},
 	}
 }

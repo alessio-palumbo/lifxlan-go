@@ -95,6 +95,49 @@ func TestFlowConstantBrightnessModePreservesPaletteBrightness(t *testing.T) {
 	}
 }
 
+func TestFlowSamplingDefaultsToStep(t *testing.T) {
+	palette := Palette{
+		Base: []Color{
+			{Hue: 359, Saturation: 100, Brightness: 100, Kelvin: 3500},
+			{Hue: 1, Saturation: 100, Brightness: 100, Kelvin: 3500},
+		},
+	}
+	flow := NewFlow(FlowConfig{
+		Capabilities:   stripCapabilities(4),
+		Palette:        palette,
+		BrightnessMode: FlowBrightnessConstant,
+	})
+
+	frame := flow.FrameAtPhase(0.125, time.Second)
+	if frame.Colors[0].Hue != 359 {
+		t.Fatalf("hue = %v, want first stepped stop", frame.Colors[0].Hue)
+	}
+}
+
+func TestFlowInterpolatedSamplingBlendsHueCircularly(t *testing.T) {
+	palette := Palette{
+		Base: []Color{
+			{Hue: 359, Saturation: 100, Brightness: 100, Kelvin: 3000},
+			{Hue: 1, Saturation: 80, Brightness: 50, Kelvin: 5000},
+		},
+	}
+	flow := NewFlow(FlowConfig{
+		Capabilities:   stripCapabilities(4),
+		Palette:        palette,
+		BrightnessMode: FlowBrightnessConstant,
+		Sampling:       FlowSamplingInterpolate,
+	})
+
+	frame := flow.FrameAtPhase(0.125, time.Second)
+	color := frame.Colors[0]
+	if math.Abs(color.Hue) > 0.001 && math.Abs(color.Hue-360) > 0.001 {
+		t.Fatalf("hue = %v, want circular blend near 0", color.Hue)
+	}
+	if color.Saturation != 90 || color.Brightness != 75 || color.Kelvin != 4000 {
+		t.Fatalf("color = %#v, want linearly blended saturation/brightness/kelvin", color)
+	}
+}
+
 func TestFlowMovesWithPhase(t *testing.T) {
 	flow := NewFlow(FlowConfig{Capabilities: stripCapabilities(16), Palette: flowPalette()})
 
@@ -219,6 +262,9 @@ func TestFlowIsRegistered(t *testing.T) {
 	if flow.cfg.BrightnessMode != FlowBrightnessCrest {
 		t.Fatalf("brightness mode = %q, want %q", flow.cfg.BrightnessMode, FlowBrightnessCrest)
 	}
+	if flow.cfg.Sampling != FlowSamplingStep {
+		t.Fatalf("sampling = %q, want %q", flow.cfg.Sampling, FlowSamplingStep)
+	}
 	if flow.cfg.Period != 500*time.Millisecond {
 		t.Fatalf("period = %s, want 500ms", flow.cfg.Period)
 	}
@@ -239,12 +285,20 @@ func TestFlowIsRegistered(t *testing.T) {
 	}}, matrixCapabilities(8, 8)); err == nil {
 		t.Fatal("a floor above 1 should be rejected")
 	}
+
+	if _, err := New(Config{ID: EffectFlow, Params: map[string]any{
+		"palette":  flowPalette(),
+		"sampling": "smooth",
+	}}, matrixCapabilities(8, 8)); err == nil {
+		t.Fatal("an unknown sampling mode should be rejected")
+	}
 }
 
 func TestFlowRegistryAcceptsConstantBrightnessMode(t *testing.T) {
 	effect, err := New(Config{ID: EffectFlow, Params: map[string]any{
 		"palette":         flowPalette(),
 		"brightness_mode": string(FlowBrightnessConstant),
+		"sampling":        string(FlowSamplingInterpolate),
 	}}, matrixCapabilities(8, 8))
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -255,6 +309,9 @@ func TestFlowRegistryAcceptsConstantBrightnessMode(t *testing.T) {
 	}
 	if flow.cfg.BrightnessMode != FlowBrightnessConstant {
 		t.Fatalf("brightness mode = %q, want %q", flow.cfg.BrightnessMode, FlowBrightnessConstant)
+	}
+	if flow.cfg.Sampling != FlowSamplingInterpolate {
+		t.Fatalf("sampling = %q, want %q", flow.cfg.Sampling, FlowSamplingInterpolate)
 	}
 
 	if _, err := New(Config{ID: EffectFlow, Params: map[string]any{

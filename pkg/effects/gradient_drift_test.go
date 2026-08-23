@@ -37,6 +37,26 @@ func TestGradientDriftPreservesPaletteBrightness(t *testing.T) {
 	}
 }
 
+func TestGradientDriftInterpolatedSamplingBlendsAdjacentStops(t *testing.T) {
+	palette := Palette{
+		Base: []Color{
+			{Hue: 0, Saturation: 100, Brightness: 20, Kelvin: 3000},
+			{Hue: 120, Saturation: 80, Brightness: 80, Kelvin: 5000},
+		},
+	}
+	drift := NewGradientDrift(GradientDriftConfig{
+		Capabilities: stripCapabilities(4),
+		Palette:      palette,
+		Sampling:     FlowSamplingInterpolate,
+	})
+
+	frame := drift.FrameAtPhase(0.125, time.Second)
+	color := frame.Colors[0]
+	if color.Hue != 60 || color.Saturation != 90 || color.Brightness != 50 || color.Kelvin != 4000 {
+		t.Fatalf("color = %#v, want halfway blend", color)
+	}
+}
+
 func TestGradientDriftPhaseIsDeterministicAndWrapped(t *testing.T) {
 	drift := NewGradientDrift(GradientDriftConfig{
 		Capabilities: stripCapabilities(10),
@@ -140,9 +160,27 @@ func TestGradientDriftIsRegistered(t *testing.T) {
 	if drift.cfg.Period != 500*time.Millisecond {
 		t.Fatalf("period = %s, want 500ms", drift.cfg.Period)
 	}
+	if drift.cfg.Sampling != FlowSamplingStep {
+		t.Fatalf("sampling = %q, want %q", drift.cfg.Sampling, FlowSamplingStep)
+	}
 
 	if _, err := New(Config{ID: EffectGradientDrift}, Capabilities{LightType: device.LightTypeSingleZone}); err == nil {
 		t.Fatal("gradient drift should reject single-zone capabilities")
+	}
+
+	effect, err = New(Config{ID: EffectGradientDrift, Params: map[string]any{
+		"palette":  gradientDriftPalette(),
+		"sampling": string(FlowSamplingInterpolate),
+	}}, Capabilities{LightType: device.LightTypeMultiZone, Zones: 8})
+	if err != nil {
+		t.Fatalf("New with sampling: %v", err)
+	}
+	drift, ok = effect.(*GradientDrift)
+	if !ok {
+		t.Fatalf("registry returned %T, want *GradientDrift", effect)
+	}
+	if drift.cfg.Sampling != FlowSamplingInterpolate {
+		t.Fatalf("sampling = %q, want %q", drift.cfg.Sampling, FlowSamplingInterpolate)
 	}
 }
 

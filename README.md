@@ -232,8 +232,13 @@ flow := effects.NewFlow(effects.FlowConfig{
 	Palette:        palette,
 	Axis:           effects.FlowAxisDiagonal,
 	BrightnessMode: effects.FlowBrightnessConstant,
+	Sampling:       effects.FlowSamplingInterpolate,
 })
 ```
+
+`Flow` and `GradientDrift` default to whole-cell palette steps. Use
+`FlowSamplingInterpolate` when slower live effects should blend between palette
+stops instead of holding each zone offset until the next step.
 
 The older `pkg/matrix` effect helpers are kept for compatibility, but new code
 should prefer `pkg/effects` plus `pkg/effects/adapters`. The newer API separates

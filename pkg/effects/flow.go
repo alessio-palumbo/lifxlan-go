@@ -42,6 +42,16 @@ const (
 	FlowBrightnessConstant FlowBrightnessMode = "constant"
 )
 
+// FlowSamplingMode controls how palette colors are sampled between logical cells.
+type FlowSamplingMode string
+
+const (
+	// FlowSamplingStep uses whole-cell palette steps, preserving existing output.
+	FlowSamplingStep FlowSamplingMode = "step"
+	// FlowSamplingInterpolate blends adjacent palette stops for sub-cell motion.
+	FlowSamplingInterpolate FlowSamplingMode = "interpolate"
+)
+
 // FlowConfig configures a Flow effect.
 type FlowConfig struct {
 	Capabilities Capabilities
@@ -58,6 +68,9 @@ type FlowConfig struct {
 	// BrightnessMode controls whether brightness moves as a crest or stays at the
 	// palette color brightness. Empty uses FlowBrightnessCrest.
 	BrightnessMode FlowBrightnessMode
+	// Sampling controls whether palette colors step cell-by-cell or interpolate
+	// between adjacent stops. Empty uses FlowSamplingStep.
+	Sampling FlowSamplingMode
 }
 
 // Flow travels a brightness crest across the surface while palette colors scroll
@@ -84,6 +97,9 @@ func NewFlow(cfg FlowConfig) *Flow {
 	}
 	if cfg.BrightnessMode == "" {
 		cfg.BrightnessMode = FlowBrightnessCrest
+	}
+	if cfg.Sampling == "" {
+		cfg.Sampling = FlowSamplingStep
 	}
 	return &Flow{cfg: cfg}
 }
@@ -116,13 +132,12 @@ func (f *Flow) FrameAtPhase(phase float64, duration time.Duration) Frame {
 	}
 
 	head := phase * float64(span)
-	offset := int(math.Floor(head))
 	colors := make([]Color, 0, size)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			position := flowPosition(axis, x, y)
 
-			color := stops[wrapIndex(position+offset, len(stops))]
+			color := sampleFlowColor(stops, float64(position)+head, f.cfg.Sampling)
 			color.Brightness = f.brightness(color.Brightness, head, position, span)
 			colors = append(colors, color)
 		}
@@ -194,6 +209,32 @@ func flowSpan(axis FlowAxis, width, height int) int {
 
 func scaleBrightness(brightness, level float64) float64 {
 	return device.ScaleBrightness(brightness, level)
+}
+
+func sampleFlowColor(stops []Color, position float64, mode FlowSamplingMode) Color {
+	if len(stops) == 0 {
+		return DefaultColor
+	}
+	base := math.Floor(position)
+	if mode != FlowSamplingInterpolate {
+		return stops[wrapIndex(int(base), len(stops))]
+	}
+	frac := position - base
+	return blendColor(stops[wrapIndex(int(base), len(stops))], stops[wrapIndex(int(base)+1, len(stops))], frac)
+}
+
+func blendColor(a, b Color, t float64) Color {
+	hueDelta := math.Mod(b.Hue-a.Hue+540, 360) - 180
+	hue := math.Mod(a.Hue+hueDelta*t, 360)
+	if hue < 0 {
+		hue += 360
+	}
+	return Color{
+		Hue:        hue,
+		Saturation: a.Saturation + (b.Saturation-a.Saturation)*t,
+		Brightness: a.Brightness + (b.Brightness-a.Brightness)*t,
+		Kelvin:     uint16(math.Round(float64(a.Kelvin) + (float64(b.Kelvin)-float64(a.Kelvin))*t)),
+	}
 }
 
 // flowLightTypes lists the surfaces a travelling crest makes sense on. A single

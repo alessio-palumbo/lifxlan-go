@@ -1,7 +1,6 @@
 package effects
 
 import (
-	"math"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
@@ -16,6 +15,9 @@ type GradientDriftConfig struct {
 	// Period is how long one full drift takes when advanced by Next. Zero uses
 	// defaultFlowPeriod. Ignored by FrameAtPhase.
 	Period time.Duration
+	// Sampling controls whether palette colors step cell-by-cell or interpolate
+	// between adjacent stops. Empty uses FlowSamplingStep.
+	Sampling FlowSamplingMode
 }
 
 // GradientDrift scrolls palette colors across a multizone or matrix surface
@@ -32,6 +34,9 @@ func NewGradientDrift(cfg GradientDriftConfig) *GradientDrift {
 	}
 	if cfg.Axis == "" {
 		cfg.Axis = FlowAxisHorizontal
+	}
+	if cfg.Sampling == "" {
+		cfg.Sampling = FlowSamplingStep
 	}
 	return &GradientDrift{cfg: cfg}
 }
@@ -56,12 +61,12 @@ func (g *GradientDrift) FrameAtPhase(phase float64, duration time.Duration) Fram
 		stops = []Color{g.cfg.Palette.Primary()}
 	}
 
-	offset := int(math.Floor(phase * float64(span)))
+	head := phase * float64(span)
 	colors := make([]Color, 0, size)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			position := flowPosition(axis, x, y)
-			colors = append(colors, stops[wrapIndex(position+offset, len(stops))])
+			colors = append(colors, sampleFlowColor(stops, float64(position)+head, g.cfg.Sampling))
 		}
 	}
 
