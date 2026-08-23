@@ -40,6 +40,8 @@ const (
 	EffectComet EffectID = "comet"
 	// EffectSparkle identifies the Sparkle effect.
 	EffectSparkle EffectID = "sparkle"
+	// EffectScanner identifies the Scanner effect.
+	EffectScanner EffectID = "scanner"
 	// EffectSolid identifies the Solid effect.
 	EffectSolid EffectID = "solid"
 	// EffectGradient identifies the Gradient effect.
@@ -327,6 +329,56 @@ func init() {
 				PeakBrightnessFactor: peakBrightnessFactor,
 				Seed:                 uint64(seed),
 				Period:               period,
+			}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectScanner,
+		Label:       "Scanner",
+		Description: "Move a soft band back and forth across the surface.",
+		DeviceKinds: scannerLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			flowAxisParamDefinition(),
+			flowPeriodParamDefinition(),
+			scannerWidthParamDefinition(),
+			scannerBackgroundBrightnessFactorParamDefinition(),
+			scannerPeakBrightnessFactorParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			axis, err := flowAxisParam(config.Params, "axis")
+			if err != nil {
+				return nil, err
+			}
+			period, err := DurationParam(config.Params, "period")
+			if err != nil {
+				return nil, err
+			}
+			width, err := NumberParam(config.Params, "width")
+			if err != nil {
+				return nil, err
+			}
+			backgroundBrightnessFactor, err := NumberParam(config.Params, "background_brightness_factor")
+			if err != nil {
+				return nil, err
+			}
+			peakBrightnessFactor, err := NumberParam(config.Params, "peak_brightness_factor")
+			if err != nil {
+				return nil, err
+			}
+			return NewScanner(ScannerConfig{
+				Capabilities:               caps,
+				Palette:                    palette,
+				Axis:                       axis,
+				Period:                     period,
+				Width:                      width,
+				BackgroundBrightnessFactor: backgroundBrightnessFactor,
+				PeakBrightnessFactor:       peakBrightnessFactor,
 			}), nil
 		},
 	})
@@ -1386,6 +1438,41 @@ func sparklePeriodParamDefinition() ParamDefinition {
 		Label:   "Period",
 		Kind:    ParamDuration,
 		Default: defaultSparklePeriod,
+	}
+}
+
+func scannerWidthParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "width",
+		Label:   "Width",
+		Kind:    ParamNumber,
+		Default: defaultScannerWidth,
+		Min:     float64Ptr(0.5),
+		Step:    float64Ptr(0.5),
+	}
+}
+
+func scannerBackgroundBrightnessFactorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "background_brightness_factor",
+		Label:   "Background Brightness Factor",
+		Kind:    ParamNumber,
+		Default: defaultScannerBackgroundBrightnessFactor,
+		Min:     float64Ptr(0.01),
+		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func scannerPeakBrightnessFactorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "peak_brightness_factor",
+		Label:   "Peak Brightness Factor",
+		Kind:    ParamNumber,
+		Default: defaultScannerPeakBrightnessFactor,
+		Min:     float64Ptr(1),
+		Max:     float64Ptr(2),
+		Step:    float64Ptr(0.05),
 	}
 }
 

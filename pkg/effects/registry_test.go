@@ -37,6 +37,7 @@ func TestDefinitionsDeterministicAndIncludeBuiltins(t *testing.T) {
 	for _, id := range []EffectID{
 		EffectComet,
 		EffectSparkle,
+		EffectScanner,
 		EffectSolid,
 		EffectGradient,
 		EffectGradientDrift,
@@ -99,6 +100,12 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 			}},
 			want: &Sparkle{},
 		},
+		"scanner": {
+			config: Config{ID: EffectScanner, Params: map[string]any{
+				"palette": Palette{Accents: []Color{color(10)}, Backgrounds: []Color{color(200)}},
+			}},
+			want: &Scanner{},
+		},
 		"sweep": {
 			config: Config{ID: EffectSweep, Params: map[string]any{
 				"palette": Palette{Accents: []Color{color(90)}, Backgrounds: []Color{color(200)}},
@@ -110,7 +117,7 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			caps := Capabilities{LightType: device.LightTypeSingleZone}
-			if tt.config.ID == EffectGradientDrift || tt.config.ID == EffectComet || tt.config.ID == EffectSparkle {
+			if tt.config.ID == EffectGradientDrift || tt.config.ID == EffectComet || tt.config.ID == EffectSparkle || tt.config.ID == EffectScanner {
 				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
 			}
 			effect, err := New(tt.config, caps)
@@ -406,6 +413,24 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 				"peak_brightness_factor": 3,
 			},
 		},
+		"invalid scanner width": {
+			ID: EffectScanner,
+			Params: map[string]any{
+				"width": 0,
+			},
+		},
+		"invalid scanner background brightness factor": {
+			ID: EffectScanner,
+			Params: map[string]any{
+				"background_brightness_factor": 2,
+			},
+		},
+		"invalid scanner peak brightness factor": {
+			ID: EffectScanner,
+			Params: map[string]any{
+				"peak_brightness_factor": 3,
+			},
+		},
 	}
 
 	for name, config := range tests {
@@ -414,7 +439,7 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 			switch config.ID {
 			case EffectWaterfall, EffectRockets, EffectRing, EffectSnake, EffectWorm, EffectWave, EffectConcentricFrames:
 				caps = Capabilities{LightType: device.LightTypeMatrix, Width: 3, Height: 3}
-			case EffectGradientDrift, EffectComet, EffectSparkle:
+			case EffectGradientDrift, EffectComet, EffectSparkle, EffectScanner:
 				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
 			}
 			if _, err := New(config, caps); !errors.Is(err, ErrInvalidConfig) {
