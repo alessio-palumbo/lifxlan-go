@@ -238,7 +238,10 @@ func init() {
 			flowPeriodParamDefinition(),
 			cometHeadSizeParamDefinition(),
 			cometTailSizeParamDefinition(),
-			cometFloorParamDefinition(),
+			cometBackgroundBrightnessFactorParamDefinition(),
+			cometPeakBrightnessFactorParamDefinition(),
+			cometTailCurveParamDefinition(),
+			cometTailSaturationFactorParamDefinition(),
 		},
 		New: func(config Config, caps Capabilities) (Effect, error) {
 			palette, err := paletteParam(config.Params, "palette")
@@ -261,18 +264,33 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			floor, err := NumberParam(config.Params, "floor")
+			backgroundBrightnessFactor, err := NumberParam(config.Params, "background_brightness_factor")
+			if err != nil {
+				return nil, err
+			}
+			peakBrightnessFactor, err := NumberParam(config.Params, "peak_brightness_factor")
+			if err != nil {
+				return nil, err
+			}
+			tailCurve, err := NumberParam(config.Params, "tail_curve")
+			if err != nil {
+				return nil, err
+			}
+			tailSaturationFactor, err := NumberParam(config.Params, "tail_saturation_factor")
 			if err != nil {
 				return nil, err
 			}
 			return NewComet(CometConfig{
-				Capabilities: caps,
-				Palette:      palette,
-				Axis:         axis,
-				Period:       period,
-				HeadSize:     headSize,
-				TailSize:     tailSize,
-				Floor:        floor,
+				Capabilities:               caps,
+				Palette:                    palette,
+				Axis:                       axis,
+				Period:                     period,
+				HeadSize:                   headSize,
+				TailSize:                   tailSize,
+				BackgroundBrightnessFactor: backgroundBrightnessFactor,
+				PeakBrightnessFactor:       peakBrightnessFactor,
+				TailCurve:                  tailCurve,
+				TailSaturationFactor:       tailSaturationFactor,
 			}), nil
 		},
 	})
@@ -1362,13 +1380,49 @@ func cometTailSizeParamDefinition() ParamDefinition {
 	}
 }
 
-func cometFloorParamDefinition() ParamDefinition {
+func cometBackgroundBrightnessFactorParamDefinition() ParamDefinition {
 	return ParamDefinition{
-		Key:     "floor",
-		Label:   "Floor",
+		Key:     "background_brightness_factor",
+		Label:   "Background Brightness Factor",
 		Kind:    ParamNumber,
-		Default: defaultCometFloor,
+		Default: defaultCometBackgroundBrightnessFactor,
 		Min:     float64Ptr(0.01),
+		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func cometPeakBrightnessFactorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "peak_brightness_factor",
+		Label:   "Peak Brightness Factor",
+		Kind:    ParamNumber,
+		Default: defaultCometPeakBrightnessFactor,
+		Min:     float64Ptr(1),
+		Max:     float64Ptr(2),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func cometTailCurveParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "tail_curve",
+		Label:   "Tail Curve",
+		Kind:    ParamNumber,
+		Default: defaultCometTailCurve,
+		Min:     float64Ptr(0.1),
+		Max:     float64Ptr(8),
+		Step:    float64Ptr(0.1),
+	}
+}
+
+func cometTailSaturationFactorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "tail_saturation_factor",
+		Label:   "Tail Saturation Factor",
+		Kind:    ParamNumber,
+		Default: defaultCometTailSaturationFactor,
+		Min:     float64Ptr(0),
 		Max:     float64Ptr(1),
 		Step:    float64Ptr(0.05),
 	}

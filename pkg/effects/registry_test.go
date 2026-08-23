@@ -383,10 +383,28 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 				"tail_size": 1.5,
 			},
 		},
-		"invalid comet floor": {
+		"invalid comet background brightness factor": {
 			ID: EffectComet,
 			Params: map[string]any{
-				"floor": 2,
+				"background_brightness_factor": 2,
+			},
+		},
+		"invalid comet peak brightness factor": {
+			ID: EffectComet,
+			Params: map[string]any{
+				"peak_brightness_factor": 3,
+			},
+		},
+		"invalid comet tail curve": {
+			ID: EffectComet,
+			Params: map[string]any{
+				"tail_curve": 0,
+			},
+		},
+		"invalid comet tail saturation factor": {
+			ID: EffectComet,
+			Params: map[string]any{
+				"tail_saturation_factor": 2,
 			},
 		},
 		"invalid sparkle density": {
