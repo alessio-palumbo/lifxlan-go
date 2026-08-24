@@ -221,7 +221,7 @@ deviceFrames, err := effects.AdaptFrameToSurface(frames[0].Frame, surface, effec
 The resulting `DeviceFrame` values contain colors, duration, send width, chain index, and orientation metadata.
 They can be serialized into a timeline, rendered in a preview, or converted to LAN messages later.
 
-Available effects include `Solid`, `Gradient`, `GradientDrift`, `Comet`, `Sparkle`, `Sweep`, `Flow`, `Ring`, `Waterfall`, `Rockets`, `Snake`, `Worm`, `Wave`, and `ConcentricFrames`.
+Available effects include `Solid`, `Gradient`, `GradientDrift`, `PaletteSweep`, `Comet`, `Sparkle`, `Sweep`, `Flow`, `Ring`, `Waterfall`, `Rockets`, `Snake`, `Worm`, `Wave`, and `ConcentricFrames`.
 
 `Flow` defaults to a moving brightness crest. For filled matrix-style color
 motion where palette brightness should stay constant, use:
@@ -239,6 +239,10 @@ flow := effects.NewFlow(effects.FlowConfig{
 `Flow` and `GradientDrift` default to whole-cell palette steps. Use
 `FlowSamplingInterpolate` when slower live effects should blend between palette
 stops instead of holding each zone offset until the next step.
+
+`PaletteSweep` moves a multi-color band over a dim drifting gradient background.
+It is useful for strip and matrix choreography where the whole surface should stay
+lit while a stronger palette band travels across it.
 
 The older `pkg/matrix` effect helpers are kept for compatibility, but new code
 should prefer `pkg/effects` plus `pkg/effects/adapters`. The newer API separates

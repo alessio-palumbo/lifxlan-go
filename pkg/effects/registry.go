@@ -48,6 +48,8 @@ const (
 	EffectGradient EffectID = "gradient"
 	// EffectGradientDrift identifies the GradientDrift effect.
 	EffectGradientDrift EffectID = "gradient_drift"
+	// EffectPaletteSweep identifies the PaletteSweep effect.
+	EffectPaletteSweep EffectID = "palette_sweep"
 	// EffectSweep identifies the Sweep effect.
 	EffectSweep EffectID = "sweep"
 	// EffectWaterfall identifies the Waterfall matrix effect.
@@ -207,6 +209,74 @@ func init() {
 				Direction:    direction,
 				Period:       period,
 				Sampling:     sampling,
+			}), nil
+		},
+	})
+
+	mustRegister(EffectDefinition{
+		ID:          EffectPaletteSweep,
+		Label:       "Palette Sweep",
+		Description: "Move a multi-color band over a dim drifting gradient background.",
+		DeviceKinds: paletteSweepLightTypes(),
+		Params: []ParamDefinition{
+			paletteParamDefinition(defaultPalette),
+			flowAxisParamDefinition(),
+			flowDirectionParamDefinition(),
+			flowSamplingParamDefinition(),
+			flowPeriodParamDefinition(),
+			paletteSweepBandSizeParamDefinition(),
+			paletteSweepBandFractionParamDefinition(),
+			paletteSweepBackgroundBrightnessFactorParamDefinition(),
+			paletteSweepTailBrightnessFactorParamDefinition(),
+		},
+		New: func(config Config, caps Capabilities) (Effect, error) {
+			palette, err := paletteParam(config.Params, "palette")
+			if err != nil {
+				return nil, err
+			}
+			axis, err := flowAxisParam(config.Params, "axis")
+			if err != nil {
+				return nil, err
+			}
+			direction, err := flowDirectionParam(config.Params, "direction")
+			if err != nil {
+				return nil, err
+			}
+			sampling, err := flowSamplingParam(config.Params, "sampling")
+			if err != nil {
+				return nil, err
+			}
+			period, err := DurationParam(config.Params, "period")
+			if err != nil {
+				return nil, err
+			}
+			bandSize, err := intParam(config.Params, "band_size")
+			if err != nil {
+				return nil, err
+			}
+			bandFraction, err := NumberParam(config.Params, "band_fraction")
+			if err != nil {
+				return nil, err
+			}
+			backgroundBrightnessFactor, err := NumberParam(config.Params, "background_brightness_factor")
+			if err != nil {
+				return nil, err
+			}
+			tailBrightnessFactor, err := NumberParam(config.Params, "tail_brightness_factor")
+			if err != nil {
+				return nil, err
+			}
+			return NewPaletteSweep(PaletteSweepConfig{
+				Capabilities:               caps,
+				Palette:                    palette,
+				Axis:                       axis,
+				Direction:                  direction,
+				Sampling:                   sampling,
+				Period:                     period,
+				BandSize:                   bandSize,
+				BandFraction:               bandFraction,
+				BackgroundBrightnessFactor: backgroundBrightnessFactor,
+				TailBrightnessFactor:       tailBrightnessFactor,
 			}), nil
 		},
 	})
@@ -1564,6 +1634,53 @@ func scannerPeakBrightnessFactorParamDefinition() ParamDefinition {
 		Default: defaultScannerPeakBrightnessFactor,
 		Min:     float64Ptr(1),
 		Max:     float64Ptr(2),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func paletteSweepBandSizeParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "band_size",
+		Label:   "Band Size",
+		Kind:    ParamNumber,
+		Default: 0,
+		Min:     float64Ptr(0),
+		Step:    float64Ptr(1),
+	}
+}
+
+func paletteSweepBandFractionParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "band_fraction",
+		Label:   "Band Fraction",
+		Kind:    ParamNumber,
+		Default: defaultPaletteSweepBandFraction,
+		Min:     float64Ptr(0.05),
+		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func paletteSweepBackgroundBrightnessFactorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "background_brightness_factor",
+		Label:   "Background Brightness Factor",
+		Kind:    ParamNumber,
+		Default: defaultPaletteSweepBackgroundBrightnessFactor,
+		Min:     float64Ptr(0.01),
+		Max:     float64Ptr(1),
+		Step:    float64Ptr(0.05),
+	}
+}
+
+func paletteSweepTailBrightnessFactorParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "tail_brightness_factor",
+		Label:   "Tail Brightness Factor",
+		Kind:    ParamNumber,
+		Default: defaultPaletteSweepTailBrightnessFactor,
+		Min:     float64Ptr(0.01),
+		Max:     float64Ptr(1),
 		Step:    float64Ptr(0.05),
 	}
 }

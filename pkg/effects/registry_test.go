@@ -41,6 +41,7 @@ func TestDefinitionsDeterministicAndIncludeBuiltins(t *testing.T) {
 		EffectSolid,
 		EffectGradient,
 		EffectGradientDrift,
+		EffectPaletteSweep,
 		EffectSweep,
 		EffectWaterfall,
 		EffectRockets,
@@ -88,6 +89,12 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 			}},
 			want: &GradientDrift{},
 		},
+		"palette sweep": {
+			config: Config{ID: EffectPaletteSweep, Params: map[string]any{
+				"palette": Palette{Base: []Color{color(10), color(20)}, Backgrounds: []Color{color(200)}},
+			}},
+			want: &PaletteSweep{},
+		},
 		"comet": {
 			config: Config{ID: EffectComet, Params: map[string]any{
 				"palette": Palette{Accents: []Color{color(10)}, Backgrounds: []Color{color(200)}},
@@ -117,7 +124,7 @@ func TestNewConstructsBuiltInEffects(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			caps := Capabilities{LightType: device.LightTypeSingleZone}
-			if tt.config.ID == EffectGradientDrift || tt.config.ID == EffectComet || tt.config.ID == EffectSparkle || tt.config.ID == EffectScanner {
+			if tt.config.ID == EffectGradientDrift || tt.config.ID == EffectPaletteSweep || tt.config.ID == EffectComet || tt.config.ID == EffectSparkle || tt.config.ID == EffectScanner {
 				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
 			}
 			effect, err := New(tt.config, caps)
@@ -383,6 +390,30 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 				"direction": "backwards",
 			},
 		},
+		"invalid palette sweep band size": {
+			ID: EffectPaletteSweep,
+			Params: map[string]any{
+				"band_size": 1.5,
+			},
+		},
+		"invalid palette sweep band fraction": {
+			ID: EffectPaletteSweep,
+			Params: map[string]any{
+				"band_fraction": 2,
+			},
+		},
+		"invalid palette sweep background brightness factor": {
+			ID: EffectPaletteSweep,
+			Params: map[string]any{
+				"background_brightness_factor": 2,
+			},
+		},
+		"invalid palette sweep tail brightness factor": {
+			ID: EffectPaletteSweep,
+			Params: map[string]any{
+				"tail_brightness_factor": 2,
+			},
+		},
 		"invalid comet tail size": {
 			ID: EffectComet,
 			Params: map[string]any{
@@ -463,7 +494,7 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 			switch config.ID {
 			case EffectWaterfall, EffectRockets, EffectRing, EffectSnake, EffectWorm, EffectWave, EffectConcentricFrames:
 				caps = Capabilities{LightType: device.LightTypeMatrix, Width: 3, Height: 3}
-			case EffectGradientDrift, EffectComet, EffectSparkle, EffectScanner:
+			case EffectGradientDrift, EffectPaletteSweep, EffectComet, EffectSparkle, EffectScanner:
 				caps = Capabilities{LightType: device.LightTypeMultiZone, Zones: 4}
 			}
 			if _, err := New(config, caps); !errors.Is(err, ErrInvalidConfig) {
