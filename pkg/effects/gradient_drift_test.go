@@ -37,6 +37,37 @@ func TestGradientDriftPreservesPaletteBrightness(t *testing.T) {
 	}
 }
 
+func TestGradientDriftMatchesConstantBrightnessFlow(t *testing.T) {
+	cfg := GradientDriftConfig{
+		Capabilities: matrixCapabilities(5, 4),
+		Palette:      gradientDriftPalette(),
+		Axis:         FlowAxisDiagonal,
+		Direction:    FlowDirectionReverse,
+		Period:       1500 * time.Millisecond,
+		Sampling:     FlowSamplingInterpolate,
+	}
+	drift := NewGradientDrift(cfg)
+	flow := NewFlow(FlowConfig{
+		Capabilities:   cfg.Capabilities,
+		Palette:        cfg.Palette,
+		Axis:           cfg.Axis,
+		Direction:      cfg.Direction,
+		Period:         cfg.Period,
+		BrightnessMode: FlowBrightnessConstant,
+		Sampling:       cfg.Sampling,
+	})
+
+	if !sameFrame(drift.FrameAtPhase(0.35, time.Second), flow.FrameAtPhase(0.35, time.Second)) {
+		t.Fatal("gradient drift should match constant-brightness flow at the same phase")
+	}
+
+	driftNext, driftOK := drift.Next(300 * time.Millisecond)
+	flowNext, flowOK := flow.Next(300 * time.Millisecond)
+	if !driftOK || !flowOK || !sameFrame(driftNext, flowNext) {
+		t.Fatalf("Next mismatch: drift ok=%t flow ok=%t", driftOK, flowOK)
+	}
+}
+
 func TestGradientDriftInterpolatedSamplingBlendsAdjacentStops(t *testing.T) {
 	palette := Palette{
 		Base: []Color{
@@ -78,6 +109,30 @@ func TestGradientDriftPhaseIsDeterministicAndWrapped(t *testing.T) {
 	}
 	if !sameFrame(drift.FrameAtPhase(-0.25, time.Second), drift.FrameAtPhase(0.75, time.Second)) {
 		t.Fatal("negative phase should wrap to the equivalent forward position")
+	}
+}
+
+func TestGradientDriftDirectionControlsVisibleMotion(t *testing.T) {
+	palette := gradientDriftPalette()
+	forward := NewGradientDrift(GradientDriftConfig{
+		Capabilities: stripCapabilities(3),
+		Palette:      palette,
+	})
+	reverse := NewGradientDrift(GradientDriftConfig{
+		Capabilities: stripCapabilities(3),
+		Palette:      palette,
+		Direction:    FlowDirectionReverse,
+	})
+
+	start := forward.FrameAtPhase(0, time.Second)
+	forwardLater := forward.FrameAtPhase(1.0/3.0, time.Second)
+	reverseLater := reverse.FrameAtPhase(1.0/3.0, time.Second)
+
+	if forwardLater.Colors[1].Hue != start.Colors[0].Hue {
+		t.Fatalf("forward hue at index 1 = %v, want previous index 0 hue %v", forwardLater.Colors[1].Hue, start.Colors[0].Hue)
+	}
+	if reverseLater.Colors[0].Hue != start.Colors[1].Hue {
+		t.Fatalf("reverse hue at index 0 = %v, want previous index 1 hue %v", reverseLater.Colors[0].Hue, start.Colors[1].Hue)
 	}
 }
 
@@ -157,6 +212,9 @@ func TestGradientDriftIsRegistered(t *testing.T) {
 	if drift.cfg.Axis != FlowAxisDiagonal {
 		t.Fatalf("axis = %q, want %q", drift.cfg.Axis, FlowAxisDiagonal)
 	}
+	if drift.cfg.Direction != FlowDirectionForward {
+		t.Fatalf("direction = %q, want %q", drift.cfg.Direction, FlowDirectionForward)
+	}
 	if drift.cfg.Period != 500*time.Millisecond {
 		t.Fatalf("period = %s, want 500ms", drift.cfg.Period)
 	}
@@ -169,8 +227,9 @@ func TestGradientDriftIsRegistered(t *testing.T) {
 	}
 
 	effect, err = New(Config{ID: EffectGradientDrift, Params: map[string]any{
-		"palette":  gradientDriftPalette(),
-		"sampling": string(FlowSamplingInterpolate),
+		"palette":   gradientDriftPalette(),
+		"direction": string(FlowDirectionReverse),
+		"sampling":  string(FlowSamplingInterpolate),
 	}}, Capabilities{LightType: device.LightTypeMultiZone, Zones: 8})
 	if err != nil {
 		t.Fatalf("New with sampling: %v", err)
@@ -181,6 +240,9 @@ func TestGradientDriftIsRegistered(t *testing.T) {
 	}
 	if drift.cfg.Sampling != FlowSamplingInterpolate {
 		t.Fatalf("sampling = %q, want %q", drift.cfg.Sampling, FlowSamplingInterpolate)
+	}
+	if drift.cfg.Direction != FlowDirectionReverse {
+		t.Fatalf("direction = %q, want %q", drift.cfg.Direction, FlowDirectionReverse)
 	}
 }
 

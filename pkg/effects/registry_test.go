@@ -377,6 +377,12 @@ func TestNewRejectsInvalidParams(t *testing.T) {
 				"axis": "sideways",
 			},
 		},
+		"invalid gradient drift direction": {
+			ID: EffectGradientDrift,
+			Params: map[string]any{
+				"direction": "backwards",
+			},
+		},
 		"invalid comet tail size": {
 			ID: EffectComet,
 			Params: map[string]any{

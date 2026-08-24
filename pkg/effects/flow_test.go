@@ -109,8 +109,8 @@ func TestFlowSamplingDefaultsToStep(t *testing.T) {
 	})
 
 	frame := flow.FrameAtPhase(0.125, time.Second)
-	if frame.Colors[0].Hue != 359 {
-		t.Fatalf("hue = %v, want first stepped stop", frame.Colors[0].Hue)
+	if frame.Colors[0].Hue != 1 {
+		t.Fatalf("hue = %v, want stepped stop without interpolation", frame.Colors[0].Hue)
 	}
 }
 
@@ -150,6 +150,39 @@ func TestFlowMovesWithPhase(t *testing.T) {
 	// Whole numbers are the same point in the cycle.
 	if !sameFrame(first, flow.FrameAtPhase(1, time.Second)) {
 		t.Fatal("phase 1 should return to the start of the cycle")
+	}
+}
+
+func TestFlowDirectionControlsVisibleMotion(t *testing.T) {
+	palette := Palette{
+		Base: []Color{
+			{Hue: 0, Saturation: 100, Brightness: 100, Kelvin: 3500},
+			{Hue: 120, Saturation: 100, Brightness: 100, Kelvin: 3500},
+			{Hue: 240, Saturation: 100, Brightness: 100, Kelvin: 3500},
+			{Hue: 60, Saturation: 100, Brightness: 100, Kelvin: 3500},
+		},
+	}
+	forward := NewFlow(FlowConfig{
+		Capabilities:   stripCapabilities(4),
+		Palette:        palette,
+		BrightnessMode: FlowBrightnessConstant,
+	})
+	reverse := NewFlow(FlowConfig{
+		Capabilities:   stripCapabilities(4),
+		Palette:        palette,
+		Direction:      FlowDirectionReverse,
+		BrightnessMode: FlowBrightnessConstant,
+	})
+
+	start := forward.FrameAtPhase(0, time.Second)
+	forwardLater := forward.FrameAtPhase(0.25, time.Second)
+	reverseLater := reverse.FrameAtPhase(0.25, time.Second)
+
+	if forwardLater.Colors[1].Hue != start.Colors[0].Hue {
+		t.Fatalf("forward hue at index 1 = %v, want previous index 0 hue %v", forwardLater.Colors[1].Hue, start.Colors[0].Hue)
+	}
+	if reverseLater.Colors[0].Hue != start.Colors[1].Hue {
+		t.Fatalf("reverse hue at index 0 = %v, want previous index 1 hue %v", reverseLater.Colors[0].Hue, start.Colors[1].Hue)
 	}
 }
 
@@ -259,6 +292,9 @@ func TestFlowIsRegistered(t *testing.T) {
 	if flow.cfg.Axis != FlowAxisDiagonal {
 		t.Fatalf("axis = %q, want %q", flow.cfg.Axis, FlowAxisDiagonal)
 	}
+	if flow.cfg.Direction != FlowDirectionForward {
+		t.Fatalf("direction = %q, want %q", flow.cfg.Direction, FlowDirectionForward)
+	}
 	if flow.cfg.BrightnessMode != FlowBrightnessCrest {
 		t.Fatalf("brightness mode = %q, want %q", flow.cfg.BrightnessMode, FlowBrightnessCrest)
 	}
@@ -277,6 +313,13 @@ func TestFlowIsRegistered(t *testing.T) {
 		"axis":    "sideways",
 	}}, matrixCapabilities(8, 8)); err == nil {
 		t.Fatal("an unknown axis should be rejected")
+	}
+
+	if _, err := New(Config{ID: EffectFlow, Params: map[string]any{
+		"palette":   flowPalette(),
+		"direction": "backwards",
+	}}, matrixCapabilities(8, 8)); err == nil {
+		t.Fatal("an unknown direction should be rejected")
 	}
 
 	if _, err := New(Config{ID: EffectFlow, Params: map[string]any{

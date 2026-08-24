@@ -52,12 +52,27 @@ const (
 	FlowSamplingInterpolate FlowSamplingMode = "interpolate"
 )
 
+// FlowDirection controls the direction a flow travels along its axis.
+type FlowDirection string
+
+const (
+	// FlowDirectionForward moves the visible pattern from lower position indexes
+	// toward higher position indexes.
+	FlowDirectionForward FlowDirection = "forward"
+	// FlowDirectionReverse moves the visible pattern from higher position indexes
+	// toward lower position indexes.
+	FlowDirectionReverse FlowDirection = "reverse"
+)
+
 // FlowConfig configures a Flow effect.
 type FlowConfig struct {
 	Capabilities Capabilities
 	Palette      Palette
 	// Axis is the axis the crest travels along. Empty uses FlowAxisHorizontal.
 	Axis FlowAxis
+	// Direction controls the travel direction along Axis. Empty uses
+	// FlowDirectionForward.
+	Direction FlowDirection
 	// Period is how long one full traversal takes when the effect is advanced by
 	// Next. Zero uses defaultFlowPeriod. Ignored by FrameAtPhase, which is given a
 	// position directly.
@@ -95,6 +110,9 @@ func NewFlow(cfg FlowConfig) *Flow {
 	if cfg.Axis == "" {
 		cfg.Axis = FlowAxisHorizontal
 	}
+	if cfg.Direction == "" {
+		cfg.Direction = FlowDirectionForward
+	}
 	if cfg.BrightnessMode == "" {
 		cfg.BrightnessMode = FlowBrightnessCrest
 	}
@@ -131,13 +149,13 @@ func (f *Flow) FrameAtPhase(phase float64, duration time.Duration) Frame {
 		stops = []Color{f.cfg.Palette.Primary()}
 	}
 
-	head := phase * float64(span)
+	head := f.motion(phase, span)
 	colors := make([]Color, 0, size)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			position := flowPosition(axis, x, y)
 
-			color := sampleFlowColor(stops, float64(position)+head, f.cfg.Sampling)
+			color := sampleFlowColor(stops, float64(position)-head, f.cfg.Sampling)
 			color.Brightness = f.brightness(color.Brightness, head, position, span)
 			colors = append(colors, color)
 		}
@@ -154,6 +172,14 @@ func (f *Flow) FrameAtPhase(phase float64, duration time.Duration) Frame {
 // Reset returns the effect to the start of its cycle.
 func (f *Flow) Reset() {
 	f.elapsed = 0
+}
+
+func (f *Flow) motion(phase float64, span int) float64 {
+	motion := phase * float64(span)
+	if f.cfg.Direction == FlowDirectionReverse {
+		return -motion
+	}
+	return motion
 }
 
 // axis resolves the configured axis against the surface. Travelling along y on a

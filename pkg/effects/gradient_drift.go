@@ -12,6 +12,9 @@ type GradientDriftConfig struct {
 	Palette      Palette
 	// Axis is the axis the palette scrolls along. Empty uses FlowAxisHorizontal.
 	Axis FlowAxis
+	// Direction controls the travel direction along Axis. Empty uses
+	// FlowDirectionForward.
+	Direction FlowDirection
 	// Period is how long one full drift takes when advanced by Next. Zero uses
 	// defaultFlowPeriod. Ignored by FrameAtPhase.
 	Period time.Duration
@@ -23,8 +26,8 @@ type GradientDriftConfig struct {
 // GradientDrift scrolls palette colors across a multizone or matrix surface
 // without changing palette brightness.
 type GradientDrift struct {
-	cfg     GradientDriftConfig
-	elapsed time.Duration
+	cfg  GradientDriftConfig
+	flow *Flow
 }
 
 // NewGradientDrift returns a GradientDrift effect.
@@ -35,61 +38,40 @@ func NewGradientDrift(cfg GradientDriftConfig) *GradientDrift {
 	if cfg.Axis == "" {
 		cfg.Axis = FlowAxisHorizontal
 	}
+	if cfg.Direction == "" {
+		cfg.Direction = FlowDirectionForward
+	}
 	if cfg.Sampling == "" {
 		cfg.Sampling = FlowSamplingStep
 	}
-	return &GradientDrift{cfg: cfg}
+	return &GradientDrift{
+		cfg: cfg,
+		flow: NewFlow(FlowConfig{
+			Capabilities:   cfg.Capabilities,
+			Palette:        cfg.Palette,
+			Axis:           cfg.Axis,
+			Direction:      cfg.Direction,
+			Period:         cfg.Period,
+			BrightnessMode: FlowBrightnessConstant,
+			Sampling:       cfg.Sampling,
+		}),
+	}
 }
 
 // Next advances the effect by dt and returns the frame at the new position.
 func (g *GradientDrift) Next(dt time.Duration) (Frame, bool) {
-	g.elapsed += dt
-	phase := float64(g.elapsed) / float64(g.cfg.Period)
-	return g.FrameAtPhase(phase, dt), true
+	return g.flow.Next(dt)
 }
 
 // FrameAtPhase returns the frame at an absolute position in the drift cycle.
 // Whole phases address the same palette position, and negative phases wrap.
 func (g *GradientDrift) FrameAtPhase(phase float64, duration time.Duration) Frame {
-	width, height := frameDimensions(g.cfg.Capabilities)
-	axis := g.axis(height)
-	span := flowSpan(axis, width, height)
-	size := FrameSize(width, height)
-
-	stops := g.cfg.Palette.GradientStops(span)
-	if len(stops) == 0 {
-		stops = []Color{g.cfg.Palette.Primary()}
-	}
-
-	head := phase * float64(span)
-	colors := make([]Color, 0, size)
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			position := flowPosition(axis, x, y)
-			colors = append(colors, sampleFlowColor(stops, float64(position)+head, g.cfg.Sampling))
-		}
-	}
-
-	return Frame{
-		Colors:   colors,
-		Width:    width,
-		Height:   height,
-		Duration: duration,
-	}
+	return g.flow.FrameAtPhase(phase, duration)
 }
 
 // Reset returns the effect to the start of its cycle.
 func (g *GradientDrift) Reset() {
-	g.elapsed = 0
-}
-
-// axis resolves the configured axis against the surface. Travelling along y on a
-// single row would leave the whole surface in unison, which is not an effect.
-func (g *GradientDrift) axis(height int) FlowAxis {
-	if height <= 1 {
-		return FlowAxisHorizontal
-	}
-	return g.cfg.Axis
+	g.flow.Reset()
 }
 
 func gradientDriftLightTypes() []device.LightType {

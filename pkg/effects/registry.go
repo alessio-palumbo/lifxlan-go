@@ -175,6 +175,7 @@ func init() {
 		Params: []ParamDefinition{
 			paletteParamDefinition(defaultPalette),
 			flowAxisParamDefinition(),
+			flowDirectionParamDefinition(),
 			flowSamplingParamDefinition(),
 			flowPeriodParamDefinition(),
 		},
@@ -184,6 +185,10 @@ func init() {
 				return nil, err
 			}
 			axis, err := flowAxisParam(config.Params, "axis")
+			if err != nil {
+				return nil, err
+			}
+			direction, err := flowDirectionParam(config.Params, "direction")
 			if err != nil {
 				return nil, err
 			}
@@ -199,6 +204,7 @@ func init() {
 				Capabilities: caps,
 				Palette:      palette,
 				Axis:         axis,
+				Direction:    direction,
 				Period:       period,
 				Sampling:     sampling,
 			}), nil
@@ -409,6 +415,7 @@ func init() {
 		Params: []ParamDefinition{
 			paletteParamDefinition(defaultPalette),
 			flowAxisParamDefinition(),
+			flowDirectionParamDefinition(),
 			flowBrightnessModeParamDefinition(),
 			flowSamplingParamDefinition(),
 			flowPeriodParamDefinition(),
@@ -420,6 +427,10 @@ func init() {
 				return nil, err
 			}
 			axis, err := flowAxisParam(config.Params, "axis")
+			if err != nil {
+				return nil, err
+			}
+			direction, err := flowDirectionParam(config.Params, "direction")
 			if err != nil {
 				return nil, err
 			}
@@ -443,6 +454,7 @@ func init() {
 				Capabilities:   caps,
 				Palette:        palette,
 				Axis:           axis,
+				Direction:      direction,
 				BrightnessMode: brightnessMode,
 				Sampling:       sampling,
 				Period:         period,
@@ -962,6 +974,19 @@ func flowAxisParam(params map[string]any, key string) (FlowAxis, error) {
 	}
 }
 
+func flowDirectionParam(params map[string]any, key string) (FlowDirection, error) {
+	choice, err := ChoiceParam(params, key)
+	if err != nil {
+		return FlowDirectionForward, err
+	}
+	switch FlowDirection(choice) {
+	case FlowDirectionForward, FlowDirectionReverse:
+		return FlowDirection(choice), nil
+	default:
+		return FlowDirectionForward, fmt.Errorf("%w: parameter %q has invalid choice %q", ErrInvalidConfig, key, choice)
+	}
+}
+
 func flowBrightnessModeParam(params map[string]any, key string) (FlowBrightnessMode, error) {
 	choice, err := ChoiceParam(params, key)
 	if err != nil {
@@ -1307,6 +1332,19 @@ func flowAxisParamDefinition() ParamDefinition {
 			{Value: string(FlowAxisHorizontal), Label: "Horizontal"},
 			{Value: string(FlowAxisVertical), Label: "Vertical"},
 			{Value: string(FlowAxisDiagonal), Label: "Diagonal"},
+		},
+	}
+}
+
+func flowDirectionParamDefinition() ParamDefinition {
+	return ParamDefinition{
+		Key:     "direction",
+		Label:   "Direction",
+		Kind:    ParamChoiceKind,
+		Default: string(FlowDirectionForward),
+		Choices: []ParamChoice{
+			{Value: string(FlowDirectionForward), Label: "Forward"},
+			{Value: string(FlowDirectionReverse), Label: "Reverse"},
 		},
 	}
 }
