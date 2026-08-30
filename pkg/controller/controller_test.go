@@ -148,11 +148,37 @@ func TestController(t *testing.T) {
 
 		ctrl.addSession(addr0, serial0)
 		ctrl.addSession(addr1, serial1)
+		locationID0 := device.LocationID{0x01}
+		locationID1 := device.LocationID{0x02}
+		groupID0 := device.GroupID{0x03}
+		groupID1 := device.GroupID{0x04}
+		ctrl.sessions[serial0].mu.Lock()
+		ctrl.sessions[serial0].device.LocationID = locationID0
+		ctrl.sessions[serial0].device.Location = "Home"
+		ctrl.sessions[serial0].device.GroupID = groupID0
+		ctrl.sessions[serial0].device.Group = "Office"
+		ctrl.sessions[serial0].mu.Unlock()
+		ctrl.sessions[serial1].mu.Lock()
+		ctrl.sessions[serial1].device.LocationID = locationID1
+		ctrl.sessions[serial1].device.Location = "Home"
+		ctrl.sessions[serial1].device.GroupID = groupID1
+		ctrl.sessions[serial1].device.Group = "Office"
+		ctrl.sessions[serial1].mu.Unlock()
 
 		devices := ctrl.GetDevices()
 		assert.Equal(t, 2, len(devices))
 		assert.Equal(t, serial0, devices[0].Serial)
 		assert.Equal(t, serial1, devices[1].Serial)
+		assert.Equal(t, locationID0, devices[0].LocationID)
+		assert.Equal(t, locationID1, devices[1].LocationID)
+		assert.NotEqual(t, devices[0].LocationID, devices[1].LocationID)
+		assert.Equal(t, "Home", devices[0].Location)
+		assert.Equal(t, "Home", devices[1].Location)
+		assert.Equal(t, groupID0, devices[0].GroupID)
+		assert.Equal(t, groupID1, devices[1].GroupID)
+		assert.NotEqual(t, devices[0].GroupID, devices[1].GroupID)
+		assert.Equal(t, "Office", devices[0].Group)
+		assert.Equal(t, "Office", devices[1].Group)
 
 	})
 

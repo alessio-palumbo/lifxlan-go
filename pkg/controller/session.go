@@ -166,15 +166,19 @@ func (s *deviceSession) recvloop() {
 					s.device.LastUpdatedAt = time.Now()
 				}
 			case *packets.DeviceStateLocation:
+				locationID := device.LocationID(p.Location)
 				label := device.ParseLabel(p.Label)
-				if shouldUpdate(s.device.Location, label) {
+				if shouldUpdate(s.device.LocationID, locationID) || shouldUpdate(s.device.Location, label) {
+					s.device.LocationID = locationID
 					s.device.Location = label
 					s.device.LastUpdatedAt = time.Now()
 				}
 			case *packets.DeviceStateGroup:
+				groupID := device.GroupID(p.Group)
 				label := device.ParseLabel(p.Label)
-				if shouldUpdate(s.device.Group, label) {
-					s.device.Group = device.ParseLabel(p.Label)
+				if shouldUpdate(s.device.GroupID, groupID) || shouldUpdate(s.device.Group, label) {
+					s.device.GroupID = groupID
+					s.device.Group = label
 					s.device.LastUpdatedAt = time.Now()
 				}
 			case *packets.TileStateDeviceChain:

@@ -166,15 +166,81 @@ func TestSession(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		assert.Equal(t, "3.50", session.deviceSnapshot().FirmwareVersion)
 
-		// Updates location
-		session.inbound <- protocol.NewMessage(&packets.DeviceStateLocation{Label: [32]byte{'H', 'o', 'm', 'e'}})
+		// Updates location ID and label.
+		locationID := [16]byte{0x01, 0x02, 0x03, 0x04}
+		locationUpdatedAfter := session.deviceSnapshot().LastUpdatedAt
+		session.inbound <- protocol.NewMessage(&packets.DeviceStateLocation{
+			Location: locationID,
+			Label:    [32]byte{'H', 'o', 'm', 'e'},
+		})
 		time.Sleep(10 * time.Millisecond)
-		assert.Equal(t, "Home", session.deviceSnapshot().Location)
+		deviceSnapshot = session.deviceSnapshot()
+		assert.Equal(t, device.LocationID(locationID), deviceSnapshot.LocationID)
+		assert.Equal(t, "Home", deviceSnapshot.Location)
+		assert.Greater(t, deviceSnapshot.LastUpdatedAt, locationUpdatedAfter)
 
-		// Updates group
-		session.inbound <- protocol.NewMessage(&packets.DeviceStateGroup{Label: [32]byte{'B', 'e', 'd', 'r', 'o', 'o', 'm'}})
+		// A label rename retains the stable ID and updates LastUpdatedAt.
+		locationRenamedAfter := deviceSnapshot.LastUpdatedAt
+		session.inbound <- protocol.NewMessage(&packets.DeviceStateLocation{
+			Location: locationID,
+			Label:    [32]byte{'H', 'o', 'u', 's', 'e'},
+		})
 		time.Sleep(10 * time.Millisecond)
-		assert.Equal(t, "Bedroom", session.deviceSnapshot().Group)
+		deviceSnapshot = session.deviceSnapshot()
+		assert.Equal(t, device.LocationID(locationID), deviceSnapshot.LocationID)
+		assert.Equal(t, "House", deviceSnapshot.Location)
+		assert.Greater(t, deviceSnapshot.LastUpdatedAt, locationRenamedAfter)
+
+		// An ID change with the same label also updates LastUpdatedAt.
+		newLocationID := [16]byte{0x11, 0x12, 0x13, 0x14}
+		locationIDUpdatedAfter := deviceSnapshot.LastUpdatedAt
+		session.inbound <- protocol.NewMessage(&packets.DeviceStateLocation{
+			Location: newLocationID,
+			Label:    [32]byte{'H', 'o', 'u', 's', 'e'},
+		})
+		time.Sleep(10 * time.Millisecond)
+		deviceSnapshot = session.deviceSnapshot()
+		assert.Equal(t, device.LocationID(newLocationID), deviceSnapshot.LocationID)
+		assert.Equal(t, "House", deviceSnapshot.Location)
+		assert.Greater(t, deviceSnapshot.LastUpdatedAt, locationIDUpdatedAfter)
+
+		// Updates group ID and label.
+		groupID := [16]byte{0x05, 0x06, 0x07, 0x08}
+		groupUpdatedAfter := deviceSnapshot.LastUpdatedAt
+		session.inbound <- protocol.NewMessage(&packets.DeviceStateGroup{
+			Group: groupID,
+			Label: [32]byte{'B', 'e', 'd', 'r', 'o', 'o', 'm'},
+		})
+		time.Sleep(10 * time.Millisecond)
+		deviceSnapshot = session.deviceSnapshot()
+		assert.Equal(t, device.GroupID(groupID), deviceSnapshot.GroupID)
+		assert.Equal(t, "Bedroom", deviceSnapshot.Group)
+		assert.Greater(t, deviceSnapshot.LastUpdatedAt, groupUpdatedAfter)
+
+		// A label rename retains the stable ID and updates LastUpdatedAt.
+		groupRenamedAfter := deviceSnapshot.LastUpdatedAt
+		session.inbound <- protocol.NewMessage(&packets.DeviceStateGroup{
+			Group: groupID,
+			Label: [32]byte{'U', 'p', 's', 't', 'a', 'i', 'r', 's'},
+		})
+		time.Sleep(10 * time.Millisecond)
+		deviceSnapshot = session.deviceSnapshot()
+		assert.Equal(t, device.GroupID(groupID), deviceSnapshot.GroupID)
+		assert.Equal(t, "Upstairs", deviceSnapshot.Group)
+		assert.Greater(t, deviceSnapshot.LastUpdatedAt, groupRenamedAfter)
+
+		// An ID change with the same label also updates LastUpdatedAt.
+		newGroupID := [16]byte{0x15, 0x16, 0x17, 0x18}
+		groupIDUpdatedAfter := deviceSnapshot.LastUpdatedAt
+		session.inbound <- protocol.NewMessage(&packets.DeviceStateGroup{
+			Group: newGroupID,
+			Label: [32]byte{'U', 'p', 's', 't', 'a', 'i', 'r', 's'},
+		})
+		time.Sleep(10 * time.Millisecond)
+		deviceSnapshot = session.deviceSnapshot()
+		assert.Equal(t, device.GroupID(newGroupID), deviceSnapshot.GroupID)
+		assert.Equal(t, "Upstairs", deviceSnapshot.Group)
+		assert.Greater(t, deviceSnapshot.LastUpdatedAt, groupIDUpdatedAfter)
 
 		// Updates matrix properties
 		tileDevices := [16]packets.TileStateDevice{{Width: 8, Height: 8}, {Width: 8, Height: 8}}

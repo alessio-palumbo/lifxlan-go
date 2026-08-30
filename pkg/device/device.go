@@ -94,6 +94,32 @@ func (s Serial) IsNil() bool {
 	return s == [8]byte{}
 }
 
+// LocationID is the stable identifier assigned to a LIFX location.
+type LocationID [16]byte
+
+// String converts a location identifier into its canonical hexadecimal value.
+func (id LocationID) String() string {
+	return fmt.Sprintf("%x", id[:])
+}
+
+// IsNil returns whether the location identifier is unavailable.
+func (id LocationID) IsNil() bool {
+	return id == LocationID{}
+}
+
+// GroupID is the stable identifier assigned to a LIFX group.
+type GroupID [16]byte
+
+// String converts a group identifier into its canonical hexadecimal value.
+func (id GroupID) String() string {
+	return fmt.Sprintf("%x", id[:])
+}
+
+// IsNil returns whether the group identifier is unavailable.
+func (id GroupID) IsNil() bool {
+	return id == GroupID{}
+}
+
 // WifiRSSI represents either RSSI or SNR depending on firmware.
 type WifiRSSI int
 
@@ -158,7 +184,9 @@ type Device struct {
 	FirmwareVersion string
 	Type            DeviceType
 	LightType       LightType
+	LocationID      LocationID
 	Location        string
+	GroupID         GroupID
 	Group           string
 	WifiRSSI        WifiRSSI
 
