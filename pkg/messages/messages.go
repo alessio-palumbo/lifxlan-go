@@ -1,8 +1,11 @@
 package messages
 
 import (
+	"fmt"
 	"math"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
@@ -54,6 +57,76 @@ func SetColor(h, s, b *float64, k *uint16, d time.Duration, waveform enums.Light
 		m.SetKelvin = true
 	}
 	return protocol.NewMessage(m)
+}
+
+// SetLabel sets the device label.
+func SetLabel(label string) (*protocol.Message, error) {
+	encoded, err := encodeLabel(label)
+	if err != nil {
+		return nil, fmt.Errorf("set label: %w", err)
+	}
+	return protocol.NewMessage(&packets.DeviceSetLabel{Label: encoded}), nil
+}
+
+// SetLocation assigns the device to a location at the supplied update time.
+func SetLocation(id device.LocationID, label string, updatedAt time.Time) (*protocol.Message, error) {
+	encoded, err := encodeLabel(label)
+	if err != nil {
+		return nil, fmt.Errorf("set location: %w", err)
+	}
+	updatedAtNanos, err := encodeUpdatedAt(updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("set location: %w", err)
+	}
+	return protocol.NewMessage(&packets.DeviceSetLocation{
+		Location:  [16]byte(id),
+		Label:     encoded,
+		UpdatedAt: updatedAtNanos,
+	}), nil
+}
+
+// SetGroup assigns the device to a group at the supplied update time.
+func SetGroup(id device.GroupID, label string, updatedAt time.Time) (*protocol.Message, error) {
+	encoded, err := encodeLabel(label)
+	if err != nil {
+		return nil, fmt.Errorf("set group: %w", err)
+	}
+	updatedAtNanos, err := encodeUpdatedAt(updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("set group: %w", err)
+	}
+	return protocol.NewMessage(&packets.DeviceSetGroup{
+		Group:     [16]byte(id),
+		Label:     encoded,
+		UpdatedAt: updatedAtNanos,
+	}), nil
+}
+
+func encodeLabel(label string) ([32]byte, error) {
+	var encoded [32]byte
+	if !utf8.ValidString(label) {
+		return encoded, fmt.Errorf("label is not valid UTF-8")
+	}
+	if strings.IndexByte(label, 0) >= 0 {
+		return encoded, fmt.Errorf("label contains a null byte")
+	}
+	if len(label) > len(encoded) {
+		return encoded, fmt.Errorf("label is %d bytes; maximum is %d", len(label), len(encoded))
+	}
+	copy(encoded[:], label)
+	return encoded, nil
+}
+
+func encodeUpdatedAt(updatedAt time.Time) (uint64, error) {
+	seconds := updatedAt.Unix()
+	if seconds < 0 {
+		return 0, fmt.Errorf("updatedAt must not precede the Unix epoch")
+	}
+	nanos := uint64(updatedAt.Nanosecond())
+	if uint64(seconds) > (math.MaxUint64-nanos)/uint64(time.Second) {
+		return 0, fmt.Errorf("updatedAt exceeds uint64 nanosecond range")
+	}
+	return uint64(seconds)*uint64(time.Second) + nanos, nil
 }
 
 // GetRelayPower requests the current power level for a switch relay.

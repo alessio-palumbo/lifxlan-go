@@ -2,6 +2,7 @@ package messages
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSetPowerOn(t *testing.T) {
@@ -115,6 +117,81 @@ func TestSetColor(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := SetColor(tc.h, tc.s, tc.b, tc.k, tc.d, tc.w)
 			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestSetLabel(t *testing.T) {
+	for name, label := range map[string]string{
+		"label":              "Desk",
+		"empty label":        "",
+		"32 ASCII bytes":     strings.Repeat("x", 32),
+		"32 multibyte bytes": strings.Repeat("é", 16),
+	} {
+		t.Run(name, func(t *testing.T) {
+			var wantLabel [32]byte
+			copy(wantLabel[:], label)
+			got, err := SetLabel(label)
+			require.NoError(t, err)
+			assert.Equal(t, protocol.NewMessage(&packets.DeviceSetLabel{Label: wantLabel}), got)
+		})
+	}
+}
+
+func TestSetLocation(t *testing.T) {
+	id := device.LocationID{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0x4d, 0xef, 0x8e, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10}
+	updatedAt := time.Unix(123, 456)
+
+	got, err := SetLocation(id, "Home", updatedAt)
+	require.NoError(t, err)
+	assert.Equal(t, protocol.NewMessage(&packets.DeviceSetLocation{
+		Location:  [16]byte(id),
+		Label:     [32]byte{'H', 'o', 'm', 'e'},
+		UpdatedAt: 123000000456,
+	}), got)
+}
+
+func TestSetGroup(t *testing.T) {
+	id := device.GroupID{0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x49, 0x88, 0xb7, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00}
+	updatedAt := time.Unix(789, 123)
+
+	got, err := SetGroup(id, "Office", updatedAt)
+	require.NoError(t, err)
+	assert.Equal(t, protocol.NewMessage(&packets.DeviceSetGroup{
+		Group:     [16]byte(id),
+		Label:     [32]byte{'O', 'f', 'f', 'i', 'c', 'e'},
+		UpdatedAt: 789000000123,
+	}), got)
+}
+
+func TestSetMetadataRejectsInvalidLabels(t *testing.T) {
+	for name, label := range map[string]string{
+		"more than 32 bytes": "123456789012345678901234567890123",
+		"multibyte overflow": "ééééééééééééééééé",
+		"invalid UTF-8":      string([]byte{0xff}),
+		"null byte":          "Home\x00Office",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, labelErr := SetLabel(label)
+			_, locationErr := SetLocation(device.LocationID{}, label, time.Unix(0, 0))
+			_, groupErr := SetGroup(device.GroupID{}, label, time.Unix(0, 0))
+			assert.Error(t, labelErr)
+			assert.Error(t, locationErr)
+			assert.Error(t, groupErr)
+		})
+	}
+}
+
+func TestSetLocationAndGroupRejectPreEpochUpdatedAt(t *testing.T) {
+	for name, updatedAt := range map[string]time.Time{
+		"before epoch":     time.Unix(-1, 0),
+		"after uint64 max": time.Date(3000, time.January, 1, 0, 0, 0, 0, time.UTC),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, locationErr := SetLocation(device.LocationID{}, "Home", updatedAt)
+			_, groupErr := SetGroup(device.GroupID{}, "Office", updatedAt)
+			assert.Error(t, locationErr)
+			assert.Error(t, groupErr)
 		})
 	}
 }
