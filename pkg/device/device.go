@@ -94,12 +94,21 @@ func (s Serial) IsNil() bool {
 	return s == [8]byte{}
 }
 
-// LocationID is the stable identifier assigned to a LIFX location.
+// LocationID is the UUID assigned to a LIFX location.
 type LocationID [16]byte
 
-// String converts a location identifier into its canonical hexadecimal value.
+// ParseLocationID parses a canonical or compact UUID into a LocationID.
+func ParseLocationID(value string) (LocationID, error) {
+	id, err := parseUUID(value)
+	if err != nil {
+		return LocationID{}, fmt.Errorf("parse location ID: %w", err)
+	}
+	return LocationID(id), nil
+}
+
+// String converts a location identifier into its canonical UUID value.
 func (id LocationID) String() string {
-	return fmt.Sprintf("%x", id[:])
+	return formatUUID([16]byte(id))
 }
 
 // IsNil returns whether the location identifier is unavailable.
@@ -107,17 +116,95 @@ func (id LocationID) IsNil() bool {
 	return id == LocationID{}
 }
 
-// GroupID is the stable identifier assigned to a LIFX group.
+// MarshalText returns the canonical UUID representation of the location identifier.
+func (id LocationID) MarshalText() ([]byte, error) {
+	return []byte(id.String()), nil
+}
+
+// UnmarshalText parses a canonical or compact UUID into the location identifier.
+func (id *LocationID) UnmarshalText(text []byte) error {
+	parsed, err := ParseLocationID(string(text))
+	if err != nil {
+		return err
+	}
+	*id = parsed
+	return nil
+}
+
+// GroupID is the UUID assigned to a LIFX group.
 type GroupID [16]byte
 
-// String converts a group identifier into its canonical hexadecimal value.
+// ParseGroupID parses a canonical or compact UUID into a GroupID.
+func ParseGroupID(value string) (GroupID, error) {
+	id, err := parseUUID(value)
+	if err != nil {
+		return GroupID{}, fmt.Errorf("parse group ID: %w", err)
+	}
+	return GroupID(id), nil
+}
+
+// String converts a group identifier into its canonical UUID value.
 func (id GroupID) String() string {
-	return fmt.Sprintf("%x", id[:])
+	return formatUUID([16]byte(id))
 }
 
 // IsNil returns whether the group identifier is unavailable.
 func (id GroupID) IsNil() bool {
 	return id == GroupID{}
+}
+
+// MarshalText returns the canonical UUID representation of the group identifier.
+func (id GroupID) MarshalText() ([]byte, error) {
+	return []byte(id.String()), nil
+}
+
+// UnmarshalText parses a canonical or compact UUID into the group identifier.
+func (id *GroupID) UnmarshalText(text []byte) error {
+	parsed, err := ParseGroupID(string(text))
+	if err != nil {
+		return err
+	}
+	*id = parsed
+	return nil
+}
+
+func formatUUID(id [16]byte) string {
+	var text [36]byte
+	hex.Encode(text[0:8], id[0:4])
+	text[8] = '-'
+	hex.Encode(text[9:13], id[4:6])
+	text[13] = '-'
+	hex.Encode(text[14:18], id[6:8])
+	text[18] = '-'
+	hex.Encode(text[19:23], id[8:10])
+	text[23] = '-'
+	hex.Encode(text[24:36], id[10:16])
+	return string(text[:])
+}
+
+func parseUUID(value string) ([16]byte, error) {
+	var id [16]byte
+	var encoded [32]byte
+	switch len(value) {
+	case 32:
+		copy(encoded[:], value)
+	case 36:
+		if value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
+			return [16]byte{}, fmt.Errorf("invalid UUID separator placement")
+		}
+		copy(encoded[0:8], value[0:8])
+		copy(encoded[8:12], value[9:13])
+		copy(encoded[12:16], value[14:18])
+		copy(encoded[16:20], value[19:23])
+		copy(encoded[20:32], value[24:36])
+	default:
+		return [16]byte{}, fmt.Errorf("expected 36-character UUID or 32 hexadecimal characters, got %d", len(value))
+	}
+
+	if _, err := hex.Decode(id[:], encoded[:]); err != nil {
+		return [16]byte{}, fmt.Errorf("decode UUID: %w", err)
+	}
+	return id, nil
 }
 
 // WifiRSSI represents either RSSI or SNR depending on firmware.
