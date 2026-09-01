@@ -5,13 +5,44 @@ inventory and state controls to non-Go applications. The first milestone is
 deliberately small: discovery, inventory, and light/relay state. It does not add
 effects, events, persistence, MCP, or gRPC.
 
-Run it locally:
+Download the archive for your platform from
+[GitHub Releases](https://github.com/alessio-palumbo/lifxlan-go/releases), verify
+it against the accompanying `SHA256SUMS`, and extract it. Then run the daemon
+locally:
 
 ```sh
-go run ./cmd/lifxland
+./lifxland
 curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/v1/devices
 ```
+
+No Go installation is required for a released binary. Developers building from
+source can use `go run ./cmd/lifxland` instead. `./lifxland --version` prints the
+embedded release tag.
+
+Release archive targets are:
+
+| Platform | Archive target |
+| --- | --- |
+| macOS, Apple Silicon | `darwin_arm64` |
+| macOS, Intel | `darwin_amd64` |
+| Linux, x86-64 | `linux_amd64` |
+| Linux or Raspberry Pi OS, 64-bit ARM | `linux_arm64` |
+| Raspberry Pi OS, 32-bit ARM | `linux_armv7` |
+| Windows, x86-64 | `windows_amd64` |
+
+For example, on a 64-bit Raspberry Pi after downloading the release archive:
+
+```sh
+tar -xzf lifxland_v0.8.0_linux_arm64.tar.gz
+cd lifxland_v0.8.0_linux_arm64
+./lifxland --version
+./lifxland
+```
+
+The macOS binaries are currently unsigned and not notarized. After verifying
+the checksum, macOS may require the binary to be approved in Privacy & Security
+before it can run.
 
 The default listener is `127.0.0.1:8080` and is reachable only by clients on the
 same machine. A non-loopback listener is useful when `lifxland` runs on an
@@ -22,7 +53,7 @@ A non-loopback listener requires a bearer token so the control API cannot be
 used without authentication:
 
 ```sh
-LIFXLAN_API_TOKEN='replace-me' go run ./cmd/lifxland -listen 0.0.0.0:8080
+LIFXLAN_API_TOKEN='replace-me' ./lifxland -listen 0.0.0.0:8080
 curl -H 'Authorization: Bearer replace-me' http://host:8080/v1/devices
 ```
 

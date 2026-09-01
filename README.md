@@ -64,9 +64,25 @@ Applications written in Python or other languages can use the bundled
 `lifxland` daemon as their LIFX LAN transport layer:
 
 ```sh
-go run ./cmd/lifxland
+./lifxland
 curl http://127.0.0.1:8080/v1/devices
 ```
+
+Prebuilt archives are published on the
+[GitHub Releases](https://github.com/alessio-palumbo/lifxlan-go/releases) page:
+
+| Platform | Archive target |
+| --- | --- |
+| macOS, Apple Silicon | `darwin_arm64` |
+| macOS, Intel | `darwin_amd64` |
+| Linux, x86-64 | `linux_amd64` |
+| Linux or Raspberry Pi OS, 64-bit ARM | `linux_arm64` |
+| Raspberry Pi OS, 32-bit ARM | `linux_armv7` |
+| Windows, x86-64 | `windows_amd64` |
+
+Download the archive for your platform, verify it against `SHA256SUMS`, extract
+it, and run `lifxland` (`lifxland.exe` on Windows). No Go installation is
+required. To build the daemon from source instead, use `go run ./cmd/lifxland`.
 
 The device-centric API supports lights, switches, and hybrid devices. State
 updates use selector arrays and capability-scoped `light` and `relays` objects
@@ -85,7 +101,7 @@ this pre-shared token and configures the same value in every authorized client:
 
 ```sh
 # Run on the server. Generate and store a suitably random value for real use.
-LIFXLAN_API_TOKEN='replace-me' go run ./cmd/lifxland -listen 0.0.0.0:8080
+LIFXLAN_API_TOKEN='replace-me' ./lifxland -listen 0.0.0.0:8080
 
 # Run from an authorized client.
 curl -H 'Authorization: Bearer replace-me' http://server-address:8080/v1/devices
