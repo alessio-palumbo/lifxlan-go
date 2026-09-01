@@ -20,6 +20,12 @@ After the release workflow succeeds, open the draft GitHub Release. Review or
 replace the generated notes, confirm that all six archives and `SHA256SUMS` are
 attached, and publish it.
 
+If a tag-triggered run needs to be recovered after the workflow itself is
+fixed, run the Release workflow manually from the Actions page and enter the
+existing tag, such as `v0.8.0`. The workflow definition comes from the selected
+branch, while the source and version are checked out from the requested tag; the
+tag does not need to be moved.
+
 The release workflow intentionally creates a draft: tagging remains a simple
 Git operation, while publishing the user-visible release and its notes stays an
 explicit maintainer decision. Re-running a successful tag workflow replaces
