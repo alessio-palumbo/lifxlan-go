@@ -37,6 +37,10 @@ type deviceSession struct {
 	// mu protects read/write access of DeviceState
 	mu     sync.RWMutex
 	device *device.Device
+
+	// sendMu keeps messages in a multi-message operation contiguous with one
+	// another, including when state polling and callers send concurrently.
+	sendMu sync.Mutex
 }
 
 // newDeviceSession creates a new deviceSession for the given device.
@@ -66,14 +70,22 @@ func (s *deviceSession) close() {
 
 // send sends one or more messages to the device.
 func (s *deviceSession) send(msgs ...*protocol.Message) error {
-	for _, msg := range msgs {
+	_, err := s.sendWithProgress(msgs...)
+	return err
+}
+
+func (s *deviceSession) sendWithProgress(msgs ...*protocol.Message) (int, error) {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+
+	for i, msg := range msgs {
 		msg.SetTarget(s.device.Serial)
 		msg.SetSequence(s.nextSeq())
 		if err := s.sender.Send(s.device.Address, msg); err != nil {
-			return fmt.Errorf("failed to send message to device %s: %v", s.device.Serial, err)
+			return i, fmt.Errorf("failed to send message to device %s: %w", s.device.Serial, err)
 		}
 	}
-	return nil
+	return len(msgs), nil
 }
 
 // deviceSnapshot returns a copy of a Device with its current device state.
