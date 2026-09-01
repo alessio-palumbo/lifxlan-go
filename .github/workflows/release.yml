@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build release archives
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Validate release tag
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid semantic version tag: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build and package
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          while read -r goos goarch goarm label; do
+            archive="lifxland_${VERSION}_${goos}_${label}"
+            staging_root="$(mktemp -d)"
+            package_dir="${staging_root}/${archive}"
+            mkdir -p "${package_dir}/api" "${package_dir}/docs" "${package_dir}/examples/http/python"
+
+            binary="${package_dir}/lifxland"
+            if [[ "$goos" == "windows" ]]; then
+              binary="${binary}.exe"
+            fi
+
+            build_env=(env CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch")
+            if [[ "$goarm" != "none" ]]; then
+              build_env+=(GOARM="$goarm")
+            fi
+            "${build_env[@]}" go build \
+              -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION}" \
+              -o "$binary" \
+              ./cmd/lifxland
+
+            cp LICENSE README.md "${package_dir}/"
+            cp api/openapi.yaml "${package_dir}/api/"
+            cp docs/http-api.md "${package_dir}/docs/"
+            cp examples/http/python/client.py "${package_dir}/examples/http/python/"
+
+            if [[ "$goos" == "windows" ]]; then
+              (cd "$staging_root" && zip -qr "${GITHUB_WORKSPACE}/dist/${archive}.zip" "$archive")
+            else
+              tar -C "$staging_root" -czf "dist/${archive}.tar.gz" "$archive"
+            fi
+          done <<'TARGETS'
+          darwin amd64 none amd64
+          darwin arm64 none arm64
+          linux amd64 none amd64
+          linux arm64 none arm64
+          linux arm 7 armv7
+          windows amd64 none amd64
+          TARGETS
+
+          (cd dist && sha256sum lifxland_* > SHA256SUMS)
+
+      - name: Upload release archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifxland-release
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Create draft release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release archives
+        uses: actions/download-artifact@v4
+        with:
+          name: lifxland-release
+          path: dist
+
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" dist/* --clobber
+          else
+            gh release create "$VERSION" dist/* \
+              --draft \
+              --generate-notes \
+              --title "lifxlan-go $VERSION" \
+              --verify-tag
+          fi
