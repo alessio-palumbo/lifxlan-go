@@ -58,6 +58,45 @@ logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 ctrl, err := controller.New(controller.WithLogger(logger))
 ```
 
+## HTTP API
+
+Applications written in Python or other languages can use the bundled
+`lifxland` daemon as their LIFX LAN transport layer:
+
+```sh
+go run ./cmd/lifxland
+curl http://127.0.0.1:8080/v1/devices
+```
+
+The device-centric API supports lights, switches, and hybrid devices. State
+updates use selector arrays and capability-scoped `light` and `relays` objects
+at `PATCH /v1/devices/state`. See the [HTTP API guide](docs/http-api.md) and
+[OpenAPI contract](api/openapi.yaml).
+
+### Running `lifxland` on another machine
+
+The default loopback listener is intended for clients running on the same
+machine as `lifxland`. A non-loopback listener is useful when the daemon runs on
+an always-on Raspberry Pi, NAS, or home server and applications on other
+computers or phones use it as their LIFX transport layer.
+
+Non-loopback listeners require `LIFXLAN_API_TOKEN`. The server operator chooses
+this pre-shared token and configures the same value in every authorized client:
+
+```sh
+# Run on the server. Generate and store a suitably random value for real use.
+LIFXLAN_API_TOKEN='replace-me' go run ./cmd/lifxland -listen 0.0.0.0:8080
+
+# Run from an authorized client.
+curl -H 'Authorization: Bearer replace-me' http://server-address:8080/v1/devices
+```
+
+The token authenticates HTTP requests; it does **not** encrypt them. Plain HTTP
+can expose the token and request data to interception and replay. For access
+outside a trusted network, use HTTPS through a reverse proxy, a VPN such as
+WireGuard or Tailscale, or a secure tunnel. Keep the default loopback listener
+when all clients run locally.
+
 ## Target Selection
 
 `pkg/device` includes small selector helpers for apps that let users refer to

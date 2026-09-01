@@ -1,0 +1,226 @@
+openapi: 3.1.0
+info:
+  title: lifxland HTTP API
+  version: 0.1.0
+  description: Local HTTP access to a long-lived lifxlan-go controller.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /healthz:
+    get:
+      summary: Check daemon health
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, const: ok}
+  /v1/devices:
+    get:
+      summary: List active LIFX devices
+      security: [{}, {bearerAuth: []}]
+      responses:
+        "200":
+          description: Active device snapshots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: {$ref: "#/components/schemas/Device"}
+  /v1/devices/{serial}:
+    get:
+      summary: Get an active LIFX device
+      security: [{}, {bearerAuth: []}]
+      parameters:
+        - name: serial
+          in: path
+          required: true
+          schema: {$ref: "#/components/schemas/Serial"}
+      responses:
+        "200":
+          description: Device snapshot
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Device"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /v1/devices/state:
+    patch:
+      summary: Update capability-scoped state on selected devices
+      description: >-
+        Selectors are resolved against one inventory snapshot. Color is sent
+        before light power when both are present. Unsupported capabilities are
+        returned as per-device rejections and are never silently skipped. UDP
+        sends are not atomic, so a result can be partial.
+      security: [{}, {bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/StateRequest"}
+      responses:
+        "200":
+          description: Per-device send results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items: {$ref: "#/components/schemas/StateResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NotFound:
+      description: Device or selector match not found
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+  schemas:
+    Serial:
+      type: string
+      pattern: "^[0-9a-fA-F]{12}$"
+      examples: [d073d5000001]
+    UUID:
+      type: string
+      format: uuid
+    Power:
+      type: string
+      enum: [on, off]
+    Color:
+      type: object
+      required: [hue, saturation, brightness, kelvin]
+      properties:
+        hue: {type: number, minimum: 0, maximum: 360}
+        saturation: {type: number, minimum: 0, maximum: 100}
+        brightness: {type: number, minimum: 0, maximum: 100}
+        kelvin: {type: integer, minimum: 0, maximum: 65535}
+    LightState:
+      type: object
+      required: [type, power, color, has_color]
+      properties:
+        type: {type: string, enum: [single_zone, multi_zone, matrix]}
+        power: {$ref: "#/components/schemas/Power"}
+        color: {$ref: "#/components/schemas/Color"}
+        has_color: {type: boolean}
+        min_kelvin: {type: integer}
+        max_kelvin: {type: integer}
+    RelayState:
+      type: object
+      required: [index, power]
+      properties:
+        index: {type: integer, minimum: 0, maximum: 255}
+        power: {$ref: "#/components/schemas/Power"}
+    SwitchState:
+      type: object
+      required: [relays]
+      properties:
+        relays:
+          type: array
+          items: {$ref: "#/components/schemas/RelayState"}
+    Device:
+      type: object
+      required: [serial, label, type, product_id, registry_known, location, group]
+      properties:
+        serial: {$ref: "#/components/schemas/Serial"}
+        label: {type: string}
+        type: {type: string, enum: [light, switch, hybrid]}
+        product_id: {type: integer, minimum: 0}
+        product_name: {type: string}
+        registry_known: {type: boolean}
+        firmware_version: {type: string}
+        location_id: {$ref: "#/components/schemas/UUID"}
+        location: {type: string}
+        group_id: {$ref: "#/components/schemas/UUID"}
+        group: {type: string}
+        light: {$ref: "#/components/schemas/LightState"}
+        switch: {$ref: "#/components/schemas/SwitchState"}
+        last_seen_at: {type: string, format: date-time}
+        last_updated_at: {type: string, format: date-time}
+    ColorUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        hue: {type: number, minimum: 0, maximum: 360}
+        saturation: {type: number, minimum: 0, maximum: 100}
+        brightness: {type: number, minimum: 0, maximum: 100}
+        kelvin: {type: integer, minimum: 0, maximum: 65535}
+      additionalProperties: false
+    LightUpdate:
+      type: object
+      anyOf:
+        - required: [power]
+        - required: [color]
+      properties:
+        power: {$ref: "#/components/schemas/Power"}
+        color: {$ref: "#/components/schemas/ColorUpdate"}
+        duration_ms: {type: integer, minimum: 0, maximum: 4294967295}
+      additionalProperties: false
+    RelayUpdate:
+      type: object
+      required: [index, power]
+      properties:
+        index: {type: integer, minimum: 0, maximum: 255}
+        power: {$ref: "#/components/schemas/Power"}
+      additionalProperties: false
+    StateRequest:
+      type: object
+      required: [selectors]
+      anyOf:
+        - required: [light]
+        - required: [relays]
+      properties:
+        selectors:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          examples:
+            - [all]
+            - ["group_id:936c9ba4-9f6d-4f12-8a83-2bed1d07ae42"]
+            - ["serial:d073d5000001", "label:Desk"]
+        light: {$ref: "#/components/schemas/LightUpdate"}
+        relays:
+          type: array
+          minItems: 1
+          items: {$ref: "#/components/schemas/RelayUpdate"}
+      additionalProperties: false
+    StateResult:
+      type: object
+      required: [serial, status]
+      properties:
+        serial: {$ref: "#/components/schemas/Serial"}
+        status: {type: string, enum: [accepted, partial, rejected]}
+        sent: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0}
+        error: {type: string}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
