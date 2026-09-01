@@ -1,10 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+func TestPrintVersion(t *testing.T) {
+	original := version
+	version = "v1.2.3"
+	t.Cleanup(func() { version = original })
+
+	var output bytes.Buffer
+	printVersion(&output)
+	if got, want := output.String(), "lifxland v1.2.3\n"; got != want {
+		t.Fatalf("version output = %q, want %q", got, want)
+	}
+}
 
 func TestValidateExposureRequiresTokenBeyondLoopback(t *testing.T) {
 	allowed := []string{"127.0.0.1:8080", "[::1]:8080", "localhost:8080"}

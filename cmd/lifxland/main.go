@@ -7,11 +7,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -23,6 +25,9 @@ import (
 
 const shutdownTimeout = 5 * time.Second
 
+// version is replaced with the release tag at build time.
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("lifxland stopped", "error", err)
@@ -33,7 +38,12 @@ func main() {
 func run() error {
 	listenAddress := flag.String("listen", "127.0.0.1:8080", "HTTP listen address")
 	apiToken := flag.String("api-token", os.Getenv("LIFXLAN_API_TOKEN"), "bearer token (or LIFXLAN_API_TOKEN)")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+	if *showVersion {
+		printVersion(os.Stdout)
+		return nil
+	}
 
 	if err := validateExposure(*listenAddress, *apiToken); err != nil {
 		return err
@@ -85,6 +95,21 @@ func run() error {
 		return fmt.Errorf("shut down HTTP API: %w", err)
 	}
 	return nil
+}
+
+func printVersion(w io.Writer) {
+	fmt.Fprintf(w, "lifxland %s\n", resolvedVersion())
+}
+
+func resolvedVersion() string {
+	if version != "dev" {
+		return version
+	}
+	buildInfo, ok := debug.ReadBuildInfo()
+	if ok && buildInfo.Main.Version != "" && buildInfo.Main.Version != "(devel)" {
+		return buildInfo.Main.Version
+	}
+	return version
 }
 
 func validateExposure(address, token string) error {
