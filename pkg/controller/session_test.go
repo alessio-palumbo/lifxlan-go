@@ -5,6 +5,7 @@ import (
 	"net"
 	"slices"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
@@ -58,27 +59,26 @@ func TestSession(t *testing.T) {
 	})
 
 	t.Run("It sends high frequency messages", func(t *testing.T) {
-		cfg := *cfg0
-		cfg.highFrequencyStateRefreshPeriod = time.Millisecond
-		mockClient := newMockClient()
-		session := newDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, onTimeout, discardLogger())
+		synctest.Test(t, func(t *testing.T) {
+			cfg := *cfg0
+			cfg.highFrequencyStateRefreshPeriod = time.Millisecond
+			mockClient := newMockClient()
+			session := newDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, onTimeout, discardLogger())
 
-		var gotMsgs int
-		timeout := time.After(10 * time.Millisecond)
-	outer:
-		for {
-			select {
-			case msg := <-mockClient.sends:
+			time.Sleep(10 * time.Millisecond)
+			session.close()
+			synctest.Wait()
+
+			var gotMsgs int
+			for len(mockClient.sends) > 0 {
+				msg := <-mockClient.sends
 				if msg.Type() == uint16(packets.PayloadTypeLightGet) {
 					gotMsgs++
 				}
-			case <-timeout:
-				break outer
 			}
-		}
 
-		assert.Greater(t, gotMsgs, 5)
-		session.close()
+			assert.Greater(t, gotMsgs, 5)
+		})
 	})
 
 	t.Run("It sends low frequency messages", func(t *testing.T) {

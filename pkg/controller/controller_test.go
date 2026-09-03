@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/client"
@@ -75,13 +76,16 @@ func TestController(t *testing.T) {
 	})
 
 	t.Run("Performs continuous discovery", func(t *testing.T) {
-		mockClient := newMockClient()
-		ctrl, err := New(WithClient(mockClient), WithDiscoveryPeriod(time.Millisecond))
-		require.NoError(t, err)
+		synctest.Test(t, func(t *testing.T) {
+			mockClient := newMockClient()
+			ctrl, err := New(WithClient(mockClient), WithDiscoveryPeriod(time.Millisecond))
+			require.NoError(t, err)
 
-		time.Sleep(10 * time.Millisecond)
-		ctrl.Close()
-		assert.Greater(t, len(mockClient.broadcasts), 5)
+			time.Sleep(10 * time.Millisecond)
+			require.NoError(t, ctrl.Close())
+			synctest.Wait()
+			assert.Greater(t, len(mockClient.broadcasts), 5)
+		})
 	})
 
 	t.Run("Skips Send if an addr has no session", func(t *testing.T) {
