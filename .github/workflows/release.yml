@@ -19,7 +19,7 @@ permissions:
 jobs:
   build:
     name: Build release archives
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v7
@@ -32,6 +32,35 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Import Developer ID certificate
+        shell: bash
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/lifxlan-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          printf '%s' "$MACOS_CERTIFICATE_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+          SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' \
+            | head -n 1)"
+          if [[ -z "$SIGNING_IDENTITY" ]]; then
+            echo "no Developer ID Application identity found" >&2
+            exit 1
+          fi
+          echo "MACOS_SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
+
       - name: Validate release tag
         run: |
           if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
@@ -43,6 +72,10 @@ jobs:
         run: go test ./...
 
       - name: Build and package
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -68,12 +101,20 @@ jobs:
               -o "$binary" \
               ./cmd/lifxland
 
+            if [[ "$goos" == "darwin" ]]; then
+              codesign --force --options runtime --timestamp \
+                --identifier com.alessiopalumbo.lifxland \
+                --sign "$MACOS_SIGNING_IDENTITY" \
+                "$binary"
+              codesign --verify --strict --verbose=2 "$binary"
+            fi
+
             cp LICENSE README.md "${package_dir}/"
             cp api/openapi.yaml "${package_dir}/api/"
             cp docs/http-api.md "${package_dir}/docs/"
             cp examples/http/python/client.py "${package_dir}/examples/http/python/"
 
-            if [[ "$goos" == "windows" ]]; then
+            if [[ "$goos" == "windows" || "$goos" == "darwin" ]]; then
               (cd "$staging_root" && zip -qr "${GITHUB_WORKSPACE}/dist/${archive}.zip" "$archive")
             else
               tar -C "$staging_root" -czf "dist/${archive}.tar.gz" "$archive"
@@ -87,7 +128,17 @@ jobs:
           windows amd64 none amd64
           TARGETS
 
-          (cd dist && sha256sum lifxland_* > SHA256SUMS)
+          # Apple issues an online notarization ticket for each signed binary in
+          # these ZIPs. ZIP archives and bare executables cannot be stapled.
+          for archive in dist/lifxland_*_darwin_*.zip; do
+            xcrun notarytool submit "$archive" \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --wait
+          done
+
+          (cd dist && shasum -a 256 lifxland_* > SHA256SUMS)
 
       - name: Upload release archives
         uses: actions/upload-artifact@v4
