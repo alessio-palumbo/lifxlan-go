@@ -134,6 +134,42 @@ Selectors are comma-separated, case-insensitive exact matches. Results preserve
 selector order, preserve device discovery order inside each selector, and
 de-duplicate serials.
 
+## Device State Events
+
+Applications can subscribe to changes in the controller's cached device state
+instead of repeatedly comparing complete device lists:
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+devices := make(map[device.Serial]device.Device)
+for event := range ctrl.SubscribeDevices(ctx) {
+	switch event.Type {
+	case controller.DeviceEventAdded, controller.DeviceEventUpdated:
+		devices[event.Device.Serial] = event.Device
+	case controller.DeviceEventRemoved:
+		delete(devices, event.Device.Serial)
+	case controller.DeviceEventResyncRequired:
+		devices = make(map[device.Serial]device.Device)
+		for _, d := range ctrl.GetDevices() {
+			devices[d.Serial] = d
+		}
+	}
+}
+```
+
+Existing devices are emitted as initial `DeviceEventAdded` events before live
+updates. Each event contains an independent device snapshot and a process-local
+revision; update events also identify the changed capability or metadata
+category. Slow subscribers do not block LAN message processing. If a subscriber
+exceeds its configured pending-event buffer, it receives
+`DeviceEventResyncRequired` and can recover using `GetDevices`.
+
+Events describe state observed by the controller, not command acknowledgements.
+The controller still polls devices according to its configured high- and
+low-frequency refresh periods.
+
 ## State Snapshot And Restore
 
 Controllers can capture and restore the current light state for one or more

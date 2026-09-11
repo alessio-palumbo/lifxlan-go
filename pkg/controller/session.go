@@ -33,6 +33,8 @@ type deviceSession struct {
 	cfg     *Config
 	// onTimeout is a callback to terminate the session when the livenessTimeout is reached
 	onTimeout func(device.Serial)
+	// onUpdate reports observed state changes after releasing mu.
+	onUpdate func(*deviceSession, DeviceChange)
 
 	// mu protects read/write access of DeviceState
 	mu     sync.RWMutex
@@ -46,7 +48,7 @@ type deviceSession struct {
 // newDeviceSession creates a new deviceSession for the given device.
 // It spins up a goroutine to periodically query devices for state updates and
 // a second one to parse devices messages and update Device state.
-func newDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cfg *Config, wgDone func(), onTimeout func(device.Serial), logger *slog.Logger) *deviceSession {
+func newDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cfg *Config, wgDone func(), onTimeout func(device.Serial), onUpdate func(*deviceSession, DeviceChange), logger *slog.Logger) *deviceSession {
 	ds := &deviceSession{
 		sender:    sender,
 		logger:    logger,
@@ -55,6 +57,7 @@ func newDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cf
 		done:      make(chan struct{}),
 		cfg:       cfg,
 		onTimeout: onTimeout,
+		onUpdate:  onUpdate,
 	}
 
 	go ds.recvloop()
@@ -95,6 +98,18 @@ func (s *deviceSession) deviceSnapshot() device.Device {
 	return s.device.Clone()
 }
 
+func (s *deviceSession) highFreqStateMessages() []*protocol.Message {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.device.HighFreqStateMessages()
+}
+
+func (s *deviceSession) lowFreqStateMessages() []*protocol.Message {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.device.LowFreqStateMessages()
+}
+
 // nextSeq increments the sequence number and returns the new value.
 // It wraps around after reaching 255.
 func (s *deviceSession) nextSeq() uint8 {
@@ -119,12 +134,10 @@ func (s *deviceSession) run(wgDone func()) {
 		case <-s.done:
 			return
 		case <-hfTicker.C:
-			snapshot := s.deviceSnapshot()
-			s.send(snapshot.HighFreqStateMessages()...)
+			s.send(s.highFreqStateMessages()...)
 			hfTicker.Reset(s.cfg.highFrequencyStateRefreshPeriod)
 		case <-lfTicker.C:
-			snapshot := s.deviceSnapshot()
-			s.send(snapshot.LowFreqStateMessages()...)
+			s.send(s.lowFreqStateMessages()...)
 			lfTicker.Reset(s.cfg.lowFrequencyStateRefreshPeriod)
 		case <-livenessTicker.C:
 			s.mu.RLock()
@@ -153,12 +166,14 @@ func (s *deviceSession) recvloop() {
 			}
 
 			s.mu.Lock()
+			var changes DeviceChange
 			switch p := msg.Payload.(type) {
 			case *packets.DeviceStateLabel:
 				label := device.ParseLabel(p.Label)
 				if shouldUpdate(s.device.Label, label) {
 					s.device.Label = label
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeLabel
 				}
 			case *packets.LightState:
 				color := device.NewColor(p.Color)
@@ -167,17 +182,20 @@ func (s *deviceSession) recvloop() {
 					s.device.Color = color
 					s.device.PoweredOn = poweredOn
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeLight
 				}
 			case *packets.DeviceStateVersion:
 				if shouldUpdate(s.device.ProductID, p.Product) {
 					s.device.SetProductInfo(p.Product)
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeProduct
 				}
 			case *packets.DeviceStateHostFirmware:
 				fwVersion := fmt.Sprintf("%d.%d", p.VersionMajor, p.VersionMinor)
 				if shouldUpdate(s.device.FirmwareVersion, fwVersion) {
 					s.device.FirmwareVersion = fwVersion
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeFirmware
 				}
 			case *packets.DeviceStateLocation:
 				locationID := device.LocationID(p.Location)
@@ -186,6 +204,7 @@ func (s *deviceSession) recvloop() {
 					s.device.LocationID = locationID
 					s.device.Location = label
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeLocation
 				}
 			case *packets.DeviceStateGroup:
 				groupID := device.GroupID(p.Group)
@@ -194,42 +213,51 @@ func (s *deviceSession) recvloop() {
 					s.device.GroupID = groupID
 					s.device.Group = label
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeGroup
 				}
 			case *packets.TileStateDeviceChain:
 				if updated := s.device.SetMatrixProperties(p); updated {
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeMatrix
 				}
 			case *packets.TileState64:
 				if updated := s.device.SetMatrixState(p); updated {
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeMatrix
 				}
 			case *packets.MultiZoneExtendedStateMultiZone:
 				if updated := s.device.SetMultizoneProperties(p); updated {
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeMultizone
 				}
 			case *packets.ButtonState:
 				if updated := s.device.SetButtons(p); updated {
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeButtons
 				}
 			case *packets.ButtonStateConfig:
 				if updated := s.device.SetButtonConfig(p); updated {
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeButtonConfig
 				}
 			case *packets.RelayStatePower:
 				if updated := s.device.SetRelayPower(p); updated {
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeRelays
 				}
 			case *packets.DeviceStatePower:
 				poweredOn := p.Level > 0
 				if shouldUpdate(s.device.PoweredOn, poweredOn) {
 					s.device.PoweredOn = poweredOn
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeLight
 				}
 			case *packets.DeviceStateWifiInfo:
 				rssi := device.WifiRSSI(int(math.Floor(10*math.Log10(float64(p.Signal)) + 0.5)))
 				if shouldUpdate(s.device.WifiRSSI.String(), rssi.String()) {
 					s.device.WifiRSSI = rssi
 					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeWiFi
 				}
 			case *packets.DeviceStateService, *packets.DeviceStateUnhandled: // Ignore these messages
 			default:
@@ -241,6 +269,9 @@ func (s *deviceSession) recvloop() {
 			}
 			s.device.LastSeenAt = time.Now()
 			s.mu.Unlock()
+			if changes != 0 && s.onUpdate != nil {
+				s.onUpdate(s, changes)
+			}
 		case <-s.done:
 			s.logger.Info("Exiting device recv loop", "serial", s.device.Serial)
 			return

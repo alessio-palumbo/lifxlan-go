@@ -40,6 +40,12 @@ type Controller struct {
 	wg        sync.WaitGroup
 	mu        sync.RWMutex
 	sessions  map[device.Serial]*deviceSession
+
+	subscriptionsMu     sync.Mutex
+	subscriptions       map[uint64]*deviceSubscription
+	nextSubscriptionID  uint64
+	eventRevision       uint64
+	subscriptionsClosed bool
 }
 
 type Client interface {
@@ -87,9 +93,10 @@ func (c *Config) setLivenessTimeout() {
 // on the LAN and creates individual sessions for message routing.
 func New(opts ...Option) (*Controller, error) {
 	ctrl := &Controller{
-		logger:   discardLogger(),
-		recvDone: make(chan struct{}),
-		sessions: make(map[device.Serial]*deviceSession),
+		logger:        discardLogger(),
+		recvDone:      make(chan struct{}),
+		sessions:      make(map[device.Serial]*deviceSession),
+		subscriptions: make(map[uint64]*deviceSubscription),
 		cfg: &Config{
 			discoveryPeriod:                 defaultDiscoveryPeriod,
 			highFrequencyStateRefreshPeriod: defaultHighFrequencyStateRefreshPeriod,
@@ -133,8 +140,15 @@ func (c *Controller) Close() error {
 		c.client.SetConnDeadline(time.Now())
 		<-c.recvDone
 		c.client.Close()
+		c.closeSubscriptions()
 
+		c.mu.RLock()
+		serials := make([]device.Serial, 0, len(c.sessions))
 		for serial := range c.sessions {
+			serials = append(serials, serial)
+		}
+		c.mu.RUnlock()
+		for _, serial := range serials {
 			c.terminateSession(serial)
 		}
 
@@ -204,19 +218,50 @@ func (c *Controller) periodicDiscovery() {
 func (c *Controller) addSession(addr *net.UDPAddr, serial device.Serial) {
 	c.wg.Add(1)
 	cb := func(serial device.Serial) { c.terminateSession(serial) }
-	session := newDeviceSession(addr, serial, c.client, c.cfg, c.wg.Done, cb, c.logger)
+	session := newDeviceSession(addr, serial, c.client, c.cfg, c.wg.Done, cb, c.publishDeviceUpdate, c.logger)
 
 	c.mu.Lock()
 	c.sessions[serial] = session
+	if c.hasSubscriptions() {
+		c.publishDeviceEvent(DeviceEvent{
+			Type:   DeviceEventAdded,
+			Device: session.deviceSnapshot(),
+		})
+	}
 	c.mu.Unlock()
+}
+
+func (c *Controller) publishDeviceUpdate(session *deviceSession, changes DeviceChange) {
+	serial := session.device.Serial
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.sessions[serial] != session || !c.hasSubscriptions() {
+		return
+	}
+	c.publishDeviceEvent(DeviceEvent{
+		Type:    DeviceEventUpdated,
+		Device:  session.deviceSnapshot(),
+		Changes: changes,
+	})
 }
 
 // terminateSession terminates a device session.
 func (c *Controller) terminateSession(serial device.Serial) {
 	c.mu.Lock()
 	if session, ok := c.sessions[serial]; ok {
+		var snapshot device.Device
+		publish := c.hasSubscriptions()
+		if publish {
+			snapshot = session.deviceSnapshot()
+		}
 		delete(c.sessions, serial)
 		session.close()
+		if publish {
+			c.publishDeviceEvent(DeviceEvent{
+				Type:   DeviceEventRemoved,
+				Device: snapshot,
+			})
+		}
 	}
 	c.mu.Unlock()
 }

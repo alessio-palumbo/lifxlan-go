@@ -37,7 +37,7 @@ func TestSession(t *testing.T) {
 
 	t.Run("Sends initial state messages", func(t *testing.T) {
 		mockClient := newMockClient()
-		session := newDeviceSession(addr0, serial0, mockClient, cfg0, wgDone, onTimeout, discardLogger())
+		session := newDeviceSession(addr0, serial0, mockClient, cfg0, wgDone, onTimeout, nil, discardLogger())
 
 		var gotMsgs []packets.Payload
 	outer:
@@ -63,7 +63,7 @@ func TestSession(t *testing.T) {
 			cfg := *cfg0
 			cfg.highFrequencyStateRefreshPeriod = time.Millisecond
 			mockClient := newMockClient()
-			session := newDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, onTimeout, discardLogger())
+			session := newDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, onTimeout, nil, discardLogger())
 
 			time.Sleep(10 * time.Millisecond)
 			session.close()
@@ -85,7 +85,7 @@ func TestSession(t *testing.T) {
 		cfg := *cfg0
 		cfg.lowFrequencyStateRefreshPeriod = time.Millisecond
 		mockClient := newMockClient()
-		session := newDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, onTimeout, discardLogger())
+		session := newDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, onTimeout, nil, discardLogger())
 
 		var gotMsgs []packets.Payload
 		timeout := time.After(10 * time.Millisecond)
@@ -110,7 +110,7 @@ func TestSession(t *testing.T) {
 		}
 
 		var lowFreqMsgs []packets.Payload
-		for msg := range slices.Values(session.device.LowFreqStateMessages()) {
+		for msg := range slices.Values(session.lowFreqStateMessages()) {
 			lowFreqMsgs = append(lowFreqMsgs, msg.Payload)
 		}
 		assert.Subset(t, gotMsgs, lowFreqMsgs)
@@ -122,7 +122,7 @@ func TestSession(t *testing.T) {
 		cfg.deviceLivenessTimeout = time.Millisecond
 		mockClient := newMockClient()
 		rmChan := make(chan device.Serial, 1)
-		session := newDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, func(d device.Serial) { rmChan <- d }, discardLogger())
+		session := newDeviceSession(addr0, serial0, mockClient, &cfg, wgDone, func(d device.Serial) { rmChan <- d }, nil, discardLogger())
 
 		rmSerial := <-rmChan
 		assert.Equal(t, serial0, rmSerial)
@@ -131,7 +131,7 @@ func TestSession(t *testing.T) {
 
 	t.Run("Updates state", func(t *testing.T) {
 		mockClient := newMockClient()
-		session := newDeviceSession(addr0, serial0, mockClient, cfg0, wgDone, onTimeout, discardLogger())
+		session := newDeviceSession(addr0, serial0, mockClient, cfg0, wgDone, onTimeout, nil, discardLogger())
 
 		wantDevice := device.Device{
 			Serial: device.Serial(serial0), Address: addr0,
