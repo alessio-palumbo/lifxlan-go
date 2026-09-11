@@ -475,6 +475,7 @@ func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZo
 	}
 	if len(d.MultizoneProperties.Zones) != int(p.Count) {
 		d.MultizoneProperties.Zones = make([]packets.LightHsbk, p.Count)
+		updated = true
 	}
 
 	nZones := len(d.MultizoneProperties.Zones)
@@ -483,7 +484,13 @@ func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZo
 		return
 	}
 
-	copy(d.MultizoneProperties.Zones[startIndex:], p.Colors[:])
+	destination := d.MultizoneProperties.Zones[startIndex:]
+	colors := p.Colors[:min(len(destination), len(p.Colors))]
+	if slices.Equal(destination[:len(colors)], colors) {
+		return updated
+	}
+
+	copy(destination, colors)
 	return true
 }
 

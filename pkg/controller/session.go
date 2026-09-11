@@ -90,9 +90,9 @@ func (s *deviceSession) sendWithProgress(msgs ...*protocol.Message) (int, error)
 
 // deviceSnapshot returns a copy of a Device with its current device state.
 func (s *deviceSession) deviceSnapshot() device.Device {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return *s.device
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.device.Clone()
 }
 
 // nextSeq increments the sequence number and returns the new value.
@@ -119,10 +119,12 @@ func (s *deviceSession) run(wgDone func()) {
 		case <-s.done:
 			return
 		case <-hfTicker.C:
-			s.send(s.device.HighFreqStateMessages()...)
+			snapshot := s.deviceSnapshot()
+			s.send(snapshot.HighFreqStateMessages()...)
 			hfTicker.Reset(s.cfg.highFrequencyStateRefreshPeriod)
 		case <-lfTicker.C:
-			s.send(s.device.LowFreqStateMessages()...)
+			snapshot := s.deviceSnapshot()
+			s.send(snapshot.LowFreqStateMessages()...)
 			lfTicker.Reset(s.cfg.lowFrequencyStateRefreshPeriod)
 		case <-livenessTicker.C:
 			s.mu.RLock()

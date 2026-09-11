@@ -186,6 +186,30 @@ func TestController(t *testing.T) {
 
 	})
 
+	t.Run("Device snapshots do not share cached state", func(t *testing.T) {
+		mockClient := newMockClient()
+		ctrl, err := New(WithClient(mockClient))
+		require.NoError(t, err)
+		defer ctrl.Close()
+
+		ctrl.addSession(addr0, serial0)
+		session := ctrl.sessions[serial0]
+		session.mu.Lock()
+		session.device.MultizoneProperties.Zones = []packets.LightHsbk{{Hue: 1}}
+		session.device.Relays = []device.Relay{{Index: 0, PoweredOn: true}}
+		session.mu.Unlock()
+
+		devices := ctrl.GetDevices()
+		require.Len(t, devices, 1)
+		devices[0].MultizoneProperties.Zones[0].Hue = 2
+		devices[0].Relays[0].PoweredOn = false
+
+		fresh := ctrl.GetDevices()
+		require.Len(t, fresh, 1)
+		assert.Equal(t, uint16(1), fresh[0].MultizoneProperties.Zones[0].Hue)
+		assert.True(t, fresh[0].Relays[0].PoweredOn)
+	})
+
 	t.Run("Adds a newly discovered device to sessions", func(t *testing.T) {
 		mockClient := newMockClient()
 		ctrl, err := New(WithClient(mockClient))

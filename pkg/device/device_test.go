@@ -165,6 +165,22 @@ func TestSetMultizonePropertiesInfersUnknownProductLightType(t *testing.T) {
 	assert.Equal(t, LightTypeMultiZone, d.LightType)
 }
 
+func TestSetMultizonePropertiesReportsOnlyChanges(t *testing.T) {
+	state := &packets.MultiZoneExtendedStateMultiZone{
+		Count:       2,
+		ColorsCount: 2,
+		Colors:      [82]packets.LightHsbk{{Hue: 1}, {Hue: 2}},
+	}
+	d := &Device{}
+
+	assert.True(t, d.SetMultizoneProperties(state))
+	assert.False(t, d.SetMultizoneProperties(state))
+
+	state.Colors[1].Hue = 3
+	assert.True(t, d.SetMultizoneProperties(state))
+	assert.Equal(t, uint16(3), d.MultizoneProperties.Zones[1].Hue)
+}
+
 func TestCapabilityStateDoesNotOverrideKnownRegistryLightType(t *testing.T) {
 	d := &Device{}
 	d.SetProductInfo(97)
