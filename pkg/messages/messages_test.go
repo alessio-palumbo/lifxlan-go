@@ -133,7 +133,10 @@ func TestSetLabel(t *testing.T) {
 			copy(wantLabel[:], label)
 			got, err := SetLabel(label)
 			require.NoError(t, err)
-			assert.Equal(t, protocol.NewMessage(&packets.DeviceSetLabel{Label: wantLabel}), got)
+			want := protocol.NewMessage(&packets.DeviceSetLabel{Label: wantLabel})
+			want.SetResponseRequired(true)
+			assert.Equal(t, want, got)
+			assertResponseRequired(t, got)
 		})
 	}
 }
@@ -144,11 +147,14 @@ func TestSetLocation(t *testing.T) {
 
 	got, err := SetLocation(id, "Home", updatedAt)
 	require.NoError(t, err)
-	assert.Equal(t, protocol.NewMessage(&packets.DeviceSetLocation{
+	want := protocol.NewMessage(&packets.DeviceSetLocation{
 		Location:  [16]byte(id),
 		Label:     [32]byte{'H', 'o', 'm', 'e'},
 		UpdatedAt: 123000000456,
-	}), got)
+	})
+	want.SetResponseRequired(true)
+	assert.Equal(t, want, got)
+	assertResponseRequired(t, got)
 }
 
 func TestSetGroup(t *testing.T) {
@@ -157,11 +163,14 @@ func TestSetGroup(t *testing.T) {
 
 	got, err := SetGroup(id, "Office", updatedAt)
 	require.NoError(t, err)
-	assert.Equal(t, protocol.NewMessage(&packets.DeviceSetGroup{
+	want := protocol.NewMessage(&packets.DeviceSetGroup{
 		Group:     [16]byte(id),
 		Label:     [32]byte{'O', 'f', 'f', 'i', 'c', 'e'},
 		UpdatedAt: 789000000123,
-	}), got)
+	})
+	want.SetResponseRequired(true)
+	assert.Equal(t, want, got)
+	assertResponseRequired(t, got)
 }
 
 func TestSetMetadataRejectsInvalidLabels(t *testing.T) {
@@ -198,6 +207,13 @@ func TestSetLocationAndGroupRejectPreEpochUpdatedAt(t *testing.T) {
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+func assertResponseRequired(t *testing.T, msg *protocol.Message) {
+	t.Helper()
+	encoded, err := msg.MarshalBinary()
+	require.NoError(t, err)
+	assert.NotZero(t, encoded[22]&1, "response-required flag is not set")
 }
 
 func TestRelayMessages(t *testing.T) {

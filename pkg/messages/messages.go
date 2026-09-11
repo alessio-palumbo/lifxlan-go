@@ -65,7 +65,9 @@ func SetLabel(label string) (*protocol.Message, error) {
 	if err != nil {
 		return nil, fmt.Errorf("set label: %w", err)
 	}
-	return protocol.NewMessage(&packets.DeviceSetLabel{Label: encoded}), nil
+	msg := protocol.NewMessage(&packets.DeviceSetLabel{Label: encoded})
+	msg.SetResponseRequired(true)
+	return msg, nil
 }
 
 // SetLocation assigns the device to a location at the supplied update time.
@@ -78,11 +80,13 @@ func SetLocation(id device.LocationID, label string, updatedAt time.Time) (*prot
 	if err != nil {
 		return nil, fmt.Errorf("set location: %w", err)
 	}
-	return protocol.NewMessage(&packets.DeviceSetLocation{
+	msg := protocol.NewMessage(&packets.DeviceSetLocation{
 		Location:  [16]byte(id),
 		Label:     encoded,
 		UpdatedAt: updatedAtNanos,
-	}), nil
+	})
+	msg.SetResponseRequired(true)
+	return msg, nil
 }
 
 // SetGroup assigns the device to a group at the supplied update time.
@@ -95,11 +99,13 @@ func SetGroup(id device.GroupID, label string, updatedAt time.Time) (*protocol.M
 	if err != nil {
 		return nil, fmt.Errorf("set group: %w", err)
 	}
-	return protocol.NewMessage(&packets.DeviceSetGroup{
+	msg := protocol.NewMessage(&packets.DeviceSetGroup{
 		Group:     [16]byte(id),
 		Label:     encoded,
 		UpdatedAt: updatedAtNanos,
-	}), nil
+	})
+	msg.SetResponseRequired(true)
+	return msg, nil
 }
 
 func encodeLabel(label string) ([32]byte, error) {
