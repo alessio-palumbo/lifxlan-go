@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/alessio-palumbo/lifxlan-go/internal/control"
@@ -64,6 +66,47 @@ func TestGetDeviceValidatesSerialAndReturnsNotFound(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/devices/"+device_.Serial.String(), nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestGetDeviceEventsStreamsSSE(t *testing.T) {
+	light := apiDevice(t, "001122334455", device.DeviceTypeLight)
+	light.PoweredOn = true
+	events := make(chan controller.DeviceEvent, 2)
+	events <- controller.DeviceEvent{
+		Type:     controller.DeviceEventUpdated,
+		Device:   light,
+		Changes:  controller.DeviceChangeLight,
+		Revision: 7,
+	}
+	events <- controller.DeviceEvent{
+		Type:     controller.DeviceEventResyncRequired,
+		Revision: 8,
+	}
+	close(events)
+
+	handler := NewHandler(&fakeService{events: events})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/devices/events", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Type"); got != "text/event-stream" {
+		t.Fatalf("content type = %q", got)
+	}
+	body := response.Body.String()
+	for _, want := range []string{
+		"id: 7\nevent: updated\n",
+		"\"type\":\"updated\"",
+		"\"changes\":[\"light\"]",
+		"\"serial\":\"001122334455\"",
+		"id: 8\nevent: resync_required\n",
+		"data: {\"type\":\"resync_required\",\"revision\":8}\n\n",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("SSE body does not contain %q:\n%s", want, body)
+		}
 	}
 }
 
@@ -148,6 +191,7 @@ func TestPatchDeviceStateMapsSelectorErrors(t *testing.T) {
 
 type fakeService struct {
 	devices   []device.Device
+	events    <-chan controller.DeviceEvent
 	selectors []string
 	update    controller.StateUpdate
 	results   []control.DeviceStateResult
@@ -171,6 +215,15 @@ func (s *fakeService) ApplyState(selectors []string, update controller.StateUpda
 	s.selectors = append([]string(nil), selectors...)
 	s.update = update
 	return s.results, s.applyErr
+}
+
+func (s *fakeService) SubscribeDevices(context.Context, ...controller.SubscriptionOption) <-chan controller.DeviceEvent {
+	if s.events != nil {
+		return s.events
+	}
+	events := make(chan controller.DeviceEvent)
+	close(events)
+	return events
 }
 
 func apiDevice(t *testing.T, serial string, deviceType device.DeviceType) device.Device {

@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -81,6 +82,10 @@ func (b *fakeBackend) GetDevices() []device.Device {
 func (b *fakeBackend) SetState(serial device.Serial, _ controller.StateUpdate) error {
 	b.called = append(b.called, serial)
 	return b.errors[serial]
+}
+
+func (b *fakeBackend) SubscribeDevices(context.Context, ...controller.SubscriptionOption) <-chan controller.DeviceEvent {
+	return make(chan controller.DeviceEvent)
 }
 
 func controlDevices(t *testing.T) []device.Device {

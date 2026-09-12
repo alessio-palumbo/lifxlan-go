@@ -35,6 +35,26 @@ paths:
                   devices:
                     type: array
                     items: {$ref: "#/components/schemas/Device"}
+  /v1/devices/events:
+    get:
+      summary: Subscribe to observed device changes
+      description: >-
+        Opens a Server-Sent Events stream. Existing devices are emitted as
+        initial added events. Revisions are process-local and are not replayed.
+        A resync_required event instructs the client to replace its local view
+        with GET /v1/devices.
+      security: [{}, {bearerAuth: []}]
+      responses:
+        "200":
+          description: >-
+            SSE frames named added, updated, removed, or resync_required. Each
+            data field is JSON matching the DeviceEvent schema.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              x-sse-event-schema:
+                $ref: "#/components/schemas/DeviceEvent"
   /v1/devices/{serial}:
     get:
       summary: Get an active LIFX device
@@ -157,6 +177,39 @@ components:
         switch: {$ref: "#/components/schemas/SwitchState"}
         last_seen_at: {type: string, format: date-time}
         last_updated_at: {type: string, format: date-time}
+    DeviceEvent:
+      type: object
+      required: [type, revision]
+      properties:
+        type:
+          type: string
+          enum: [added, updated, removed, resync_required]
+        revision:
+          type: integer
+          minimum: 0
+        initial:
+          type: boolean
+          description: True for devices present when the subscription started.
+        changes:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - label
+              - product
+              - firmware
+              - location
+              - group
+              - wifi
+              - light
+              - matrix
+              - multizone
+              - buttons
+              - button_config
+              - relays
+        device:
+          $ref: "#/components/schemas/Device"
     ColorUpdate:
       type: object
       minProperties: 1

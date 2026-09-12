@@ -147,6 +147,30 @@ func TestSubscriptionOverflowRequiresResync(t *testing.T) {
 	}
 }
 
+func TestSubscriptionOrdersInitialDevicesBeforeQueuedLiveEvents(t *testing.T) {
+	subscription := newDeviceSubscription(1)
+	subscription.enqueue(DeviceEvent{
+		Type:     DeviceEventUpdated,
+		Device:   device.Device{Serial: device.Serial{1}, Label: "Updated"},
+		Changes:  DeviceChangeLabel,
+		Revision: 1,
+	}, false)
+	subscription.initialize([]device.Device{{Serial: device.Serial{1}, Label: "Initial"}})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go subscription.run(ctx, func() {})
+
+	initial := receiveDeviceEvent(t, subscription.events)
+	if initial.Type != DeviceEventAdded || !initial.Initial || initial.Device.Label != "Initial" {
+		t.Fatalf("initial event = %#v", initial)
+	}
+	live := receiveDeviceEvent(t, subscription.events)
+	if live.Type != DeviceEventUpdated || live.Device.Label != "Updated" {
+		t.Fatalf("live event = %#v", live)
+	}
+}
+
 func TestSubscriptionClosesWithContextAndController(t *testing.T) {
 	t.Run("context", func(t *testing.T) {
 		mockClient := newMockClient()

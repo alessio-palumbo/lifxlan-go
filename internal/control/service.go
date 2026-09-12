@@ -3,6 +3,7 @@
 package control
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -23,6 +24,7 @@ var (
 type Backend interface {
 	GetDevices() []device.Device
 	SetState(device.Serial, controller.StateUpdate) error
+	SubscribeDevices(context.Context, ...controller.SubscriptionOption) <-chan controller.DeviceEvent
 }
 
 // Service applies transport-independent operations to a controller backend.
@@ -38,6 +40,11 @@ func New(backend Backend) *Service {
 // GetDevices returns snapshots of all active devices.
 func (s *Service) GetDevices() []device.Device {
 	return s.backend.GetDevices()
+}
+
+// SubscribeDevices returns the backend's stream of observed device changes.
+func (s *Service) SubscribeDevices(ctx context.Context, opts ...controller.SubscriptionOption) <-chan controller.DeviceEvent {
+	return s.backend.SubscribeDevices(ctx, opts...)
 }
 
 // GetDevice returns the snapshot for an active device.

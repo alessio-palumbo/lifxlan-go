@@ -25,6 +25,22 @@ const (
 	DeviceEventResyncRequired
 )
 
+// String returns the event type's API representation.
+func (t DeviceEventType) String() string {
+	switch t {
+	case DeviceEventAdded:
+		return "added"
+	case DeviceEventUpdated:
+		return "updated"
+	case DeviceEventRemoved:
+		return "removed"
+	case DeviceEventResyncRequired:
+		return "resync_required"
+	default:
+		return ""
+	}
+}
+
 // DeviceChange identifies categories changed by a DeviceEventUpdated event.
 type DeviceChange uint64
 
@@ -42,6 +58,11 @@ const (
 	DeviceChangeButtonConfig
 	DeviceChangeRelays
 )
+
+// Has reports whether changes includes every bit in change.
+func (changes DeviceChange) Has(change DeviceChange) bool {
+	return changes&change == change
+}
 
 // DeviceEvent describes a transition in the controller's observed device
 // state. Device is an independent snapshot and is empty for resync events.
@@ -78,6 +99,7 @@ type deviceSubscription struct {
 	queue    []DeviceEvent
 	limit    int
 	overflow bool
+	initials int
 }
 
 func newDeviceSubscription(limit int) *deviceSubscription {
@@ -98,11 +120,13 @@ func (s *deviceSubscription) enqueue(event DeviceEvent, cloneDevice bool) {
 
 	s.mu.Lock()
 	if s.overflow {
-		s.queue[0].Revision = event.Revision
+		s.queue[len(s.queue)-1].Revision = event.Revision
 		s.mu.Unlock()
 		return
 	}
 	if len(s.queue) >= s.limit {
+		s.limit -= s.initials
+		s.initials = 0
 		clear(s.queue)
 		s.queue = append(s.queue[:0], DeviceEvent{
 			Type:     DeviceEventResyncRequired,
@@ -123,6 +147,33 @@ func (s *deviceSubscription) enqueue(event DeviceEvent, cloneDevice bool) {
 	}
 }
 
+func (s *deviceSubscription) initialize(devices []device.Device) {
+	select {
+	case <-s.done:
+		return
+	default:
+	}
+
+	s.mu.Lock()
+	s.limit += len(devices)
+	s.initials += len(devices)
+	initial := make([]DeviceEvent, 0, len(devices)+len(s.queue))
+	for _, d := range devices {
+		initial = append(initial, DeviceEvent{
+			Type:    DeviceEventAdded,
+			Device:  d,
+			Initial: true,
+		})
+	}
+	s.queue = append(initial, s.queue...)
+	s.mu.Unlock()
+
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 func (s *deviceSubscription) next() (DeviceEvent, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -133,6 +184,10 @@ func (s *deviceSubscription) next() (DeviceEvent, bool) {
 	copy(s.queue, s.queue[1:])
 	s.queue[len(s.queue)-1] = DeviceEvent{}
 	s.queue = s.queue[:len(s.queue)-1]
+	if event.Initial {
+		s.initials--
+		s.limit--
+	}
 	if event.Type == DeviceEventResyncRequired {
 		s.overflow = false
 	}
@@ -181,15 +236,6 @@ func (c *Controller) SubscribeDevices(ctx context.Context, opts ...SubscriptionO
 	subscription := newDeviceSubscription(cfg.bufferSize)
 
 	c.mu.RLock()
-	devices := make([]device.Device, 0, len(c.sessions))
-	for _, session := range c.sessions {
-		devices = append(devices, session.deviceSnapshot())
-	}
-	device.SortDevices(devices)
-	// Initial events cannot be consumed until SubscribeDevices returns, so they
-	// do not count against the caller's live-event buffer allowance.
-	subscription.limit += len(devices)
-
 	c.subscriptionsMu.Lock()
 	if c.subscriptionsClosed {
 		c.subscriptionsMu.Unlock()
@@ -200,16 +246,16 @@ func (c *Controller) SubscribeDevices(ctx context.Context, opts ...SubscriptionO
 	c.nextSubscriptionID++
 	id := c.nextSubscriptionID
 	c.subscriptions[id] = subscription
-	revision := c.eventRevision
-	for _, d := range devices {
-		subscription.enqueue(DeviceEvent{
-			Type:     DeviceEventAdded,
-			Device:   d,
-			Revision: revision,
-			Initial:  true,
-		}, false)
-	}
 	c.subscriptionsMu.Unlock()
+
+	devices := make([]device.Device, 0, len(c.sessions))
+	for _, session := range c.sessions {
+		devices = append(devices, session.deviceSnapshot())
+	}
+	device.SortDevices(devices)
+	// The subscription is registered before snapshots are collected, so live
+	// events cannot be lost. initialize places them after the initial devices.
+	subscription.initialize(devices)
 	c.mu.RUnlock()
 
 	go subscription.run(ctx, func() { c.removeSubscription(id, subscription) })

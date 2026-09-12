@@ -21,6 +21,19 @@ def request(path: str, *, method: str = "GET", body: dict | None = None) -> dict
         return json.load(response)
 
 
+def device_events():
+    """Yield decoded events from lifxland's SSE stream."""
+    headers = {"Accept": "text/event-stream"}
+    if TOKEN:
+        headers["Authorization"] = f"Bearer {TOKEN}"
+    req = urllib.request.Request(BASE_URL + "/v1/devices/events", headers=headers)
+    with urllib.request.urlopen(req) as response:
+        for raw_line in response:
+            line = raw_line.decode("utf-8").rstrip("\r\n")
+            if line.startswith("data:"):
+                yield json.loads(line.removeprefix("data:").lstrip())
+
+
 devices = request("/v1/devices")
 print(json.dumps(devices, indent=2))
 
@@ -39,3 +52,7 @@ if selector:
         },
     )
     print(json.dumps(result, indent=2))
+
+if os.getenv("LIFX_WATCH"):
+    for event in device_events():
+        print(json.dumps(event, indent=2))

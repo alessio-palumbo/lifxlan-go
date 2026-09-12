@@ -3,6 +3,7 @@ package httpapi
 import (
 	"time"
 
+	"github.com/alessio-palumbo/lifxlan-go/pkg/controller"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 )
 
@@ -47,6 +48,14 @@ type switchResponse struct {
 type relayResponse struct {
 	Index int    `json:"index"`
 	Power string `json:"power"`
+}
+
+type deviceEventResponse struct {
+	Type     string          `json:"type"`
+	Revision uint64          `json:"revision"`
+	Initial  bool            `json:"initial,omitempty"`
+	Changes  []string        `json:"changes,omitempty"`
+	Device   *deviceResponse `json:"device,omitempty"`
 }
 
 func newDeviceResponse(d device.Device) deviceResponse {
@@ -106,4 +115,45 @@ func powerString(poweredOn bool) string {
 		return "on"
 	}
 	return "off"
+}
+
+func newDeviceEventResponse(event controller.DeviceEvent) deviceEventResponse {
+	response := deviceEventResponse{
+		Type:     event.Type.String(),
+		Revision: event.Revision,
+		Initial:  event.Initial,
+		Changes:  deviceChangeNames(event.Changes),
+	}
+	if event.Type != controller.DeviceEventResyncRequired {
+		device := newDeviceResponse(event.Device)
+		response.Device = &device
+	}
+	return response
+}
+
+func deviceChangeNames(changes controller.DeviceChange) []string {
+	known := []struct {
+		change controller.DeviceChange
+		name   string
+	}{
+		{controller.DeviceChangeLabel, "label"},
+		{controller.DeviceChangeProduct, "product"},
+		{controller.DeviceChangeFirmware, "firmware"},
+		{controller.DeviceChangeLocation, "location"},
+		{controller.DeviceChangeGroup, "group"},
+		{controller.DeviceChangeWiFi, "wifi"},
+		{controller.DeviceChangeLight, "light"},
+		{controller.DeviceChangeMatrix, "matrix"},
+		{controller.DeviceChangeMultizone, "multizone"},
+		{controller.DeviceChangeButtons, "buttons"},
+		{controller.DeviceChangeButtonConfig, "button_config"},
+		{controller.DeviceChangeRelays, "relays"},
+	}
+	var names []string
+	for _, item := range known {
+		if changes.Has(item.change) {
+			names = append(names, item.name)
+		}
+	}
+	return names
 }

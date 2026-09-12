@@ -86,8 +86,9 @@ required. To build the daemon from source instead, use `go run ./cmd/lifxland`.
 
 The device-centric API supports lights, switches, and hybrid devices. State
 updates use selector arrays and capability-scoped `light` and `relays` objects
-at `PATCH /v1/devices/state`. See the [HTTP API guide](docs/http-api.md) and
-[OpenAPI contract](api/openapi.yaml).
+at `PATCH /v1/devices/state`. Observed device changes are available as
+Server-Sent Events at `GET /v1/devices/events`. See the
+[HTTP API guide](docs/http-api.md) and [OpenAPI contract](api/openapi.yaml).
 
 ### Running `lifxland` on another machine
 

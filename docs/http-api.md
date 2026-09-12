@@ -2,8 +2,8 @@
 
 `lifxland` embeds one long-lived `controller.Controller` and exposes its device
 inventory and state controls to non-Go applications. The first milestone is
-deliberately small: discovery, inventory, and light/relay state. It does not add
-effects, events, persistence, MCP, or gRPC.
+deliberately small: discovery, inventory, observed device events, and
+light/relay state. It does not add effects, persistence, MCP, or gRPC.
 
 Download the archive for your platform from
 [GitHub Releases](https://github.com/alessio-palumbo/lifxlan-go/releases), verify
@@ -127,6 +127,48 @@ Unsupported capabilities are explicit rejections rather than silent skips. LIFX
 LAN sends are not transactional: `partial` means one or more earlier messages
 were sent before a later transport failure.
 
+## Device events
+
+`GET /v1/devices/events` is a
+[Server-Sent Events](https://html.spec.whatwg.org/multipage/server-sent-events.html)
+stream of the controller's observed device state:
+
+```sh
+curl -N http://127.0.0.1:8080/v1/devices/events
+```
+
+Authenticated remote clients send the same bearer token as other API requests:
+
+```sh
+curl -N -H 'Authorization: Bearer replace-me' \
+  http://host:8080/v1/devices/events
+```
+
+Each frame has an event name of `added`, `updated`, `removed`, or
+`resync_required`. Its `data` field is JSON:
+
+```text
+id: 14
+event: updated
+data: {"type":"updated","revision":14,"changes":["light"],"device":{...}}
+```
+
+When a connection starts, every currently active device is sent as an `added`
+event with `initial: true`. Later updates include change categories and a
+complete snapshot using the same representation as `GET /v1/devices/{serial}`.
+The current HTTP device representation does not include detailed matrix pixel
+buffers, multizone buffers, or button configuration.
+
+Events describe changes observed in the controller's cache. LIFX state is still
+polled on the LAN, and a successful state-changing request is not itself an
+observation event. Revisions are monotonic for the lifetime of the daemon but
+are not persisted or replayed.
+
+Streaming never blocks device packet processing. If a client cannot consume
+events quickly enough, it receives `resync_required` and must replace its local
+view with `GET /v1/devices`. Reconnecting creates a fresh subscription and
+again sends the current devices as initial events.
+
 ## Python
 
 The dependency-free example in [`examples/http/python/client.py`](../examples/http/python/client.py)
@@ -136,4 +178,6 @@ lists devices and updates a selector. It uses only Python's standard library:
 python3 examples/http/python/client.py
 LIFX_SELECTOR='location_id:936c9ba4-9f6d-4f12-8a83-2bed1d07ae42' \
   python3 examples/http/python/client.py
+
+LIFX_WATCH=1 python3 examples/http/python/client.py
 ```

@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ type service interface {
 	GetDevices() []device.Device
 	GetDevice(device.Serial) (device.Device, bool)
 	ApplyState([]string, controller.StateUpdate) ([]control.DeviceStateResult, error)
+	SubscribeDevices(context.Context, ...controller.SubscriptionOption) <-chan controller.DeviceEvent
 }
 
 // NewHandler returns the HTTP API handler.
@@ -30,6 +32,9 @@ func NewHandler(service service) http.Handler {
 	mux.HandleFunc("GET /healthz", handleHealth)
 	mux.HandleFunc("GET /v1/devices", func(w http.ResponseWriter, _ *http.Request) {
 		handleGetDevices(w, service)
+	})
+	mux.HandleFunc("GET /v1/devices/events", func(w http.ResponseWriter, r *http.Request) {
+		handleDeviceEvents(w, r, service)
 	})
 	mux.HandleFunc("PATCH /v1/devices/state", func(w http.ResponseWriter, r *http.Request) {
 		handleSetState(w, r, service)
