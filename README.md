@@ -171,6 +171,19 @@ Events describe state observed by the controller, not command acknowledgements.
 The controller still polls devices according to its configured high- and
 low-frequency refresh periods.
 
+A runnable [Go device monitor](examples/monitor/main.go) demonstrates the full
+subscription lifecycle while maintaining and printing a compact device
+inventory:
+
+```sh
+go run ./examples/monitor
+```
+
+It displays device identity, labels, location, group, product information,
+device type, power, color, and the cached zone count for multizone and matrix
+lights. Event bursts are coalesced, and an interactive terminal is repainted in
+place rather than appending a new table for every revision.
+
 ## State Snapshot And Restore
 
 Controllers can capture and restore the current light state for one or more
