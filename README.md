@@ -196,6 +196,19 @@ has not been queried yet, and `Effect.Running()` provides the common active-stat
 check. Effect setters request their corresponding state response, while periodic
 high-frequency queries also detect effects started by another controller.
 
+Effect instance IDs can be retained to correlate observed state with an effect
+started by the application without depending on generated packet types:
+
+```go
+msg := messages.SetMatrixFlameEffect(5 * time.Second)
+instanceID, _ := messages.EffectInstanceID(msg)
+// Record instanceID before Send because the state response may arrive promptly.
+err := ctrl.Send(serial, msg)
+```
+
+An instance ID is a correlation token rather than proof of ownership; another
+controller can replace the effect at any time.
+
 A runnable [Go device monitor](examples/monitor/main.go) demonstrates the full
 subscription lifecycle while maintaining and printing a compact device
 inventory:

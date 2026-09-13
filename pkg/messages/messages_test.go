@@ -226,6 +226,30 @@ func TestFirmwareEffectMessages(t *testing.T) {
 	}
 }
 
+func TestEffectInstanceID(t *testing.T) {
+	for name, msg := range map[string]*protocol.Message{
+		"multizone": SetMultizoneMoveEffect(time.Second, true),
+		"matrix":    SetMatrixFlameEffect(time.Second),
+	} {
+		t.Run(name, func(t *testing.T) {
+			id, ok := EffectInstanceID(msg)
+			assert.True(t, ok)
+
+			switch payload := msg.Payload.(type) {
+			case *packets.MultiZoneSetEffect:
+				assert.Equal(t, payload.Settings.Instanceid, id)
+			case *packets.TileSetEffect:
+				assert.Equal(t, payload.Settings.Instanceid, id)
+			}
+		})
+	}
+
+	_, ok := EffectInstanceID(protocol.NewMessage(&packets.LightGet{}))
+	assert.False(t, ok)
+	_, ok = EffectInstanceID(nil)
+	assert.False(t, ok)
+}
+
 func ptr[T any](v T) *T {
 	return &v
 }

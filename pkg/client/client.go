@@ -199,14 +199,6 @@ func BroadcastInterfaces() ([]BroadcastInterface, error) {
 	}), nil
 }
 
-// resolveBroadcastUDPAddress computes and returns the UDP broadcast address for
-// cfg. Without an override it preserves the historical behavior: first suitable
-// network interface wins.
-func resolveBroadcastUDPAddress(port int, cfg *Config) (*net.UDPAddr, error) {
-	addr, _, err := resolveBroadcastTarget(port, cfg)
-	return addr, err
-}
-
 func resolveBroadcastTarget(port int, cfg *Config) (*net.UDPAddr, *BroadcastInterface, error) {
 	if cfg != nil && cfg.BroadcastAddr != nil {
 		return broadcastUDPAddr(cfg.BroadcastAddr.IP, cfg.BroadcastAddr.Port, port), nil, nil
