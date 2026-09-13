@@ -124,7 +124,7 @@ func newDeviceEventResponse(event controller.DeviceEvent) deviceEventResponse {
 		Initial:  event.Initial,
 		Changes:  deviceChangeNames(event.Changes),
 	}
-	if event.Type != controller.DeviceEventResyncRequired {
+	if event.Type != controller.DeviceEventResyncRequired && event.Type != controller.DeviceEventSnapshotComplete {
 		device := newDeviceResponse(event.Device)
 		response.Device = &device
 	}

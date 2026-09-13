@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"runtime"
@@ -36,6 +37,29 @@ func BenchmarkControllerGetDevicesParallel(b *testing.B) {
 					runtime.KeepAlive(devices)
 				}
 			})
+		})
+	}
+}
+
+func BenchmarkSubscribeDevices(b *testing.B) {
+	for _, count := range []int{0, 10, 100} {
+		ctrl := benchmarkController(count)
+		ctrl.subscriptions = make(map[uint64]*deviceSubscription)
+
+		b.Run(fmt.Sprintf("initial_devices=%d", count), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				ctx, cancel := context.WithCancel(context.Background())
+				events := ctrl.SubscribeDevices(ctx)
+				for range count {
+					benchmarkEventSink = <-events
+				}
+				benchmarkEventSink = <-events
+				cancel()
+				for range events {
+				}
+				waitForBenchmarkSubscriptions(ctrl, 0)
+			}
 		})
 	}
 }
@@ -85,6 +109,18 @@ func benchmarkController(count int) *Controller {
 		ctrl.sessions[d.Serial] = &deviceSession{device: &d}
 	}
 	return ctrl
+}
+
+func waitForBenchmarkSubscriptions(ctrl *Controller, count int) {
+	for {
+		ctrl.subscriptionsMu.Lock()
+		remaining := len(ctrl.subscriptions)
+		ctrl.subscriptionsMu.Unlock()
+		if remaining == count {
+			return
+		}
+		runtime.Gosched()
+	}
 }
 
 func benchmarkControllerDevice(index int) device.Device {

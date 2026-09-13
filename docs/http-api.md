@@ -144,8 +144,8 @@ curl -N -H 'Authorization: Bearer replace-me' \
   http://host:8080/v1/devices/events
 ```
 
-Each frame has an event name of `added`, `updated`, `removed`, or
-`resync_required`. Its `data` field is JSON:
+Each frame has an event name of `added`, `updated`, `removed`,
+`snapshot_complete`, or `resync_required`. Its `data` field is JSON:
 
 ```text
 id: 14
@@ -154,20 +154,35 @@ data: {"type":"updated","revision":14,"changes":["light"],"device":{...}}
 ```
 
 When a connection starts, every currently active device is sent as an `added`
-event with `initial: true`. Later updates include change categories and a
-complete snapshot using the same representation as `GET /v1/devices/{serial}`.
+event with `initial: true` and revision zero. A `snapshot_complete` event then
+marks the end of the initial inventory and carries the revision baseline. The
+next live event has a greater revision. An empty inventory therefore starts
+with `snapshot_complete` and no preceding `added` events.
+
+An `added` event means the device was discovered and its controller session was
+created. It does not mean the preflight handshake has populated every product,
+group, color, matrix, or other capability field. Clients should expect later
+`updated` events to complete the device state.
+
+Later updates include change categories and a complete snapshot using the same
+representation as `GET /v1/devices/{serial}`.
 The current HTTP device representation does not include detailed matrix pixel
 buffers, multizone buffers, or button configuration.
 
 Events describe changes observed in the controller's cache. LIFX state is still
 polled on the LAN, and a successful state-changing request is not itself an
 observation event. Revisions are monotonic for the lifetime of the daemon but
-are not persisted or replayed.
+are not persisted or replayed. Initial device records are synthesized at
+revision zero and should not be interpreted as live transitions.
 
 Streaming never blocks device packet processing. If a client cannot consume
 events quickly enough, it receives `resync_required` and must replace its local
 view with `GET /v1/devices`. Reconnecting creates a fresh subscription and
 again sends the current devices as initial events.
+
+The stream does not coalesce updates by time. UI clients can coalesce event
+bursts according to their rendering needs, while automation and monitoring
+clients can process each observed transition immediately.
 
 ## Python
 

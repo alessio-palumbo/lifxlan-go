@@ -46,7 +46,7 @@ jobs:
         run: |
           mkdir -p benchmark-dist
           go test -run '^$' \
-            -bench 'Benchmark(DeviceClone|ControllerGetDevices|ControllerGetDevicesParallel|DeviceEventFanout|DeviceEventSSE)$' \
+            -bench 'Benchmark(DeviceClone|ControllerGetDevices|ControllerGetDevicesParallel|SubscribeDevices|DeviceEventFanout|DeviceEventSSE)$' \
             -benchmem -benchtime=500ms -count=10 \
             ./pkg/device ./pkg/controller ./internal/httpapi \
             > benchmark-dist/current.txt
@@ -61,7 +61,7 @@ jobs:
           git worktree add --detach "$previous_dir" "$PREVIOUS_VERSION"
           cd "$previous_dir"
           go test -run '^$' \
-            -bench 'Benchmark(DeviceClone|ControllerGetDevices|ControllerGetDevicesParallel|DeviceEventFanout|DeviceEventSSE)$' \
+            -bench 'Benchmark(DeviceClone|ControllerGetDevices|ControllerGetDevicesParallel|SubscribeDevices|DeviceEventFanout|DeviceEventSSE)$' \
             -benchmem -benchtime=500ms -count=10 \
             ./pkg/device ./pkg/controller ./internal/httpapi \
             > "$GITHUB_WORKSPACE/benchmark-dist/previous.txt"
@@ -96,7 +96,8 @@ jobs:
             echo "# lifxlan-go ${VERSION} benchmarks"
             echo
             echo "These results measure in-memory device cloning, controller snapshots,"
-            echo "device-event fan-out, and HTTP Server-Sent Event encoding. They do not"
+            echo "subscription initialization, device-event fan-out, and HTTP Server-Sent"
+            echo "Event encoding. They do not"
             echo "measure LAN discovery, Wi-Fi latency, or physical device response time."
             echo
             echo "## Environment"

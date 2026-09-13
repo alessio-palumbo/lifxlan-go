@@ -72,7 +72,11 @@ func TestGetDeviceValidatesSerialAndReturnsNotFound(t *testing.T) {
 func TestGetDeviceEventsStreamsSSE(t *testing.T) {
 	light := apiDevice(t, "001122334455", device.DeviceTypeLight)
 	light.PoweredOn = true
-	events := make(chan controller.DeviceEvent, 2)
+	events := make(chan controller.DeviceEvent, 3)
+	events <- controller.DeviceEvent{
+		Type:     controller.DeviceEventSnapshotComplete,
+		Revision: 6,
+	}
 	events <- controller.DeviceEvent{
 		Type:     controller.DeviceEventUpdated,
 		Device:   light,
@@ -97,6 +101,8 @@ func TestGetDeviceEventsStreamsSSE(t *testing.T) {
 	}
 	body := response.Body.String()
 	for _, want := range []string{
+		"id: 6\nevent: snapshot_complete\n",
+		"data: {\"type\":\"snapshot_complete\",\"revision\":6}\n\n",
 		"id: 7\nevent: updated\n",
 		"\"type\":\"updated\"",
 		"\"changes\":[\"light\"]",

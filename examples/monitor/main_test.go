@@ -49,3 +49,14 @@ func TestPrintDevicesUsesPlainOutputWhenRedirected(t *testing.T) {
 		t.Fatalf("plain output contains terminal control sequence: %q", output.String())
 	}
 }
+
+func TestPrintDevicesNamesSnapshotComplete(t *testing.T) {
+	var output bytes.Buffer
+	printDevices(&output, controller.DeviceEvent{
+		Type:     controller.DeviceEventSnapshotComplete,
+		Revision: 12,
+	}, nil, false)
+	if !strings.Contains(output.String(), "event=snapshot_complete  revision=12") {
+		t.Fatalf("snapshot-complete output = %q", output.String())
+	}
+}

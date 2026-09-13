@@ -156,6 +156,8 @@ for event := range ctrl.SubscribeDevices(ctx) {
 		devices[event.Device.Serial] = event.Device
 	case controller.DeviceEventRemoved:
 		delete(devices, event.Device.Serial)
+	case controller.DeviceEventSnapshotComplete:
+		fmt.Printf("initial inventory ready at revision %d\n", event.Revision)
 	case controller.DeviceEventResyncRequired:
 		devices = make(map[device.Serial]device.Device)
 		for _, d := range ctrl.GetDevices() {
@@ -165,16 +167,25 @@ for event := range ctrl.SubscribeDevices(ctx) {
 }
 ```
 
-Existing devices are emitted as initial `DeviceEventAdded` events before live
-updates. Each event contains an independent device snapshot and a process-local
-revision; update events also identify the changed capability or metadata
-category. Slow subscribers do not block LAN message processing. If a subscriber
-exceeds its configured pending-event buffer, it receives
+Existing devices are emitted as initial `DeviceEventAdded` events at revision
+zero, followed by `DeviceEventSnapshotComplete` carrying the baseline revision.
+The completion marker is emitted even when the initial inventory is empty, and
+subsequent live events have greater revisions. Each event contains an
+independent device snapshot and update events identify the changed capability
+or metadata category.
+
+`DeviceEventAdded` means that discovery created a device session; it does not
+guarantee that the preflight handshake has populated all capability-specific
+state. Consumers should expect subsequent update events. Slow subscribers do
+not block LAN message processing. If a subscriber exceeds its configured
+pending-event buffer, it receives
 `DeviceEventResyncRequired` and can recover using `GetDevices`.
 
 Events describe state observed by the controller, not command acknowledgements.
 The controller still polls devices according to its configured high- and
 low-frequency refresh periods.
+Time-based event coalescing is intentionally left to consumers so UIs can batch
+renders while automation and monitoring clients can retain low latency.
 
 A runnable [Go device monitor](examples/monitor/main.go) demonstrates the full
 subscription lifecycle while maintaining and printing a compact device

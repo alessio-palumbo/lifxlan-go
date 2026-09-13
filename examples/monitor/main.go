@@ -37,11 +37,12 @@ func main() {
 
 	var lastEvent controller.DeviceEvent
 	var dirty bool
+	var ready bool
 	for {
 		select {
 		case event, ok := <-events:
 			if !ok {
-				if dirty {
+				if dirty && ready {
 					printDevices(os.Stdout, lastEvent, devices, inPlace)
 				}
 				return
@@ -49,8 +50,11 @@ func main() {
 			applyEvent(ctrl, devices, event)
 			lastEvent = event
 			dirty = true
+			if event.Type == controller.DeviceEventSnapshotComplete {
+				ready = true
+			}
 		case <-render.C:
-			if dirty {
+			if dirty && ready {
 				printDevices(os.Stdout, lastEvent, devices, inPlace)
 				dirty = false
 			}
@@ -80,7 +84,7 @@ func terminalOutput(out *os.File) bool {
 func printDevices(out io.Writer, event controller.DeviceEvent, devices map[device.Serial]device.Device, inPlace bool) {
 	var display bytes.Buffer
 	eventName := event.Type.String()
-	if event.Initial {
+	if event.Type == controller.DeviceEventAdded && event.Initial {
 		eventName = "initial"
 	}
 	fmt.Fprintf(&display, "%s  event=%s  revision=%d  devices=%d\n",

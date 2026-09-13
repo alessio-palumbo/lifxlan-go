@@ -23,6 +23,9 @@ const (
 	// DeviceEventResyncRequired indicates that the subscriber could not keep up
 	// and should replace its local view with Controller.GetDevices.
 	DeviceEventResyncRequired
+	// DeviceEventSnapshotComplete marks the end of a subscription's initial
+	// inventory. Its revision is the baseline before live events begin.
+	DeviceEventSnapshotComplete
 )
 
 // String returns the event type's API representation.
@@ -36,6 +39,8 @@ func (t DeviceEventType) String() string {
 		return "removed"
 	case DeviceEventResyncRequired:
 		return "resync_required"
+	case DeviceEventSnapshotComplete:
+		return "snapshot_complete"
 	default:
 		return ""
 	}
@@ -65,7 +70,10 @@ func (changes DeviceChange) Has(change DeviceChange) bool {
 }
 
 // DeviceEvent describes a transition in the controller's observed device
-// state. Device is an independent snapshot and is empty for resync events.
+// state. Device is an independent snapshot and is empty for resync and
+// snapshot-complete events. Initial device events have revision zero; a
+// snapshot-complete event carries the baseline revision for subsequent live
+// transitions.
 type DeviceEvent struct {
 	Type     DeviceEventType
 	Device   device.Device
@@ -99,7 +107,7 @@ type deviceSubscription struct {
 	queue    []DeviceEvent
 	limit    int
 	overflow bool
-	initials int
+	preface  int
 }
 
 func newDeviceSubscription(limit int) *deviceSubscription {
@@ -125,8 +133,8 @@ func (s *deviceSubscription) enqueue(event DeviceEvent, cloneDevice bool) {
 		return
 	}
 	if len(s.queue) >= s.limit {
-		s.limit -= s.initials
-		s.initials = 0
+		s.limit -= s.preface
+		s.preface = 0
 		clear(s.queue)
 		s.queue = append(s.queue[:0], DeviceEvent{
 			Type:     DeviceEventResyncRequired,
@@ -147,7 +155,7 @@ func (s *deviceSubscription) enqueue(event DeviceEvent, cloneDevice bool) {
 	}
 }
 
-func (s *deviceSubscription) initialize(devices []device.Device) {
+func (s *deviceSubscription) initialize(devices []device.Device, revision uint64) {
 	select {
 	case <-s.done:
 		return
@@ -155,9 +163,10 @@ func (s *deviceSubscription) initialize(devices []device.Device) {
 	}
 
 	s.mu.Lock()
-	s.limit += len(devices)
-	s.initials += len(devices)
-	initial := make([]DeviceEvent, 0, len(devices)+len(s.queue))
+	initialCount := len(devices) + 1
+	s.limit += initialCount
+	s.preface += initialCount
+	initial := make([]DeviceEvent, 0, initialCount+len(s.queue))
 	for _, d := range devices {
 		initial = append(initial, DeviceEvent{
 			Type:    DeviceEventAdded,
@@ -165,6 +174,10 @@ func (s *deviceSubscription) initialize(devices []device.Device) {
 			Initial: true,
 		})
 	}
+	initial = append(initial, DeviceEvent{
+		Type:     DeviceEventSnapshotComplete,
+		Revision: revision,
+	})
 	s.queue = append(initial, s.queue...)
 	s.mu.Unlock()
 
@@ -184,8 +197,8 @@ func (s *deviceSubscription) next() (DeviceEvent, bool) {
 	copy(s.queue, s.queue[1:])
 	s.queue[len(s.queue)-1] = DeviceEvent{}
 	s.queue = s.queue[:len(s.queue)-1]
-	if event.Initial {
-		s.initials--
+	if event.Initial || event.Type == DeviceEventSnapshotComplete {
+		s.preface--
 		s.limit--
 	}
 	if event.Type == DeviceEventResyncRequired {
@@ -225,8 +238,11 @@ func (s *deviceSubscription) run(ctx context.Context, unregister func()) {
 }
 
 // SubscribeDevices returns a stream of observed device changes. It first emits
-// the current devices as initial DeviceEventAdded events, followed by live
-// updates. The channel closes when ctx is canceled or the Controller closes.
+// the current devices as initial DeviceEventAdded events with revision zero,
+// followed by DeviceEventSnapshotComplete carrying the live revision baseline.
+// Live events have revisions greater than that baseline. DeviceEventAdded means
+// a session exists, not that its capability-specific state is fully populated.
+// The channel closes when ctx is canceled or the Controller closes.
 func (c *Controller) SubscribeDevices(ctx context.Context, opts ...SubscriptionOption) <-chan DeviceEvent {
 	cfg := subscriptionConfig{bufferSize: defaultSubscriptionBufferSize}
 	for _, opt := range opts {
@@ -235,17 +251,20 @@ func (c *Controller) SubscribeDevices(ctx context.Context, opts ...SubscriptionO
 
 	subscription := newDeviceSubscription(cfg.bufferSize)
 
-	c.mu.RLock()
+	// Exclude device-set changes and update publication until the initial
+	// inventory and its revision boundary have been queued.
+	c.mu.Lock()
 	c.subscriptionsMu.Lock()
 	if c.subscriptionsClosed {
 		c.subscriptionsMu.Unlock()
-		c.mu.RUnlock()
+		c.mu.Unlock()
 		close(subscription.events)
 		return subscription.events
 	}
 	c.nextSubscriptionID++
 	id := c.nextSubscriptionID
 	c.subscriptions[id] = subscription
+	revision := c.eventRevision
 	c.subscriptionsMu.Unlock()
 
 	devices := make([]device.Device, 0, len(c.sessions))
@@ -253,10 +272,8 @@ func (c *Controller) SubscribeDevices(ctx context.Context, opts ...SubscriptionO
 		devices = append(devices, session.deviceSnapshot())
 	}
 	device.SortDevices(devices)
-	// The subscription is registered before snapshots are collected, so live
-	// events cannot be lost. initialize places them after the initial devices.
-	subscription.initialize(devices)
-	c.mu.RUnlock()
+	subscription.initialize(devices, revision)
+	c.mu.Unlock()
 
 	go subscription.run(ctx, func() { c.removeSubscription(id, subscription) })
 	return subscription.events
