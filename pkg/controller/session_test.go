@@ -10,6 +10,7 @@ import (
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
+	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -279,6 +280,44 @@ func TestSession(t *testing.T) {
 
 		session.close()
 	})
+}
+
+func TestSessionCachesFirmwareEffectResponses(t *testing.T) {
+	updates := make(chan DeviceChange, 2)
+	session := &deviceSession{
+		logger:  discardLogger(),
+		device:  device.NewDevice(&net.UDPAddr{}, device.Serial{1}),
+		inbound: make(chan *protocol.Message, 2),
+		done:    make(chan struct{}),
+		onUpdate: func(_ *deviceSession, changes DeviceChange) {
+			updates <- changes
+		},
+	}
+	go session.recvloop()
+	defer session.close()
+
+	session.inbound <- protocol.NewMessage(&packets.MultiZoneStateEffect{Settings: packets.MultiZoneEffectSettings{
+		Type: enums.MultiZoneEffectTypeMULTIZONEEFFECTTYPEMOVE,
+	}})
+	assert.Eventually(t, func() bool {
+		return session.deviceSnapshot().MultizoneProperties.Effect.Known
+	}, time.Second, time.Millisecond)
+	multizone := session.deviceSnapshot()
+	assert.True(t, multizone.MultizoneProperties.Effect.Running())
+	assert.False(t, multizone.LastUpdatedAt.IsZero())
+	assert.Equal(t, DeviceChangeEffect, <-updates)
+
+	previousUpdate := multizone.LastUpdatedAt
+	session.inbound <- protocol.NewMessage(&packets.TileStateEffect{Settings: packets.TileEffectSettings{
+		Type: enums.TileEffectTypeTILEEFFECTTYPEFLAME,
+	}})
+	assert.Eventually(t, func() bool {
+		return session.deviceSnapshot().MatrixProperties.Effect.Known
+	}, time.Second, time.Millisecond)
+	matrix := session.deviceSnapshot()
+	assert.True(t, matrix.MatrixProperties.Effect.Running())
+	assert.Greater(t, matrix.LastUpdatedAt, previousUpdate)
+	assert.Equal(t, DeviceChangeEffect, <-updates)
 }
 
 func Test_preflightHandshake(t *testing.T) {

@@ -3,7 +3,9 @@
 `lifxland` embeds one long-lived `controller.Controller` and exposes its device
 inventory and state controls to non-Go applications. The first milestone is
 deliberately small: discovery, inventory, observed device events, and
-light/relay state. It does not add effects, persistence, MCP, or gRPC.
+light/relay state. Firmware effects running on matrix and multizone devices are
+reported when observed, but the HTTP API does not start or stop effects. It also
+does not add persistence, MCP, or gRPC.
 
 Download the archive for your platform from
 [GitHub Releases](https://github.com/alessio-palumbo/lifxlan-go/releases), verify

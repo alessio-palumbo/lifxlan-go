@@ -205,6 +205,27 @@ func TestSetLocationAndGroupRejectPreEpochUpdatedAt(t *testing.T) {
 	}
 }
 
+func TestFirmwareEffectMessages(t *testing.T) {
+	assert.Equal(t, protocol.NewMessage(&packets.MultiZoneGetEffect{}), GetMultizoneEffect())
+	assert.Equal(t, protocol.NewMessage(&packets.TileGetEffect{}), GetMatrixEffect())
+
+	speed := time.Second
+	for name, msg := range map[string]*protocol.Message{
+		"multizone off":  SetMultizoneEffectOff(),
+		"multizone move": SetMultizoneMoveEffect(speed, true),
+		"matrix off":     SetMatrixEffectOff(),
+		"matrix flame":   SetMatrixFlameEffect(speed),
+		"matrix morph":   SetMatrixMorphEffect(speed),
+		"matrix clouds":  SetMatrixCloudsEffect(speed, nil),
+		"matrix sunrise": SetMatrixSunriseEffect(&speed),
+		"matrix sunset":  SetMatrixSunsetEffect(&speed, true),
+	} {
+		t.Run(name, func(t *testing.T) {
+			assertResponseRequired(t, msg)
+		})
+	}
+}
+
 func ptr[T any](v T) *T {
 	return &v
 }

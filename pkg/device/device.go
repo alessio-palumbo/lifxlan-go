@@ -306,10 +306,12 @@ type MatrixProperties struct {
 	ChainZones [][]packets.LightHsbk
 	// ChainOrientations describe devices orientation according to accelerometer measurements, if supported.
 	ChainOrientations []Orientation
+	Effect            MatrixEffect
 }
 
 type MultizoneProperties struct {
-	Zones []packets.LightHsbk
+	Zones  []packets.LightHsbk
+	Effect MultizoneEffect
 }
 
 type ColorProperties struct {
@@ -590,11 +592,13 @@ func (d *Device) HighFreqStateMessages() []*protocol.Message {
 			protocol.NewMessage(&packets.LightGet{}),
 			protocol.NewMessage(&packets.DeviceGetPower{}),
 			protocol.NewMessage(&packets.MultiZoneExtendedGetColorZones{}),
+			protocol.NewMessage(&packets.MultiZoneGetEffect{}),
 		}
 	case LightTypeMatrix:
 		msgs := []*protocol.Message{
 			protocol.NewMessage(&packets.LightGet{}),
 			protocol.NewMessage(&packets.DeviceGetPower{}),
+			protocol.NewMessage(&packets.TileGetEffect{}),
 		}
 
 		for i := range d.MatrixProperties.ChainLength {

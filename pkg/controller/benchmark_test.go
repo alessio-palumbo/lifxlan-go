@@ -170,6 +170,7 @@ func benchmarkControllerDevice(index int) device.Device {
 	case 1:
 		d.LightType = device.LightTypeMultiZone
 		d.MultizoneProperties.Zones = make([]packets.LightHsbk, 82)
+		d.MultizoneProperties.Effect = device.MultizoneEffect{Known: true, Type: device.MultizoneEffectTypeMove}
 	case 2:
 		d.LightType = device.LightTypeMatrix
 		d.MatrixProperties = device.MatrixProperties{
@@ -180,6 +181,7 @@ func benchmarkControllerDevice(index int) device.Device {
 			ChainLength:       5,
 			ChainZones:        make([][]packets.LightHsbk, 5),
 			ChainOrientations: make([]device.Orientation, 5),
+			Effect:            device.MatrixEffect{Known: true, Type: device.MatrixEffectTypeMorph, Palette: make([]device.Color, 16)},
 		}
 		for i := range d.MatrixProperties.ChainZones {
 			d.MatrixProperties.ChainZones[i] = make([]packets.LightHsbk, 64)

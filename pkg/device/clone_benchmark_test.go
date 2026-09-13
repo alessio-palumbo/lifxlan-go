@@ -47,6 +47,7 @@ func benchmarkCloneDevice(lightType LightType, zones int) Device {
 	switch lightType {
 	case LightTypeMultiZone:
 		d.MultizoneProperties.Zones = make([]packets.LightHsbk, zones)
+		d.MultizoneProperties.Effect = MultizoneEffect{Known: true, Type: MultizoneEffectTypeMove}
 	case LightTypeMatrix:
 		const zonesPerPanel = 64
 		panels := zones / zonesPerPanel
@@ -58,6 +59,7 @@ func benchmarkCloneDevice(lightType LightType, zones int) Device {
 			ChainLength:       panels,
 			ChainZones:        make([][]packets.LightHsbk, panels),
 			ChainOrientations: make([]Orientation, panels),
+			Effect:            MatrixEffect{Known: true, Type: MatrixEffectTypeMorph, Palette: make([]Color, 16)},
 		}
 		for i := range d.MatrixProperties.ChainZones {
 			d.MatrixProperties.ChainZones[i] = make([]packets.LightHsbk, zonesPerPanel)

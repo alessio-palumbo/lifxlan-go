@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/internal/control"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/controller"
@@ -66,6 +67,35 @@ func TestGetDeviceValidatesSerialAndReturnsNotFound(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/devices/"+device_.Serial.String(), nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestDeviceResponseIncludesObservedFirmwareEffect(t *testing.T) {
+	d := apiDevice(t, "001122334455", device.DeviceTypeLight)
+	d.LightType = device.LightTypeMultiZone
+	d.MultizoneProperties.Effect = device.MultizoneEffect{
+		Known: true, Type: device.MultizoneEffectTypeMove, InstanceID: 42,
+		Speed: 2 * time.Second, RemainingDuration: 30 * time.Second, Direction: device.EffectDirectionForward,
+	}
+
+	response := newDeviceResponse(d)
+	if response.Light == nil || response.Light.Effect == nil {
+		t.Fatalf("effect missing from response: %+v", response)
+	}
+	effect := response.Light.Effect
+	if effect.Type != "move" || !effect.Running || effect.Direction != "forward" || effect.SpeedMS != 2000 {
+		t.Fatalf("effect = %+v", effect)
+	}
+
+	d.MultizoneProperties.Effect = device.MultizoneEffect{}
+	if effect := newDeviceResponse(d).Light.Effect; effect != nil {
+		t.Fatalf("unknown effect should be omitted: %+v", effect)
+	}
+}
+
+func TestDeviceChangeNamesIncludesEffect(t *testing.T) {
+	if got := deviceChangeNames(controller.DeviceChangeEffect); !reflect.DeepEqual(got, []string{"effect"}) {
+		t.Fatalf("effect change names = %v", got)
 	}
 }
 

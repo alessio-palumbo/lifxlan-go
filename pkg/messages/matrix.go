@@ -13,6 +13,11 @@ const (
 	defaultCloudsMinSaturation = 50
 )
 
+// GetMatrixEffect requests the current matrix firmware effect state.
+func GetMatrixEffect() *protocol.Message {
+	return protocol.NewMessage(&packets.TileGetEffect{})
+}
+
 // SetMatrixColors returns a TileSet64 Message that sets a matrix with the given size to the provided colors.
 func SetMatrixColors(startIndex, length, width int, colors [64]packets.LightHsbk, d time.Duration) *protocol.Message {
 	return newTileSet64Msg(startIndex, length, 0, width, 0, 0, colors, d)
@@ -55,7 +60,7 @@ func SetMatrixColorsFromSlice(startIndex, length, width int, colors []packets.Li
 
 // SetMatrixEffectOff returns a message instructing the device to turn any running matrix effect off.
 func SetMatrixEffectOff() *protocol.Message {
-	return protocol.NewMessage(&packets.TileSetEffect{
+	return newMatrixEffectMessage(&packets.TileSetEffect{
 		Settings: packets.TileEffectSettings{
 			Instanceid: rand.Uint32(),
 			Type:       enums.TileEffectTypeTILEEFFECTTYPEOFF,
@@ -65,7 +70,7 @@ func SetMatrixEffectOff() *protocol.Message {
 
 // SetMatrixFlameEffect returns a message instructing the device to run the Flame effect.
 func SetMatrixFlameEffect(speed time.Duration) *protocol.Message {
-	return protocol.NewMessage(&packets.TileSetEffect{
+	return newMatrixEffectMessage(&packets.TileSetEffect{
 		Settings: packets.TileEffectSettings{
 			Instanceid: rand.Uint32(),
 			Type:       enums.TileEffectTypeTILEEFFECTTYPEFLAME,
@@ -83,7 +88,7 @@ func SetMatrixMorphEffect(speed time.Duration, colors ...packets.LightHsbk) *pro
 	var palette [16]packets.LightHsbk
 	copy(palette[:], colors)
 
-	return protocol.NewMessage(&packets.TileSetEffect{
+	return newMatrixEffectMessage(&packets.TileSetEffect{
 		Settings: packets.TileEffectSettings{
 			Instanceid:   rand.Uint32(),
 			Type:         enums.TileEffectTypeTILEEFFECTTYPEMORPH,
@@ -103,7 +108,7 @@ func SetMatrixCloudsEffect(speed time.Duration, minSaturation *uint32) *protocol
 		minSaturation = new(uint32)
 		*minSaturation = uint32(defaultCloudsMinSaturation)
 	}
-	return protocol.NewMessage(&packets.TileSetEffect{
+	return newMatrixEffectMessage(&packets.TileSetEffect{
 		Settings: packets.TileEffectSettings{
 			Instanceid: rand.Uint32(),
 			Type:       enums.TileEffectTypeTILEEFFECTTYPESKY,
@@ -121,7 +126,7 @@ func SetMatrixSunriseEffect(speed *time.Duration) *protocol.Message {
 	if speed == nil {
 		speed = new(time.Duration)
 	}
-	return protocol.NewMessage(&packets.TileSetEffect{
+	return newMatrixEffectMessage(&packets.TileSetEffect{
 		Settings: packets.TileEffectSettings{
 			Instanceid: rand.Uint32(),
 			Type:       enums.TileEffectTypeTILEEFFECTTYPESKY,
@@ -143,7 +148,7 @@ func SetMatrixSunsetEffect(speed *time.Duration, softOff bool) *protocol.Message
 	if softOff {
 		p0 = 1
 	}
-	return protocol.NewMessage(&packets.TileSetEffect{
+	return newMatrixEffectMessage(&packets.TileSetEffect{
 		Settings: packets.TileEffectSettings{
 			Instanceid: rand.Uint32(),
 			Type:       enums.TileEffectTypeTILEEFFECTTYPESKY,
@@ -196,6 +201,12 @@ func SetMatrixFrameAnimation(startIndex, length, width int, frames [][]packets.L
 		activeFrame = (nextFrameFb) % frameCount
 		return SetMatrixVisibleFrameBuffer(startIndex, length, nextFrameFb, width, len(frames[0])/width, d)
 	}
+}
+
+func newMatrixEffectMessage(payload *packets.TileSetEffect) *protocol.Message {
+	msg := protocol.NewMessage(payload)
+	msg.SetResponseRequired(true)
+	return msg
 }
 
 // SetMatrixVisibleFrameBuffer copies the given frame buffer (fb) into the visible frame buffer (0).

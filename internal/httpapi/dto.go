@@ -26,12 +26,24 @@ type deviceResponse struct {
 }
 
 type lightResponse struct {
-	Type      string        `json:"type"`
-	Power     string        `json:"power"`
-	Color     colorResponse `json:"color"`
-	HasColor  bool          `json:"has_color"`
-	MinKelvin int           `json:"min_kelvin,omitempty"`
-	MaxKelvin int           `json:"max_kelvin,omitempty"`
+	Type      string          `json:"type"`
+	Power     string          `json:"power"`
+	Color     colorResponse   `json:"color"`
+	HasColor  bool            `json:"has_color"`
+	MinKelvin int             `json:"min_kelvin,omitempty"`
+	MaxKelvin int             `json:"max_kelvin,omitempty"`
+	Effect    *effectResponse `json:"effect,omitempty"`
+}
+
+type effectResponse struct {
+	Type                string          `json:"type"`
+	Running             bool            `json:"running"`
+	InstanceID          uint32          `json:"instance_id"`
+	SpeedMS             int64           `json:"speed_ms"`
+	RemainingDurationMS int64           `json:"remaining_duration_ms"`
+	Direction           string          `json:"direction,omitempty"`
+	Variant             string          `json:"variant,omitempty"`
+	Palette             []colorResponse `json:"palette,omitempty"`
 }
 
 type colorResponse struct {
@@ -86,7 +98,7 @@ func newDeviceResponse(d device.Device) deviceResponse {
 	}
 
 	if d.Type != device.DeviceTypeSwitch {
-		response.Light = &lightResponse{
+		light := &lightResponse{
 			Type:  d.LightType.String(),
 			Power: powerString(d.PoweredOn),
 			Color: colorResponse{
@@ -99,6 +111,35 @@ func newDeviceResponse(d device.Device) deviceResponse {
 			MinKelvin: d.ColorProperties.TemperatureRange.Min,
 			MaxKelvin: d.ColorProperties.TemperatureRange.Max,
 		}
+		switch d.LightType {
+		case device.LightTypeMultiZone:
+			if effect := d.MultizoneProperties.Effect; effect.Known {
+				light.Effect = &effectResponse{
+					Type: effect.Type.String(), Running: effect.Running(), InstanceID: effect.InstanceID,
+					SpeedMS: effect.Speed.Milliseconds(), RemainingDurationMS: effect.RemainingDuration.Milliseconds(),
+				}
+				if effect.Type == device.MultizoneEffectTypeMove {
+					light.Effect.Direction = effect.Direction.String()
+				}
+			}
+		case device.LightTypeMatrix:
+			if effect := d.MatrixProperties.Effect; effect.Known {
+				light.Effect = &effectResponse{
+					Type: effect.Type.String(), Running: effect.Running(), InstanceID: effect.InstanceID,
+					SpeedMS: effect.Speed.Milliseconds(), RemainingDurationMS: effect.RemainingDuration.Milliseconds(),
+					Palette: make([]colorResponse, len(effect.Palette)),
+				}
+				if effect.Type == device.MatrixEffectTypeSky {
+					light.Effect.Variant = effect.SkyType.String()
+				}
+				for i, color := range effect.Palette {
+					light.Effect.Palette[i] = colorResponse{
+						Hue: color.Hue, Saturation: color.Saturation, Brightness: color.Brightness, Kelvin: color.Kelvin,
+					}
+				}
+			}
+		}
+		response.Light = light
 	}
 	if d.Type != device.DeviceTypeLight {
 		relays := make([]relayResponse, len(d.Relays))
@@ -148,6 +189,7 @@ func deviceChangeNames(changes controller.DeviceChange) []string {
 		{controller.DeviceChangeButtons, "buttons"},
 		{controller.DeviceChangeButtonConfig, "button_config"},
 		{controller.DeviceChangeRelays, "relays"},
+		{controller.DeviceChangeEffect, "effect"},
 	}
 	var names []string
 	for _, item := range known {

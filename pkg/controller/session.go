@@ -230,6 +230,16 @@ func (s *deviceSession) recvloop() {
 					s.device.LastUpdatedAt = time.Now()
 					changes = DeviceChangeMultizone
 				}
+			case *packets.MultiZoneStateEffect:
+				if updated := s.device.SetMultizoneEffect(p); updated {
+					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeEffect
+				}
+			case *packets.TileStateEffect:
+				if updated := s.device.SetMatrixEffect(p); updated {
+					s.device.LastUpdatedAt = time.Now()
+					changes = DeviceChangeEffect
+				}
 			case *packets.ButtonState:
 				if updated := s.device.SetButtons(p); updated {
 					s.device.LastUpdatedAt = time.Now()

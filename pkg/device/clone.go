@@ -15,6 +15,7 @@ func (d Device) Clone() Device {
 
 	cloned.MatrixProperties.ChainZones = CloneMatrixChains(d.MatrixProperties.ChainZones)
 	cloned.MatrixProperties.ChainOrientations = slices.Clone(d.MatrixProperties.ChainOrientations)
+	cloned.MatrixProperties.Effect.Palette = slices.Clone(d.MatrixProperties.Effect.Palette)
 	cloned.MultizoneProperties.Zones = CloneHSBKs(d.MultizoneProperties.Zones)
 
 	cloned.Buttons = slices.Clone(d.Buttons)

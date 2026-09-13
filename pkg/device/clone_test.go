@@ -13,6 +13,7 @@ func TestDeviceCloneIsIndependent(t *testing.T) {
 		MatrixProperties: MatrixProperties{
 			ChainZones:        [][]packets.LightHsbk{{{Hue: 1}}},
 			ChainOrientations: []Orientation{OrientationLeft},
+			Effect:            MatrixEffect{Known: true, Palette: []Color{{Hue: 30}}},
 		},
 		MultizoneProperties: MultizoneProperties{
 			Zones: []packets.LightHsbk{{Hue: 2}},
@@ -25,6 +26,7 @@ func TestDeviceCloneIsIndependent(t *testing.T) {
 	cloned.Address.IP[0] = 10
 	cloned.MatrixProperties.ChainZones[0][0].Hue = 10
 	cloned.MatrixProperties.ChainOrientations[0] = OrientationRight
+	cloned.MatrixProperties.Effect.Palette[0].Hue = 40
 	cloned.MultizoneProperties.Zones[0].Hue = 20
 	cloned.Buttons[0].Actions[0].TargetType = 1
 	cloned.Relays[0].PoweredOn = false
@@ -37,6 +39,9 @@ func TestDeviceCloneIsIndependent(t *testing.T) {
 	}
 	if original.MatrixProperties.ChainOrientations[0] != OrientationLeft {
 		t.Fatal("clone shares matrix orientation storage")
+	}
+	if original.MatrixProperties.Effect.Palette[0].Hue != 30 {
+		t.Fatal("clone shares matrix effect palette storage")
 	}
 	if original.MultizoneProperties.Zones[0].Hue != 2 {
 		t.Fatal("clone shares multizone storage")

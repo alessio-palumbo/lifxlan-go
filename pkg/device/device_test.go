@@ -3,6 +3,7 @@ package device
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/enums"
@@ -701,6 +702,55 @@ func TestSetButtonConfig(t *testing.T) {
 	assert.False(t, d.SetButtonConfig(msg))
 }
 
+func TestSetMultizoneEffect(t *testing.T) {
+	state := &packets.MultiZoneStateEffect{Settings: packets.MultiZoneEffectSettings{
+		Instanceid: 42,
+		Type:       enums.MultiZoneEffectTypeMULTIZONEEFFECTTYPEMOVE,
+		Speed:      2500,
+		Duration:   uint64(30 * time.Second),
+		Parameter:  packets.MultiZoneEffectParameter{Parameter1: 1},
+	}}
+	d := &Device{}
+
+	assert.True(t, d.SetMultizoneEffect(state))
+	assert.Equal(t, MultizoneEffect{
+		Known: true, Type: MultizoneEffectTypeMove, InstanceID: 42,
+		Speed: 2500 * time.Millisecond, RemainingDuration: 30 * time.Second, Direction: EffectDirectionForward,
+	}, d.MultizoneProperties.Effect)
+	assert.True(t, d.MultizoneProperties.Effect.Running())
+	assert.False(t, d.SetMultizoneEffect(state))
+
+	state.Settings.Type = enums.MultiZoneEffectTypeMULTIZONEEFFECTTYPEOFF
+	assert.True(t, d.SetMultizoneEffect(state))
+	assert.False(t, d.MultizoneProperties.Effect.Running())
+}
+
+func TestSetMatrixEffect(t *testing.T) {
+	state := &packets.TileStateEffect{Settings: packets.TileEffectSettings{
+		Instanceid:   84,
+		Type:         enums.TileEffectTypeTILEEFFECTTYPESKY,
+		Speed:        5000,
+		Duration:     uint64(time.Minute),
+		Parameter:    packets.TileEffectParameter{Parameter0: uint32(enums.TileEffectSkyTypeTILEEFFECTSKYTYPECLOUDS)},
+		PaletteCount: 1,
+		Palette:      [16]packets.LightHsbk{{Hue: math.MaxUint16, Saturation: math.MaxUint16, Brightness: math.MaxUint16, Kelvin: 3500}},
+	}}
+	d := &Device{}
+
+	assert.True(t, d.SetMatrixEffect(state))
+	assert.Equal(t, MatrixEffect{
+		Known: true, Type: MatrixEffectTypeSky, SkyType: MatrixEffectSkyTypeClouds, InstanceID: 84,
+		Speed: 5 * time.Second, RemainingDuration: time.Minute,
+		Palette: []Color{{Hue: 360, Saturation: 100, Brightness: 100, Kelvin: 3500}},
+	}, d.MatrixProperties.Effect)
+	assert.True(t, d.MatrixProperties.Effect.Running())
+	assert.False(t, d.SetMatrixEffect(state))
+
+	state.Settings.Palette[0].Hue = 0
+	assert.True(t, d.SetMatrixEffect(state))
+	assert.Equal(t, float64(0), d.MatrixProperties.Effect.Palette[0].Hue)
+}
+
 func TestStateMessagesForSwitch(t *testing.T) {
 	switchDevice := &Device{Type: DeviceTypeSwitch, Buttons: []Button{{}, {}}}
 	assert.Equal(t, []packets.Payload{
@@ -710,6 +760,21 @@ func TestStateMessagesForSwitch(t *testing.T) {
 
 	assert.Contains(t, payloads(switchDevice.LowFreqStateMessages()), &packets.ButtonGet{})
 	assert.Contains(t, payloads(switchDevice.LowFreqStateMessages()), &packets.ButtonGetConfig{})
+}
+
+func TestStateMessagesIncludeCapabilitySpecificEffectState(t *testing.T) {
+	multizone := &Device{LightType: LightTypeMultiZone}
+	assert.Contains(t, payloads(multizone.HighFreqStateMessages()), &packets.MultiZoneGetEffect{})
+
+	matrix := &Device{LightType: LightTypeMatrix}
+	assert.Contains(t, payloads(matrix.HighFreqStateMessages()), &packets.TileGetEffect{})
+
+	singleZone := &Device{LightType: LightTypeSingleZone}
+	for _, payload := range payloads(singleZone.HighFreqStateMessages()) {
+		_, multizoneEffect := payload.(*packets.MultiZoneGetEffect)
+		_, matrixEffect := payload.(*packets.TileGetEffect)
+		assert.False(t, multizoneEffect || matrixEffect)
+	}
 }
 
 func TestStateMessagesForHybridDoesNotPollRelays(t *testing.T) {

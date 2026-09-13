@@ -13,6 +13,11 @@ const (
 	extendedMultizoneMsgMaxZones = 82
 )
 
+// GetMultizoneEffect requests the current multizone firmware effect state.
+func GetMultizoneEffect() *protocol.Message {
+	return protocol.NewMessage(&packets.MultiZoneGetEffect{})
+}
+
 // SetMultizoneExtendedColors accepts a variable length list of colors and returns multiple MultiZoneExtendedSetColorZones
 // messages to cater for devices with more than the message maximum supported zones.
 // If a single message is needed than the Apply directive is set on the message itself, otherwise an extra message
@@ -47,7 +52,7 @@ func SetMultizoneExtendedColors(startIndex int, colors []packets.LightHsbk, d ti
 
 // SetMultizoneEffectOff returns a message instructing the device to turn any running multizone effect off.
 func SetMultizoneEffectOff() *protocol.Message {
-	return protocol.NewMessage(&packets.MultiZoneSetEffect{
+	return newMultizoneEffectMessage(&packets.MultiZoneSetEffect{
 		Settings: packets.MultiZoneEffectSettings{
 			Instanceid: rand.Uint32(),
 			Type:       enums.MultiZoneEffectTypeMULTIZONEEFFECTTYPEOFF,
@@ -70,5 +75,11 @@ func SetMultizoneMoveEffect(speed time.Duration, directionForward bool) *protoco
 			Parameter:  p,
 		},
 	}
-	return protocol.NewMessage(m)
+	return newMultizoneEffectMessage(m)
+}
+
+func newMultizoneEffectMessage(payload *packets.MultiZoneSetEffect) *protocol.Message {
+	msg := protocol.NewMessage(payload)
+	msg.SetResponseRequired(true)
+	return msg
 }

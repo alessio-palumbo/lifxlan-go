@@ -190,6 +190,12 @@ low-frequency refresh periods.
 Time-based event coalescing is intentionally left to consumers so UIs can batch
 renders while automation and monitoring clients can retain low latency.
 
+Matrix and multizone device snapshots include their last observed firmware
+effect. `Effect.Known` distinguishes a confirmed `off` state from an effect that
+has not been queried yet, and `Effect.Running()` provides the common active-state
+check. Effect setters request their corresponding state response, while periodic
+high-frequency queries also detect effects started by another controller.
+
 A runnable [Go device monitor](examples/monitor/main.go) demonstrates the full
 subscription lifecycle while maintaining and printing a compact device
 inventory:

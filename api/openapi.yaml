@@ -148,6 +148,32 @@ components:
         has_color: {type: boolean}
         min_kelvin: {type: integer}
         max_kelvin: {type: integer}
+        effect:
+          $ref: "#/components/schemas/FirmwareEffect"
+          description: Absent until firmware effect state has been observed.
+    FirmwareEffect:
+      type: object
+      required: [type, running, instance_id, speed_ms, remaining_duration_ms]
+      properties:
+        type:
+          type: string
+          enum: [off, move, morph, flame, sky, color_sweep, unknown]
+        running: {type: boolean}
+        instance_id: {type: integer, minimum: 0}
+        speed_ms: {type: integer, minimum: 0}
+        remaining_duration_ms: {type: integer, minimum: 0}
+        direction:
+          type: string
+          enum: [reverse, forward, unknown]
+          description: Present for multizone move effects.
+        variant:
+          type: string
+          enum: [sunrise, sunset, clouds, unknown]
+          description: Present for matrix sky effects.
+        palette:
+          type: array
+          maxItems: 16
+          items: {$ref: "#/components/schemas/Color"}
     RelayState:
       type: object
       required: [index, power]
@@ -213,6 +239,7 @@ components:
               - buttons
               - button_config
               - relays
+              - effect
         device:
           $ref: "#/components/schemas/Device"
           description: Absent for snapshot_complete and resync_required events.
