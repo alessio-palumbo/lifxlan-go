@@ -12,11 +12,135 @@ on:
 
 env:
   VERSION: ${{ inputs.version || github.ref_name }}
+  BENCHSTAT_VERSION: v0.0.0-20260908200009-22c9c6c9d4da
 
 permissions:
   contents: read
 
 jobs:
+  benchmark:
+    name: Benchmark release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.VERSION }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Find previous release
+        id: previous
+        shell: bash
+        run: |
+          previous_version="$(git describe --tags --abbrev=0 "${VERSION}^" 2>/dev/null || true)"
+          echo "version=$previous_version" >> "$GITHUB_OUTPUT"
+
+      - name: Benchmark current release
+        shell: bash
+        run: |
+          mkdir -p benchmark-dist
+          go test -run '^$' \
+            -bench 'Benchmark(DeviceClone|ControllerGetDevices|ControllerGetDevicesParallel|DeviceEventFanout|DeviceEventSSE)$' \
+            -benchmem -benchtime=500ms -count=10 \
+            ./pkg/device ./pkg/controller ./internal/httpapi \
+            > benchmark-dist/current.txt
+
+      - name: Benchmark previous release
+        if: steps.previous.outputs.version != ''
+        shell: bash
+        env:
+          PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
+        run: |
+          previous_dir="$RUNNER_TEMP/lifxlan-go-previous"
+          git worktree add --detach "$previous_dir" "$PREVIOUS_VERSION"
+          cd "$previous_dir"
+          go test -run '^$' \
+            -bench 'Benchmark(DeviceClone|ControllerGetDevices|ControllerGetDevicesParallel|DeviceEventFanout|DeviceEventSSE)$' \
+            -benchmem -benchtime=500ms -count=10 \
+            ./pkg/device ./pkg/controller ./internal/httpapi \
+            > "$GITHUB_WORKSPACE/benchmark-dist/previous.txt"
+
+      - name: Compare releases
+        shell: bash
+        env:
+          PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
+        run: |
+          go install "golang.org/x/perf/cmd/benchstat@${BENCHSTAT_VERSION}"
+          benchstat="$(go env GOPATH)/bin/benchstat"
+          if [[ -n "$PREVIOUS_VERSION" ]]; then
+            "$benchstat" \
+              "$PREVIOUS_VERSION=benchmark-dist/previous.txt" \
+              "$VERSION=benchmark-dist/current.txt" \
+              > benchmark-dist/comparison.txt
+          else
+            "$benchstat" "$VERSION=benchmark-dist/current.txt" \
+              > benchmark-dist/comparison.txt
+          fi
+
+      - name: Build benchmark report
+        shell: bash
+        env:
+          PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
+        run: |
+          report="benchmark-dist/lifxlan-go_${VERSION}_benchmarks.md"
+          raw="benchmark-dist/lifxlan-go_${VERSION}_benchmarks.txt"
+          mv benchmark-dist/current.txt "$raw"
+
+          {
+            echo "# lifxlan-go ${VERSION} benchmarks"
+            echo
+            echo "These results measure in-memory device cloning, controller snapshots,"
+            echo "device-event fan-out, and HTTP Server-Sent Event encoding. They do not"
+            echo "measure LAN discovery, Wi-Fi latency, or physical device response time."
+            echo
+            echo "## Environment"
+            echo
+            echo "- Runner: GitHub Actions \`ubuntu-latest\`"
+            echo "- Architecture: $(go env GOARCH)"
+            echo "- Logical CPUs: $(getconf _NPROCESSORS_ONLN)"
+            echo "- CPU: $(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -n 1)"
+            echo "- Go: $(go version)"
+            echo "- benchstat: ${BENCHSTAT_VERSION}"
+            echo "- Samples: 10 at 500ms minimum benchmark time"
+            echo
+            echo "## Comparison"
+            echo
+            if [[ -n "$PREVIOUS_VERSION" ]]; then
+              echo "The previous release is ${PREVIOUS_VERSION}. A row present in only one"
+              echo "release was added or removed between those releases."
+            else
+              echo "No previous reachable release tag was found."
+            fi
+            echo
+            echo '```text'
+            cat benchmark-dist/comparison.txt
+            echo '```'
+            echo
+            echo "Interpret small timing changes cautiously: hosted runners vary. Allocation"
+            echo "changes are generally more reproducible, and large statistically significant"
+            echo "timing changes are more informative than small deltas."
+          } > "$report"
+
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifxlan-go-benchmarks
+          path: |
+            benchmark-dist/lifxlan-go_*_benchmarks.md
+            benchmark-dist/lifxlan-go_*_benchmarks.txt
+            benchmark-dist/previous.txt
+            benchmark-dist/comparison.txt
+          if-no-files-found: error
+          retention-days: 90
+
   build:
     name: Build release archives
     runs-on: macos-latest
@@ -150,7 +274,7 @@ jobs:
 
   release:
     name: Create draft release
-    needs: build
+    needs: [build, benchmark]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -161,6 +285,15 @@ jobs:
         with:
           name: lifxland-release
           path: dist
+
+      - name: Download benchmark report
+        uses: actions/download-artifact@v4
+        with:
+          name: lifxlan-go-benchmarks
+          path: benchmark-results
+
+      - name: Add benchmark report to release assets
+        run: cp benchmark-results/lifxlan-go_*_benchmarks.* dist/
 
       - name: Create or update draft release
         env:

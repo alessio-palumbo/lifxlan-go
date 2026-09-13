@@ -3,7 +3,6 @@ package controller
 import (
 	"bytes"
 	"log/slog"
-	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -266,57 +265,6 @@ func TestController(t *testing.T) {
 			t.Fatal("Session channel was not closed")
 		}
 	})
-}
-
-func BenchmarkControllerGetDevices(b *testing.B) {
-	mockClient := newMockClient()
-	ctrl, err := New(WithClient(mockClient))
-	require.NoError(b, err)
-	defer ctrl.Close()
-
-	// Base address
-	ipBase := [4]byte{192, 168, 1, 100}
-	port := 56700
-
-	for i := range 100 {
-		// Increment the last byte of IP
-		addr := &net.UDPAddr{
-			IP:   net.IPv4(ipBase[0], ipBase[1], ipBase[2], ipBase[3]+byte(i)),
-			Port: port,
-		}
-
-		// Build serial: top 6 bytes from counter, last 2 = 0
-		s := uint64(i + 1)
-		serial := [8]byte{
-			byte(s >> 40 & 0xFF),
-			byte(s >> 32 & 0xFF),
-			byte(s >> 24 & 0xFF),
-			byte(s >> 16 & 0xFF),
-			byte(s >> 8 & 0xFF),
-			byte(s >> 0 & 0xFF),
-			0,
-			0,
-		}
-
-		ctrl.addSession(addr, serial)
-		ctrl.sessions[serial].device.Label = randomLabel()
-	}
-
-	b.ResetTimer()
-	for b.Loop() {
-		_ = ctrl.GetDevices()
-	}
-}
-
-// randomLabel returns a random string of 8–10 alphabetic characters.
-func randomLabel() string {
-	n := 8 + rand.Intn(3) // 8, 9 or 10
-	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
 }
 
 type mockClient struct {

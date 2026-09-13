@@ -6,6 +6,11 @@ It provides everything needed to build local-first LIFX applications, including 
 
 This library is designed to be lightweight, idiomatic, and suitable for CLI tools, desktop apps, automation services, and embedded controllers.
 
+Repeatable performance benchmarks cover device snapshots, controller state
+reads, subscription fan-out, and HTTP event encoding. Tagged releases publish
+raw results and a same-runner comparison with the previous release; see the
+[benchmark guide](docs/benchmarks.md) for scope and interpretation.
+
 ## Features
 
 - Discover LIFX devices via UDP broadcast
