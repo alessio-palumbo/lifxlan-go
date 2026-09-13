@@ -50,6 +50,28 @@ func TestController(t *testing.T) {
 		assert.True(t, ok)
 	})
 
+	t.Run("Expose the selected broadcast interface", func(t *testing.T) {
+		mockClient := newMockClient()
+		mockClient.broadcastInterface = client.BroadcastInterface{
+			Index:     4,
+			Name:      "wifi0",
+			IP:        net.IPv4(192, 168, 1, 42).To4(),
+			Broadcast: net.IPv4(192, 168, 1, 255).To4(),
+		}
+		mockClient.hasBroadcastInterface = true
+		ctrl, err := New(WithClient(mockClient))
+		require.NoError(t, err)
+		defer ctrl.Close()
+
+		got, ok := ctrl.BroadcastInterface()
+		require.True(t, ok)
+		assert.Equal(t, "wifi0", got.Name)
+		got.IP[0] = 10
+		fresh, ok := ctrl.BroadcastInterface()
+		require.True(t, ok)
+		assert.Equal(t, net.IPv4(192, 168, 1, 42).To4(), fresh.IP)
+	})
+
 	t.Run("Uses custom client when it is configured after client config", func(t *testing.T) {
 		mockClient := newMockClient()
 		ctrl, err := New(
@@ -292,11 +314,13 @@ func TestController(t *testing.T) {
 }
 
 type mockClient struct {
-	sends      chan *protocol.Message
-	broadcasts chan struct{}
-	inbound    chan recvMsg
-	once       sync.Once
-	done       chan struct{}
+	sends                 chan *protocol.Message
+	broadcasts            chan struct{}
+	inbound               chan recvMsg
+	once                  sync.Once
+	done                  chan struct{}
+	broadcastInterface    client.BroadcastInterface
+	hasBroadcastInterface bool
 }
 
 type recvMsg struct {
@@ -316,6 +340,10 @@ func newMockClient() *mockClient {
 func (m *mockClient) Send(dst *net.UDPAddr, msg *protocol.Message) error {
 	m.sends <- msg
 	return nil
+}
+
+func (m *mockClient) BroadcastInterface() (client.BroadcastInterface, bool) {
+	return m.broadcastInterface, m.hasBroadcastInterface
 }
 
 func (m *mockClient) SendBroadcast(msg *protocol.Message) error {

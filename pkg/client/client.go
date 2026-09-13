@@ -1,12 +1,35 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 )
+
+// ErrNoBroadcastInterface indicates that automatic selection found no
+// broadcast-capable IPv4 interface.
+var ErrNoBroadcastInterface = errors.New("no suitable broadcast interface found")
+
+// BroadcastInterfaceNotFoundError indicates that a configured interface name
+// or index did not match a broadcast-capable IPv4 interface.
+type BroadcastInterfaceNotFoundError struct {
+	Name  string
+	Index int
+}
+
+func (e *BroadcastInterfaceNotFoundError) Error() string {
+	switch {
+	case e.Name != "":
+		return fmt.Sprintf("broadcast interface %q not found", e.Name)
+	case e.Index > 0:
+		return fmt.Sprintf("broadcast interface index %d not found", e.Index)
+	default:
+		return "configured broadcast interface not found"
+	}
+}
 
 const (
 	// lifxPort is the port LIFX devices listen to for broadcast messages.
@@ -20,9 +43,10 @@ const (
 
 // Client is a UDP client that can be used to send and receive LIFX messages on the LAN.
 type Client struct {
-	conn          *net.UDPConn
-	source        uint32
-	broadcastAddr *net.UDPAddr
+	conn               *net.UDPConn
+	source             uint32
+	broadcastAddr      *net.UDPAddr
+	broadcastInterface *BroadcastInterface
 }
 
 // Config contains optional user-configurable fields.
@@ -37,6 +61,7 @@ type Config struct {
 	// If Port is 0, the default LIFX UDP port is used.
 	BroadcastAddr *net.UDPAddr
 	// BroadcastInterfaceName selects a broadcast-capable IPv4 interface by name.
+	// If it has multiple suitable addresses, the first candidate is used.
 	BroadcastInterfaceName string
 	// BroadcastInterfaceIndex selects a broadcast-capable IPv4 interface by index.
 	BroadcastInterfaceIndex int
@@ -66,7 +91,7 @@ func NewClient(cfg *Config) (*Client, error) {
 		}
 	}
 
-	bAddr, err := resolveBroadcastUDPAddress(lifxPort, cfg)
+	bAddr, resolvedInterface, err := resolveBroadcastTarget(lifxPort, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -78,9 +103,10 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 
 	return &Client{
-		conn:          conn,
-		source:        source,
-		broadcastAddr: bAddr,
+		conn:               conn,
+		source:             source,
+		broadcastAddr:      bAddr,
+		broadcastInterface: resolvedInterface,
 	}, nil
 }
 
@@ -151,6 +177,16 @@ func (c *Client) SetConnDeadline(t time.Time) error {
 	return c.conn.SetDeadline(t)
 }
 
+// BroadcastInterface returns the OS interface selected for broadcast. The
+// boolean is false when Config.BroadcastAddr supplied an exact address. The
+// returned value is independent and may be safely modified by the caller.
+func (c *Client) BroadcastInterface() (BroadcastInterface, bool) {
+	if c.broadcastInterface == nil {
+		return BroadcastInterface{}, false
+	}
+	return cloneBroadcastInterface(*c.broadcastInterface), true
+}
+
 // BroadcastInterfaces returns broadcast-capable IPv4 interfaces that can be
 // used for LIFX discovery.
 func BroadcastInterfaces() ([]BroadcastInterface, error) {
@@ -167,41 +203,54 @@ func BroadcastInterfaces() ([]BroadcastInterface, error) {
 // cfg. Without an override it preserves the historical behavior: first suitable
 // network interface wins.
 func resolveBroadcastUDPAddress(port int, cfg *Config) (*net.UDPAddr, error) {
+	addr, _, err := resolveBroadcastTarget(port, cfg)
+	return addr, err
+}
+
+func resolveBroadcastTarget(port int, cfg *Config) (*net.UDPAddr, *BroadcastInterface, error) {
 	if cfg != nil && cfg.BroadcastAddr != nil {
-		return broadcastUDPAddr(cfg.BroadcastAddr.IP, cfg.BroadcastAddr.Port, port), nil
+		return broadcastUDPAddr(cfg.BroadcastAddr.IP, cfg.BroadcastAddr.Port, port), nil, nil
 	}
 
 	candidates, err := BroadcastInterfaces()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return resolveBroadcastUDPAddressFromCandidates(port, cfg, candidates)
+	return resolveBroadcastTargetFromCandidates(port, cfg, candidates)
 }
 
 func resolveBroadcastUDPAddressFromCandidates(port int, cfg *Config, candidates []BroadcastInterface) (*net.UDPAddr, error) {
+	addr, _, err := resolveBroadcastTargetFromCandidates(port, cfg, candidates)
+	return addr, err
+}
+
+func resolveBroadcastTargetFromCandidates(port int, cfg *Config, candidates []BroadcastInterface) (*net.UDPAddr, *BroadcastInterface, error) {
 	if cfg != nil {
 		if cfg.BroadcastInterfaceName != "" {
 			for _, candidate := range candidates {
 				if candidate.Name == cfg.BroadcastInterfaceName {
-					return broadcastUDPAddr(candidate.Broadcast, port, port), nil
+					resolved := cloneBroadcastInterface(candidate)
+					return broadcastUDPAddr(candidate.Broadcast, port, port), &resolved, nil
 				}
 			}
-			return nil, fmt.Errorf("broadcast interface %q not found", cfg.BroadcastInterfaceName)
+			return nil, nil, &BroadcastInterfaceNotFoundError{Name: cfg.BroadcastInterfaceName}
 		}
 		if cfg.BroadcastInterfaceIndex > 0 {
 			for _, candidate := range candidates {
 				if candidate.Index == cfg.BroadcastInterfaceIndex {
-					return broadcastUDPAddr(candidate.Broadcast, port, port), nil
+					resolved := cloneBroadcastInterface(candidate)
+					return broadcastUDPAddr(candidate.Broadcast, port, port), &resolved, nil
 				}
 			}
-			return nil, fmt.Errorf("broadcast interface index %d not found", cfg.BroadcastInterfaceIndex)
+			return nil, nil, &BroadcastInterfaceNotFoundError{Index: cfg.BroadcastInterfaceIndex}
 		}
 	}
 
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no suitable broadcast interface found")
+		return nil, nil, ErrNoBroadcastInterface
 	}
-	return broadcastUDPAddr(candidates[0].Broadcast, port, port), nil
+	resolved := cloneBroadcastInterface(candidates[0])
+	return broadcastUDPAddr(candidates[0].Broadcast, port, port), &resolved, nil
 }
 
 func broadcastInterfacesFrom(ifaces []net.Interface, addrs func(net.Interface) ([]net.Addr, error)) []BroadcastInterface {
@@ -249,4 +298,10 @@ func broadcastUDPAddr(ip net.IP, port, defaultPort int) *net.UDPAddr {
 		ip = ipv4
 	}
 	return &net.UDPAddr{IP: append(net.IP(nil), ip...), Port: port}
+}
+
+func cloneBroadcastInterface(iface BroadcastInterface) BroadcastInterface {
+	iface.IP = append(net.IP(nil), iface.IP...)
+	iface.Broadcast = append(net.IP(nil), iface.Broadcast...)
+	return iface
 }

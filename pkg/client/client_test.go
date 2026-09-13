@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -52,6 +53,8 @@ func TestNewClientUsesExplicitBroadcastAddress(t *testing.T) {
 
 	broadcastAddr.IP[0] = 10
 	assert.Equal(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1).To4(), Port: 9}, client.broadcastAddr)
+	_, ok := client.BroadcastInterface()
+	assert.False(t, ok)
 }
 
 func TestNewClientDefaultsExplicitBroadcastAddressPort(t *testing.T) {
@@ -216,15 +219,70 @@ func TestResolveBroadcastUDPAddressFromCandidatesRejectsMissingSelection(t *test
 	candidates := []BroadcastInterface{{Index: 10, Name: "eth0", Broadcast: net.IPv4(10, 0, 0, 255)}}
 
 	_, err := resolveBroadcastUDPAddressFromCandidates(lifxPort, &Config{BroadcastInterfaceName: "wifi0"}, candidates)
-	require.Error(t, err)
+	var notFound *BroadcastInterfaceNotFoundError
+	require.ErrorAs(t, err, &notFound)
+	assert.Equal(t, "wifi0", notFound.Name)
+	assert.Zero(t, notFound.Index)
 
 	_, err = resolveBroadcastUDPAddressFromCandidates(lifxPort, &Config{BroadcastInterfaceIndex: 20}, candidates)
-	require.Error(t, err)
+	notFound = nil
+	require.ErrorAs(t, err, &notFound)
+	assert.Empty(t, notFound.Name)
+	assert.Equal(t, 20, notFound.Index)
 }
 
 func TestResolveBroadcastUDPAddressFromCandidatesRejectsEmptyDefault(t *testing.T) {
 	_, err := resolveBroadcastUDPAddressFromCandidates(lifxPort, nil, nil)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrNoBroadcastInterface)
+}
+
+func TestResolveBroadcastTargetReturnsSelectedInterface(t *testing.T) {
+	candidates := []BroadcastInterface{
+		{
+			Index:     20,
+			Name:      "wifi0",
+			IP:        net.IPv4(192, 168, 1, 42).To4(),
+			Broadcast: net.IPv4(192, 168, 1, 255).To4(),
+			Flags:     broadcastUpIface,
+		},
+	}
+
+	addr, iface, err := resolveBroadcastTargetFromCandidates(lifxPort, nil, candidates)
+	require.NoError(t, err)
+	require.NotNil(t, iface)
+	assert.Equal(t, &net.UDPAddr{IP: candidates[0].Broadcast, Port: lifxPort}, addr)
+	assert.Equal(t, candidates[0], *iface)
+
+	iface.IP[0] = 10
+	iface.Broadcast[0] = 10
+	assert.Equal(t, net.IPv4(192, 168, 1, 42).To4(), candidates[0].IP)
+	assert.Equal(t, net.IPv4(192, 168, 1, 255).To4(), candidates[0].Broadcast)
+}
+
+func TestClientBroadcastInterfaceReturnsIndependentValue(t *testing.T) {
+	selected := BroadcastInterface{
+		Index:     20,
+		Name:      "wifi0",
+		IP:        net.IPv4(192, 168, 1, 42).To4(),
+		Broadcast: net.IPv4(192, 168, 1, 255).To4(),
+	}
+	c := &Client{broadcastInterface: &selected}
+
+	got, ok := c.BroadcastInterface()
+	require.True(t, ok)
+	got.IP[0] = 10
+	got.Broadcast[0] = 10
+
+	fresh, ok := c.BroadcastInterface()
+	require.True(t, ok)
+	assert.Equal(t, net.IPv4(192, 168, 1, 42).To4(), fresh.IP)
+	assert.Equal(t, net.IPv4(192, 168, 1, 255).To4(), fresh.Broadcast)
+}
+
+func TestBroadcastInterfaceNotFoundErrorFallback(t *testing.T) {
+	err := &BroadcastInterfaceNotFoundError{}
+	assert.Equal(t, "configured broadcast interface not found", err.Error())
+	assert.False(t, errors.Is(err, ErrNoBroadcastInterface))
 }
 
 func TestBroadcastUDPAddrUsesDefaultPortAndCopiesIP(t *testing.T) {

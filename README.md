@@ -418,6 +418,21 @@ ctrl, err := controller.New(controller.WithClientConfig(&client.Config{
 }))
 ```
 
+The resolved interface is available for diagnostics in both automatic and
+configured-interface modes:
+
+```go
+if iface, ok := ctrl.BroadcastInterface(); ok {
+	fmt.Printf("using %s: %s -> %s\n", iface.Name, iface.IP, iface.Broadcast)
+}
+```
+
+Automatic selection with no suitable interface returns
+`client.ErrNoBroadcastInterface`. A configured name or index that is no longer
+available returns `*client.BroadcastInterfaceNotFoundError`, so applications
+can use `errors.Is` and `errors.As` instead of matching error text. Socket bind,
+send, and receive failures retain their standard Go network error types.
+
 Advanced callers can also provide an exact broadcast address. If the port is zero, the default LIFX UDP port is used.
 
 ```go
@@ -425,6 +440,11 @@ c, err := client.NewClient(&client.Config{
 	BroadcastAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 1, 255)},
 })
 ```
+
+`BroadcastInterface` returns `false` for an exact `BroadcastAddr` override
+because no OS interface was resolved. Interface-name selection continues to
+use the first suitable IPv4 address on that interface; callers that require a
+specific subnet can use an exact broadcast address.
 
 If an application changes the selected interface at runtime, close the current controller and create a new one so discovery and device sessions are rebuilt for the selected network.
 

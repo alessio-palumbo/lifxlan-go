@@ -176,6 +176,25 @@ func (c *Controller) Discover() error {
 	return c.client.SendBroadcast(msg)
 }
 
+// BroadcastInterface returns the OS interface selected by the underlying
+// client for discovery. The boolean is false when the client does not expose
+// this information or an exact broadcast address was configured.
+func (c *Controller) BroadcastInterface() (client.BroadcastInterface, bool) {
+	provider, ok := c.client.(interface {
+		BroadcastInterface() (client.BroadcastInterface, bool)
+	})
+	if !ok {
+		return client.BroadcastInterface{}, false
+	}
+	iface, ok := provider.BroadcastInterface()
+	if !ok {
+		return client.BroadcastInterface{}, false
+	}
+	iface.IP = append(net.IP(nil), iface.IP...)
+	iface.Broadcast = append(net.IP(nil), iface.Broadcast...)
+	return iface, true
+}
+
 // Send sends the given message to the given UDP address, if a session exists.
 func (c *Controller) Send(serial device.Serial, msg *protocol.Message) error {
 	c.mu.RLock()
