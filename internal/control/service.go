@@ -22,6 +22,7 @@ var (
 
 // Backend is the controller functionality used by Service.
 type Backend interface {
+	GetDevice(device.Serial) (device.Device, bool)
 	GetDevices() []device.Device
 	SetState(device.Serial, controller.StateUpdate) error
 	SubscribeDevices(context.Context, ...controller.SubscriptionOption) <-chan controller.DeviceEvent
@@ -49,12 +50,7 @@ func (s *Service) SubscribeDevices(ctx context.Context, opts ...controller.Subsc
 
 // GetDevice returns the snapshot for an active device.
 func (s *Service) GetDevice(serial device.Serial) (device.Device, bool) {
-	for _, d := range s.backend.GetDevices() {
-		if d.Serial == serial {
-			return d, true
-		}
-	}
-	return device.Device{}, false
+	return s.backend.GetDevice(serial)
 }
 
 // ApplyStatus describes the outcome of a state update for one device.

@@ -186,6 +186,18 @@ func (c *Controller) Send(serial device.Serial, msg *protocol.Message) error {
 	return nil
 }
 
+// GetDevice returns an independent snapshot of the active device identified by
+// serial. The boolean is false when no session exists for serial.
+func (c *Controller) GetDevice(serial device.Serial) (device.Device, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	session, ok := c.sessions[serial]
+	if !ok {
+		return device.Device{}, false
+	}
+	return session.deviceSnapshot(), true
+}
+
 // GetDevices returns the list of devices that have a session.
 func (c *Controller) GetDevices() []device.Device {
 	c.mu.RLock()

@@ -75,6 +75,15 @@ type fakeBackend struct {
 	called  []device.Serial
 }
 
+func (b *fakeBackend) GetDevice(serial device.Serial) (device.Device, bool) {
+	for _, d := range b.devices {
+		if d.Serial == serial {
+			return d.Clone(), true
+		}
+	}
+	return device.Device{}, false
+}
+
 func (b *fakeBackend) GetDevices() []device.Device {
 	return append([]device.Device(nil), b.devices...)
 }

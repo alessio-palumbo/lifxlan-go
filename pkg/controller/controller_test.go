@@ -209,6 +209,30 @@ func TestController(t *testing.T) {
 		assert.True(t, fresh[0].Relays[0].PoweredOn)
 	})
 
+	t.Run("Return one independent device snapshot", func(t *testing.T) {
+		mockClient := newMockClient()
+		ctrl, err := New(WithClient(mockClient))
+		require.NoError(t, err)
+		defer ctrl.Close()
+
+		ctrl.addSession(addr0, serial0)
+		session := ctrl.sessions[serial0]
+		session.mu.Lock()
+		session.device.MultizoneProperties.Zones = []packets.LightHsbk{{Hue: 1}}
+		session.mu.Unlock()
+
+		got, ok := ctrl.GetDevice(serial0)
+		require.True(t, ok)
+		assert.Equal(t, serial0, got.Serial)
+		got.MultizoneProperties.Zones[0].Hue = 2
+
+		fresh, ok := ctrl.GetDevice(serial0)
+		require.True(t, ok)
+		assert.Equal(t, uint16(1), fresh.MultizoneProperties.Zones[0].Hue)
+		_, ok = ctrl.GetDevice(serial1)
+		assert.False(t, ok)
+	})
+
 	t.Run("Adds a newly discovered device to sessions", func(t *testing.T) {
 		mockClient := newMockClient()
 		ctrl, err := New(WithClient(mockClient))

@@ -55,6 +55,9 @@ func main() {
 }
 ```
 
+For a point lookup, `GetDevice(serial)` returns one independent device snapshot
+without cloning the complete inventory.
+
 The controller is silent by default.
 To receive controller and device-session logs, pass a standard `log/slog` logger:
 

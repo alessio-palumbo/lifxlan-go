@@ -5,6 +5,7 @@ relevant to applications that inspect or subscribe to device state:
 
 - cloning single-zone, multizone, matrix, and switch device snapshots;
 - snapshotting controllers with realistic mixtures of 1 to 100 devices;
+- cloned point lookups by serial;
 - concurrent controller snapshots;
 - initializing subscriptions with 0 to 100 existing devices;
 - publishing an update to zero, one, five, or ten subscribers; and
@@ -39,7 +40,7 @@ Run the published suite:
 
 ```sh
 go test -run '^$' \
-  -bench 'Benchmark(DeviceClone|ControllerGetDevices|ControllerGetDevicesParallel|SubscribeDevices|DeviceEventFanout|DeviceEventSSE)$' \
+  -bench 'Benchmark(DeviceClone|ControllerGetDevice|ControllerGetDevices|ControllerGetDevicesParallel|SubscribeDevices|DeviceEventFanout|DeviceEventSSE)$' \
   -benchmem -benchtime=500ms -count=10 \
   ./pkg/device ./pkg/controller ./internal/httpapi
 ```

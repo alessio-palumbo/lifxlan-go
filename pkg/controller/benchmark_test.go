@@ -41,6 +41,33 @@ func BenchmarkControllerGetDevicesParallel(b *testing.B) {
 	}
 }
 
+func BenchmarkControllerGetDevice(b *testing.B) {
+	ctrl := benchmarkController(100)
+
+	b.Run("matrix", func(b *testing.B) {
+		serial := benchmarkControllerDevice(2).Serial
+		b.ReportAllocs()
+		for b.Loop() {
+			d, ok := ctrl.GetDevice(serial)
+			if !ok {
+				b.Fatal("benchmark device disappeared")
+			}
+			runtime.KeepAlive(d)
+		}
+	})
+
+	b.Run("missing", func(b *testing.B) {
+		serial := device.Serial{0xff}
+		b.ReportAllocs()
+		for b.Loop() {
+			_, ok := ctrl.GetDevice(serial)
+			if ok {
+				b.Fatal("unexpected benchmark device")
+			}
+		}
+	})
+}
+
 func BenchmarkSubscribeDevices(b *testing.B) {
 	for _, count := range []int{0, 10, 100} {
 		ctrl := benchmarkController(count)
