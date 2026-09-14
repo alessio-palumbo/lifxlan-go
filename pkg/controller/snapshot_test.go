@@ -175,7 +175,7 @@ func TestCaptureStateSnapshotRejectsEmptySerials(t *testing.T) {
 	}
 }
 
-func TestRestoreStateSnapshotRestoresSingleZoneColorThenPower(t *testing.T) {
+func TestRestoreStateSnapshotPowersOffBeforeRestoringSingleZoneColor(t *testing.T) {
 	mockClient := newMockClient()
 	serial := snapshotSerial(1)
 	ctrl := newSnapshotController(mockClient, device.Device{Serial: serial, Address: snapshotAddr(1)})
@@ -190,25 +190,25 @@ func TestRestoreStateSnapshotRestoresSingleZoneColorThenPower(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	powerMsg := nextSent(t, mockClient)
+	powerPayload, ok := powerMsg.Payload.(*packets.LightSetPower)
+	if !ok {
+		t.Fatalf("first payload = %T, want LightSetPower", powerMsg.Payload)
+	}
+	if powerPayload.Level != 0 || powerPayload.Duration != 500 {
+		t.Fatalf("power payload = %#v, want off duration 500", powerPayload)
+	}
+
 	colorMsg := nextSent(t, mockClient)
 	colorPayload, ok := colorMsg.Payload.(*packets.LightSetWaveformOptional)
 	if !ok {
-		t.Fatalf("first payload = %T, want LightSetWaveformOptional", colorMsg.Payload)
+		t.Fatalf("second payload = %T, want LightSetWaveformOptional", colorMsg.Payload)
 	}
 	if !colorPayload.SetHue || !colorPayload.SetSaturation || !colorPayload.SetBrightness || !colorPayload.SetKelvin {
 		t.Fatalf("color restore did not set all HSBK fields: %#v", colorPayload)
 	}
 	if colorPayload.Period != 500 {
 		t.Fatalf("color period = %d, want 500", colorPayload.Period)
-	}
-
-	powerMsg := nextSent(t, mockClient)
-	powerPayload, ok := powerMsg.Payload.(*packets.LightSetPower)
-	if !ok {
-		t.Fatalf("second payload = %T, want LightSetPower", powerMsg.Payload)
-	}
-	if powerPayload.Level != 0 || powerPayload.Duration != 500 {
-		t.Fatalf("power payload = %#v, want off duration 500", powerPayload)
 	}
 }
 

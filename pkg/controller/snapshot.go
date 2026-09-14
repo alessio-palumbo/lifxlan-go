@@ -137,6 +137,13 @@ func (c *Controller) restoreDeviceState(ctx context.Context, state device.Device
 }
 
 func (c *Controller) restoreDeviceStateOnce(state device.DeviceStateSnapshot, duration time.Duration) error {
+	if !state.PoweredOn {
+		if err := c.restoreSnapshotPower(state, duration); err != nil {
+			return err
+		}
+		return c.restoreSnapshotColors(state, duration)
+	}
+
 	if err := c.restoreSnapshotColors(state, duration); err != nil {
 		return err
 	}
