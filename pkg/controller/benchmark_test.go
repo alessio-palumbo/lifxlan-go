@@ -8,10 +8,12 @@ import (
 	"testing"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
+	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
 
 var benchmarkEventSink DeviceEvent
+var benchmarkMessageBytesSink []byte
 
 func BenchmarkControllerGetDevices(b *testing.B) {
 	for _, count := range []int{1, 10, 50, 100} {
@@ -66,6 +68,51 @@ func BenchmarkControllerGetDevice(b *testing.B) {
 			}
 		}
 	})
+}
+
+func BenchmarkSetColorByGroup(b *testing.B) {
+	hue, saturation, brightness := 210.0, 80.0, 60.0
+	kelvin := uint16(3500)
+	update := StateUpdate{Light: &LightStateUpdate{
+		Hue: &hue, Saturation: &saturation, Brightness: &brightness, Kelvin: &kelvin,
+	}}
+
+	for _, count := range []int{1, 10, 50} {
+		ctrl := benchmarkLightController(count)
+		selectors := []string{"group:benchmark"}
+		first := ctrl.sessions[benchmarkControllerDevice(0).Serial]
+
+		sample, err := stateMessages(*first.device, update)
+		if err != nil {
+			b.Fatal(err)
+		}
+		wireBytes := 0
+		for _, msg := range sample {
+			encoded, err := msg.MarshalBinary()
+			if err != nil {
+				b.Fatal(err)
+			}
+			wireBytes += len(encoded)
+		}
+
+		b.Run(fmt.Sprintf("devices_%d", count), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				selected, err := device.ResolveSelectorList(selectors, ctrl.GetDevices())
+				if err != nil || len(selected) != count {
+					b.Fatalf("selected %d devices: %v", len(selected), err)
+				}
+				for _, target := range selected {
+					if err := ctrl.SetState(target.Serial, update); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+			b.ReportMetric(float64(count), "devices/op")
+			b.ReportMetric(float64(count*len(sample)), "packets/op")
+			b.ReportMetric(float64(count*wireBytes), "wire-B/op")
+		})
+	}
 }
 
 func BenchmarkSubscribeDevices(b *testing.B) {
@@ -133,9 +180,26 @@ func benchmarkController(count int) *Controller {
 	ctrl := &Controller{sessions: make(map[device.Serial]*deviceSession, count)}
 	for i := range count {
 		d := benchmarkControllerDevice(i)
-		ctrl.sessions[d.Serial] = &deviceSession{device: &d}
+		ctrl.sessions[d.Serial] = &deviceSession{device: &d, sender: benchmarkMarshalSender{}}
 	}
 	return ctrl
+}
+
+func benchmarkLightController(count int) *Controller {
+	ctrl := &Controller{sessions: make(map[device.Serial]*deviceSession, count)}
+	for i := range count {
+		d := benchmarkControllerDevice(i * 4)
+		ctrl.sessions[d.Serial] = &deviceSession{device: &d, sender: benchmarkMarshalSender{}}
+	}
+	return ctrl
+}
+
+type benchmarkMarshalSender struct{}
+
+func (benchmarkMarshalSender) Send(_ *net.UDPAddr, msg *protocol.Message) error {
+	encoded, err := msg.MarshalBinary()
+	benchmarkMessageBytesSink = encoded
+	return err
 }
 
 func waitForBenchmarkSubscriptions(ctrl *Controller, count int) {

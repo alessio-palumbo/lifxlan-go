@@ -11,6 +11,29 @@ reads, subscription fan-out, and HTTP event encoding. Tagged releases publish
 raw results and a same-runner comparison with the previous release; see the
 [benchmark guide](docs/benchmarks.md) for scope and interpretation.
 
+## Performance at a glance
+
+An illustrative development run on an Apple M1 Pro with Go 1.26.7 produced the
+following rounded results. Tagged-release reports from the consistent Linux CI
+runner remain the canonical comparison between versions.
+
+| Operation | Time | Allocated | Work |
+| --- | ---: | ---: | ---: |
+| Read one 5×64-zone matrix device | 0.9 µs | 3.3 KB | one cloned device |
+| Snapshot 100 mixed devices | 79 µs | 171 KB | 100 cloned devices |
+| Publish a matrix update to 10 subscribers | 7.6 µs | 30 KB | 10 snapshots |
+| Encode and write one light SSE event | 1.4 µs | 1.0 KB | 502 wire bytes |
+| Resolve and encode a color update for one light | 1.5 µs | 1.9 KB | one LAN packet |
+| Resolve and encode a group color update for 50 lights | 96 µs | 142 KB | 50 LAN packets |
+| Encode an 82-zone multizone update | 8.6 µs | 3.2 KB | one 700-byte packet |
+| Encode a 128-zone matrix frame | 14 µs | 5.6 KB | three packets, 1,167 bytes |
+
+These measure in-memory library and daemon work. They do not measure UDP
+delivery, Wi-Fi conditions, device processing, transitions, or the time until a
+light visibly changes. See the [benchmark guide](docs/benchmarks.md) and tagged
+[GitHub Releases](https://github.com/alessio-palumbo/lifxlan-go/releases) for
+the full statistical results and environment details.
+
 ## Features
 
 - Discover LIFX devices via UDP broadcast

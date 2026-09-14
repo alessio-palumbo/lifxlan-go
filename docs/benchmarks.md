@@ -1,12 +1,15 @@
 # Benchmarks
 
 lifxlan-go includes repeatable benchmarks for the in-memory operations most
-relevant to applications that inspect or subscribe to device state:
+relevant to applications that inspect, control, or subscribe to device state:
 
 - cloning single-zone, multizone, matrix, and switch device snapshots;
 - snapshotting controllers with realistic mixtures of 1 to 100 devices;
 - cloned point lookups by serial;
 - concurrent controller snapshots;
+- resolving a group and preparing encoded color updates for 1, 10, or 50 lights;
+- preparing and encoding an 82-zone multizone color batch;
+- preparing and encoding a 128-zone matrix frame with its framebuffer swap;
 - initializing subscriptions with 0 to 100 existing devices;
 - publishing an update to zero, one, five, or ten subscribers; and
 - projecting, encoding, and writing HTTP Server-Sent Events.
@@ -40,9 +43,9 @@ Run the published suite:
 
 ```sh
 go test -run '^$' \
-  -bench 'Benchmark(DeviceClone|ControllerGetDevice|ControllerGetDevices|ControllerGetDevicesParallel|SubscribeDevices|DeviceEventFanout|DeviceEventSSE)$' \
+  -bench 'Benchmark(DeviceClone|ControllerGetDevice|ControllerGetDevices|ControllerGetDevicesParallel|SetColorByGroup|SubscribeDevices|DeviceEventFanout|DeviceEventSSE|MultizoneColorBatch|MatrixColorBatch)$' \
   -benchmem -benchtime=500ms -count=10 \
-  ./pkg/device ./pkg/controller ./internal/httpapi
+  ./pkg/device ./pkg/controller ./pkg/messages ./internal/httpapi
 ```
 
 To assess a change, collect the same command on the base and changed revisions,
@@ -61,9 +64,16 @@ The primary measurements are:
 
 - `ns/op`: elapsed time per operation;
 - `B/op`: bytes allocated per operation;
-- `allocs/op`: allocation count per operation; and
+- `allocs/op`: allocation count per operation;
+- `devices/op` and `packets/op`: devices targeted and LAN packets prepared;
+- `wire-B/op`: total encoded LIFX LAN bytes prepared by a control operation; and
 - `wire-B/event`: the encoded size of one SSE event frame.
 
-Lower values are better for each of these measurements. Throughput can be
-derived from `ns/op`, but real applications should also account for their own
-processing and network behavior.
+Lower values are better for timing and allocation measurements. Device, packet,
+and wire-byte counts describe the work represented by an operation rather than
+scores to minimize. Throughput can be derived from `ns/op`, but real
+applications should also account for their own processing and network behavior.
+
+Control benchmarks stop after messages have been selected, constructed,
+encoded, and handed to an in-memory sender. They do not measure UDP delivery,
+device processing, transitions, or the time until lights visibly change.

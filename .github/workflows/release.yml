@@ -46,9 +46,9 @@ jobs:
         run: |
           mkdir -p benchmark-dist
           go test -run '^$' \
-            -bench 'Benchmark(DeviceClone|ControllerGetDevice|ControllerGetDevices|ControllerGetDevicesParallel|SubscribeDevices|DeviceEventFanout|DeviceEventSSE)$' \
+            -bench 'Benchmark(DeviceClone|ControllerGetDevice|ControllerGetDevices|ControllerGetDevicesParallel|SetColorByGroup|SubscribeDevices|DeviceEventFanout|DeviceEventSSE|MultizoneColorBatch|MatrixColorBatch)$' \
             -benchmem -benchtime=500ms -count=10 \
-            ./pkg/device ./pkg/controller ./internal/httpapi \
+            ./pkg/device ./pkg/controller ./pkg/messages ./internal/httpapi \
             > benchmark-dist/current.txt
 
       - name: Benchmark previous release
@@ -61,9 +61,9 @@ jobs:
           git worktree add --detach "$previous_dir" "$PREVIOUS_VERSION"
           cd "$previous_dir"
           go test -run '^$' \
-            -bench 'Benchmark(DeviceClone|ControllerGetDevice|ControllerGetDevices|ControllerGetDevicesParallel|SubscribeDevices|DeviceEventFanout|DeviceEventSSE)$' \
+            -bench 'Benchmark(DeviceClone|ControllerGetDevice|ControllerGetDevices|ControllerGetDevicesParallel|SetColorByGroup|SubscribeDevices|DeviceEventFanout|DeviceEventSSE|MultizoneColorBatch|MatrixColorBatch)$' \
             -benchmem -benchtime=500ms -count=10 \
-            ./pkg/device ./pkg/controller ./internal/httpapi \
+            ./pkg/device ./pkg/controller ./pkg/messages ./internal/httpapi \
             > "$GITHUB_WORKSPACE/benchmark-dist/previous.txt"
 
       - name: Compare releases
@@ -96,8 +96,8 @@ jobs:
             echo "# lifxlan-go ${VERSION} benchmarks"
             echo
             echo "These results measure in-memory device cloning, controller snapshots,"
-            echo "subscription initialization, device-event fan-out, and HTTP Server-Sent"
-            echo "Event encoding. They do not"
+            echo "color command preparation, subscription initialization, device-event"
+            echo "fan-out, and HTTP Server-Sent Event encoding. They do not"
             echo "measure LAN discovery, Wi-Fi latency, or physical device response time."
             echo
             echo "## Environment"
