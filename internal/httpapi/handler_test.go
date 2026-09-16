@@ -93,9 +93,25 @@ func TestDeviceResponseIncludesObservedFirmwareEffect(t *testing.T) {
 	}
 }
 
-func TestDeviceChangeNamesIncludesEffect(t *testing.T) {
-	if got := deviceChangeNames(controller.DeviceChangeEffect); !reflect.DeepEqual(got, []string{"effect"}) {
-		t.Fatalf("effect change names = %v", got)
+func TestDeviceResponseIncludesEstimatedBootTime(t *testing.T) {
+	d := apiDevice(t, "001122334455", device.DeviceTypeLight)
+	d.EstimatedBootedAt = time.Now().Add(-time.Hour)
+
+	response := newDeviceResponse(d)
+	if response.EstimatedBootedAt == nil || !response.EstimatedBootedAt.Equal(d.EstimatedBootedAt) {
+		t.Fatalf("estimated boot time = %v, want %v", response.EstimatedBootedAt, d.EstimatedBootedAt)
+	}
+
+	d.EstimatedBootedAt = time.Time{}
+	if got := newDeviceResponse(d).EstimatedBootedAt; got != nil {
+		t.Fatalf("unknown estimated boot time = %v, want nil", got)
+	}
+}
+
+func TestDeviceChangeNamesIncludesEffectAndUptime(t *testing.T) {
+	changes := controller.DeviceChangeEffect | controller.DeviceChangeUptime
+	if got := deviceChangeNames(changes); !reflect.DeepEqual(got, []string{"effect", "uptime"}) {
+		t.Fatalf("change names = %v", got)
 	}
 }
 

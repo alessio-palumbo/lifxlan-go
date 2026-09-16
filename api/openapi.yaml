@@ -202,6 +202,12 @@ components:
         location: {type: string}
         group_id: {$ref: "#/components/schemas/UUID"}
         group: {type: string}
+        estimated_booted_at:
+          type: string
+          format: date-time
+          description: >-
+            Local estimate derived from the device uptime reported during
+            session preflight. Absent when that request did not complete.
         light: {$ref: "#/components/schemas/LightState"}
         switch: {$ref: "#/components/schemas/SwitchState"}
         last_seen_at: {type: string, format: date-time}
@@ -240,6 +246,7 @@ components:
               - button_config
               - relays
               - effect
+              - uptime
         device:
           $ref: "#/components/schemas/Device"
           description: Absent for snapshot_complete and resync_required events.

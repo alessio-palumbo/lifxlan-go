@@ -8,21 +8,22 @@ import (
 )
 
 type deviceResponse struct {
-	Serial          string          `json:"serial"`
-	Label           string          `json:"label"`
-	Type            string          `json:"type"`
-	ProductID       uint32          `json:"product_id"`
-	ProductName     string          `json:"product_name,omitempty"`
-	RegistryKnown   bool            `json:"registry_known"`
-	FirmwareVersion string          `json:"firmware_version,omitempty"`
-	LocationID      string          `json:"location_id,omitempty"`
-	Location        string          `json:"location"`
-	GroupID         string          `json:"group_id,omitempty"`
-	Group           string          `json:"group"`
-	Light           *lightResponse  `json:"light,omitempty"`
-	Switch          *switchResponse `json:"switch,omitempty"`
-	LastSeenAt      *time.Time      `json:"last_seen_at,omitempty"`
-	LastUpdatedAt   *time.Time      `json:"last_updated_at,omitempty"`
+	Serial            string          `json:"serial"`
+	Label             string          `json:"label"`
+	Type              string          `json:"type"`
+	ProductID         uint32          `json:"product_id"`
+	ProductName       string          `json:"product_name,omitempty"`
+	RegistryKnown     bool            `json:"registry_known"`
+	FirmwareVersion   string          `json:"firmware_version,omitempty"`
+	LocationID        string          `json:"location_id,omitempty"`
+	Location          string          `json:"location"`
+	GroupID           string          `json:"group_id,omitempty"`
+	Group             string          `json:"group"`
+	EstimatedBootedAt *time.Time      `json:"estimated_booted_at,omitempty"`
+	Light             *lightResponse  `json:"light,omitempty"`
+	Switch            *switchResponse `json:"switch,omitempty"`
+	LastSeenAt        *time.Time      `json:"last_seen_at,omitempty"`
+	LastUpdatedAt     *time.Time      `json:"last_updated_at,omitempty"`
 }
 
 type lightResponse struct {
@@ -87,6 +88,10 @@ func newDeviceResponse(d device.Device) deviceResponse {
 	}
 	if !d.GroupID.IsNil() {
 		response.GroupID = d.GroupID.String()
+	}
+	if !d.EstimatedBootedAt.IsZero() {
+		bootedAt := d.EstimatedBootedAt
+		response.EstimatedBootedAt = &bootedAt
 	}
 	if !d.LastSeenAt.IsZero() {
 		seen := d.LastSeenAt
@@ -190,6 +195,7 @@ func deviceChangeNames(changes controller.DeviceChange) []string {
 		{controller.DeviceChangeButtonConfig, "button_config"},
 		{controller.DeviceChangeRelays, "relays"},
 		{controller.DeviceChangeEffect, "effect"},
+		{controller.DeviceChangeUptime, "uptime"},
 	}
 	var names []string
 	for _, item := range known {

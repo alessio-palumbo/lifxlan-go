@@ -276,6 +276,9 @@ type Device struct {
 	GroupID         GroupID
 	Group           string
 	WifiRSSI        WifiRSSI
+	// EstimatedBootedAt is the local estimate of when the device last started.
+	// It is zero when DeviceGetInfo did not complete during session preflight.
+	EstimatedBootedAt time.Time
 
 	// Device specific properties.
 	MatrixProperties    MatrixProperties
@@ -292,6 +295,15 @@ type Device struct {
 	PoweredOn     bool
 	LastSeenAt    time.Time
 	LastUpdatedAt time.Time
+}
+
+// Uptime returns the estimated time since the device last started. The boolean
+// is false when no uptime baseline was received during session preflight.
+func (d Device) Uptime() (time.Duration, bool) {
+	if d.EstimatedBootedAt.IsZero() {
+		return 0, false
+	}
+	return max(0, time.Since(d.EstimatedBootedAt)), true
 }
 
 type MatrixProperties struct {

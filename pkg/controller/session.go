@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"context"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"math"
@@ -29,6 +31,7 @@ type deviceSession struct {
 	logger  *slog.Logger
 	inbound chan *protocol.Message
 	seq     atomic.Uint32
+	echoID  atomic.Uint64
 	done    chan struct{}
 	cfg     *Config
 	// onTimeout is a callback to terminate the session when the livenessTimeout is reached
@@ -43,6 +46,9 @@ type deviceSession struct {
 	// sendMu keeps messages in a multi-message operation contiguous with one
 	// another, including when state polling and callers send concurrently.
 	sendMu sync.Mutex
+
+	pingMu       sync.Mutex
+	pendingPings map[uint64]chan struct{}
 }
 
 // newDeviceSession creates a new deviceSession for the given device.
@@ -89,6 +95,64 @@ func (s *deviceSession) sendWithProgress(msgs ...*protocol.Message) (int, error)
 		}
 	}
 	return len(msgs), nil
+}
+
+func (s *deviceSession) ping(ctx context.Context) (time.Duration, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	select {
+	case <-s.done:
+		return 0, ErrSessionClosed
+	default:
+	}
+
+	id := s.echoID.Add(1)
+	var payload [64]byte
+	binary.LittleEndian.PutUint64(payload[:8], id)
+
+	response := make(chan struct{})
+	s.pingMu.Lock()
+	if s.pendingPings == nil {
+		s.pendingPings = make(map[uint64]chan struct{})
+	}
+	s.pendingPings[id] = response
+	s.pingMu.Unlock()
+
+	removePending := func() {
+		s.pingMu.Lock()
+		if s.pendingPings[id] == response {
+			delete(s.pendingPings, id)
+		}
+		s.pingMu.Unlock()
+	}
+
+	startedAt := time.Now()
+	if err := s.send(protocol.NewMessage(&packets.DeviceEchoRequest{Payload: payload})); err != nil {
+		removePending()
+		return 0, err
+	}
+
+	select {
+	case <-response:
+		return time.Since(startedAt), nil
+	case <-ctx.Done():
+		removePending()
+		return 0, ctx.Err()
+	case <-s.done:
+		removePending()
+		return 0, ErrSessionClosed
+	}
+}
+
+func (s *deviceSession) handleEchoResponse(payload [64]byte) {
+	id := binary.LittleEndian.Uint64(payload[:8])
+	s.pingMu.Lock()
+	if response, ok := s.pendingPings[id]; ok {
+		delete(s.pendingPings, id)
+		close(response)
+	}
+	s.pingMu.Unlock()
 }
 
 // deviceSnapshot returns a copy of a Device with its current device state.
@@ -168,6 +232,15 @@ func (s *deviceSession) recvloop() {
 			s.mu.Lock()
 			var changes DeviceChange
 			switch p := msg.Payload.(type) {
+			case *packets.DeviceEchoResponse:
+				s.handleEchoResponse(p.Payload)
+			case *packets.DeviceStateInfo:
+				if s.device.EstimatedBootedAt.IsZero() && p.Uptime <= math.MaxInt64 {
+					now := time.Now()
+					s.device.EstimatedBootedAt = now.Add(-time.Duration(p.Uptime))
+					s.device.LastUpdatedAt = now
+					changes = DeviceChangeUptime
+				}
 			case *packets.DeviceStateLabel:
 				label := device.ParseLabel(p.Label)
 				if shouldUpdate(s.device.Label, label) {
@@ -370,6 +443,7 @@ func unknownProductLightShapeProbeMessages() []*protocol.Message {
 // about the state of a Device.
 func requiredStateMessages() []*protocol.Message {
 	return []*protocol.Message{
+		protocol.NewMessage(&packets.DeviceGetInfo{}),
 		protocol.NewMessage(&packets.DeviceGetLabel{}),
 		protocol.NewMessage(&packets.DeviceGetVersion{}),
 		protocol.NewMessage(&packets.LightGet{}),
@@ -382,6 +456,7 @@ func requiredStateMessages() []*protocol.Message {
 
 // messageDoneFuncs maps a message to a function to checks whether the message has been fulfilled.
 var messageDoneFuncs = map[packets.Payload]func(*device.Device) bool{
+	&packets.DeviceGetInfo{}:         func(d *device.Device) bool { return !d.EstimatedBootedAt.IsZero() },
 	&packets.DeviceGetLabel{}:        func(d *device.Device) bool { return d.Label != "" },
 	&packets.DeviceGetVersion{}:      func(d *device.Device) bool { return d.ProductID > 0 },
 	&packets.DeviceGetHostFirmware{}: func(d *device.Device) bool { return d.FirmwareVersion != "" },

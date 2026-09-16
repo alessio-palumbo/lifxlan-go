@@ -320,6 +320,52 @@ func TestSessionCachesFirmwareEffectResponses(t *testing.T) {
 	assert.Equal(t, DeviceChangeEffect, <-updates)
 }
 
+func TestSessionCachesInitialUptimeEstimate(t *testing.T) {
+	updates := make(chan DeviceChange, 2)
+	session := &deviceSession{
+		logger:  discardLogger(),
+		device:  device.NewDevice(&net.UDPAddr{}, device.Serial{1}),
+		inbound: make(chan *protocol.Message, 2),
+		done:    make(chan struct{}),
+		onUpdate: func(_ *deviceSession, changes DeviceChange) {
+			updates <- changes
+		},
+	}
+	go session.recvloop()
+	defer session.close()
+
+	wantUptime := 2 * time.Hour
+	receivedAfter := time.Now()
+	session.inbound <- protocol.NewMessage(&packets.DeviceStateInfo{Uptime: uint64(wantUptime)})
+	assert.Eventually(t, func() bool {
+		return !session.deviceSnapshot().EstimatedBootedAt.IsZero()
+	}, time.Second, time.Millisecond)
+
+	snapshot := session.deviceSnapshot()
+	if snapshot.EstimatedBootedAt.Before(receivedAfter.Add(-wantUptime-time.Second)) ||
+		snapshot.EstimatedBootedAt.After(time.Now().Add(-wantUptime)) {
+		t.Fatalf("estimated boot time = %v, want approximately %v ago", snapshot.EstimatedBootedAt, wantUptime)
+	}
+	if uptime, ok := snapshot.Uptime(); !ok || uptime < wantUptime || uptime > wantUptime+time.Second {
+		t.Fatalf("Uptime() = (%v, %v), want approximately (%v, true)", uptime, ok, wantUptime)
+	}
+	assert.Equal(t, DeviceChangeUptime, <-updates)
+
+	// Delayed duplicate responses must not move the baseline or emit another
+	// update after the initial preflight value has been accepted.
+	bootedAt := snapshot.EstimatedBootedAt
+	session.inbound <- protocol.NewMessage(&packets.DeviceStateInfo{Uptime: uint64(time.Minute)})
+	assert.Eventually(t, func() bool {
+		return session.deviceSnapshot().LastSeenAt.After(snapshot.LastSeenAt)
+	}, time.Second, time.Millisecond)
+	assert.Equal(t, bootedAt, session.deviceSnapshot().EstimatedBootedAt)
+	select {
+	case change := <-updates:
+		t.Fatalf("duplicate uptime emitted change %v", change)
+	default:
+	}
+}
+
 func Test_preflightHandshake(t *testing.T) {
 	var (
 		addr0   = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10)}

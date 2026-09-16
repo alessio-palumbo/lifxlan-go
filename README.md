@@ -213,6 +213,35 @@ low-frequency refresh periods.
 Time-based event coalescing is intentionally left to consumers so UIs can batch
 renders while automation and monitoring clients can retain low latency.
 
+## Device Diagnostics
+
+The controller requests device uptime during session preflight and stores an
+estimated boot timestamp. It does not poll the continuously changing counter.
+The estimate is unavailable when the initial request did not complete:
+
+```go
+d, ok := ctrl.GetDevice(serial)
+if ok {
+	if uptime, known := d.Uptime(); known {
+		fmt.Printf("device uptime: %s\n", uptime.Round(time.Second))
+	}
+}
+```
+
+`Ping` performs one LIFX echo round trip and respects context cancellation and
+deadlines:
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+defer cancel()
+
+rtt, err := ctrl.Ping(ctx, serial)
+```
+
+One echo measures responsiveness for that request, not light-command execution
+time or general Wi-Fi quality. Diagnostic tools should take multiple sequential
+samples and report packet loss and a latency distribution.
+
 Matrix and multizone device snapshots include their last observed firmware
 effect. `Effect.Known` distinguishes a confirmed `off` state from an effect that
 has not been queried yet, and `Effect.Running()` provides the common active-state

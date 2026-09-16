@@ -63,6 +63,7 @@ const (
 	DeviceChangeButtonConfig
 	DeviceChangeRelays
 	DeviceChangeEffect
+	DeviceChangeUptime
 )
 
 // Has reports whether changes includes every bit in change.
