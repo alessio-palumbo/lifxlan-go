@@ -296,6 +296,8 @@ The shared rendering pipeline is:
 
 ```text
 Effect -> Frame -> device.Surface -> DeviceFrame -> renderer/messages
+
+physical HSBK state + device.Surface -> normalized logical/display Frame
 ```
 
 `device.SurfaceFromDevice` derives logical/display layout and physical send metadata from a discovered device.
@@ -386,6 +388,39 @@ deviceFrames, err := effects.AdaptFrameToSurface(frames[0].Frame, surface, effec
 
 The resulting `DeviceFrame` values contain colors, duration, send width, chain index, and orientation metadata.
 They can be serialized into a timeline, rendered in a preview, or converted to LAN messages later.
+
+### Adapt Physical State for Previews
+
+`effects.PhysicalColorState` keeps exact HSBK values in device packet order.
+It can merge partial single-zone, multizone, or matrix updates before adapting
+the accumulated state back to a logical frame. For example, a received
+multizone range can update an existing preview without rebuilding unrelated
+zones:
+
+```go
+surface := device.Surface{
+	LightType: device.LightTypeMultiZone,
+	Width:     16,
+	Height:    1,
+	Zones:     16,
+}
+physical := effects.NewPhysicalColorState(surface)
+
+// Preserve the packet's exact HSBK values. For an extended multizone packet,
+// use only Colors[:ColorsCount].
+err := physical.MergeZoneColors(startIndex, receivedColors)
+if err != nil {
+	return err
+}
+
+preview, err := effects.AdaptPhysicalColorStateToFrame(physical, surface, 0)
+```
+
+For matrix state, use `MergeMatrixColors` with the chain index and physical
+`x`, `y`, and send width. Adaptation removes device orientation, positions each
+chain at its logical bounds, applies row offsets, and leaves hidden or
+non-emitting cells blank. Returned frames own their color slices and do not
+alias the physical state.
 
 Available effects include `Solid`, `Gradient`, `GradientDrift`, `PaletteSweep`, `Comet`, `Sparkle`, `Sweep`, `Flow`, `Ring`, `Waterfall`, `Rockets`, `Snake`, `Worm`, `Wave`, and `ConcentricFrames`.
 

@@ -146,6 +146,26 @@ func TestFrameFromDeviceStateRejectsMissingMatrixState(t *testing.T) {
 	}
 }
 
+func TestFrameFromDeviceStatePreservesLegacyZeroPadding(t *testing.T) {
+	dev := device.Device{
+		LightType: device.LightTypeMatrix,
+		MatrixProperties: device.MatrixProperties{
+			Width:       2,
+			Height:      2,
+			ChainLength: 1,
+			ChainZones:  [][]packets.LightHsbk{{physicalTestColor(1)}},
+		},
+	}
+
+	frame, err := FrameFromDeviceState(dev, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := frame.Colors[1:]; !reflect.DeepEqual(got, []Color{{}, {}, {}}) {
+		t.Fatalf("padded colors = %#v, want zero-value colors", got)
+	}
+}
+
 func deviceColors(colors ...Color) []packets.LightHsbk {
 	out := make([]packets.LightHsbk, len(colors))
 	for i, color := range colors {

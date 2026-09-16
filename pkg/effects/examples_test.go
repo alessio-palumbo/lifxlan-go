@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
+	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
 
 type examplePulse struct {
@@ -64,6 +65,36 @@ func ExampleRender() {
 	// 2
 	// 0s
 	// 2
+}
+
+func ExampleAdaptPhysicalColorStateToFrame() {
+	surface := device.Surface{
+		LightType: device.LightTypeMultiZone,
+		Width:     3,
+		Height:    1,
+		Zones:     3,
+	}
+	state := NewPhysicalColorState(surface)
+	received := []packets.LightHsbk{
+		{Hue: 12345, Saturation: 54321, Brightness: 40000, Kelvin: 3500},
+		{Hue: 23456, Saturation: 43210, Brightness: 30000, Kelvin: 4000},
+	}
+	if err := state.MergeZoneColors(1, received); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	frame, err := AdaptPhysicalColorStateToFrame(state, surface, 0)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(frame.Width, frame.Height)
+	fmt.Println(frame.Colors[1].ToDeviceColor() == received[0])
+
+	// Output:
+	// 3 1
+	// true
 }
 
 func ExampleRegister() {

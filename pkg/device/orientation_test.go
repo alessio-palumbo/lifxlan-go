@@ -145,6 +145,75 @@ func TestReorientSquaredMatrix(t *testing.T) {
 	}
 }
 
+func TestLogicalAndPhysicalMatrixColorsAreInverses(t *testing.T) {
+	orientations := []Orientation{
+		OrientationRightSideUp,
+		OrientationUpsideDown,
+		OrientationFaceUp,
+		OrientationFaceDown,
+		OrientationLeft,
+		OrientationRight,
+	}
+	logical := []packets.LightHsbk{
+		{Hue: 1}, {Hue: 2}, {Hue: 3},
+		{Hue: 4}, {Hue: 5}, {Hue: 6},
+	}
+
+	for _, orientation := range orientations {
+		t.Run(orientationName(orientation), func(t *testing.T) {
+			input := append([]packets.LightHsbk(nil), logical...)
+			physical := LogicalMatrixColorsToPhysical(3, 2, orientation, input)
+			got := PhysicalMatrixColorsToLogical(3, 2, orientation, physical)
+			assert.Equal(t, logical, got)
+
+			if rotatesMatrix(orientation) {
+				physical[0].Hue = 99
+				assert.Equal(t, logical[0].Hue, input[0].Hue, "rotated physical colors alias logical input")
+			}
+		})
+	}
+}
+
+func TestLogicalMatrixColorsToPhysicalPreservesNoRotationAlias(t *testing.T) {
+	colors := []packets.LightHsbk{{Hue: 1}}
+	physical := LogicalMatrixColorsToPhysical(1, 1, OrientationRightSideUp, colors)
+	physical[0].Hue = 2
+	assert.Equal(t, uint16(2), colors[0].Hue)
+
+	logical := PhysicalMatrixColorsToLogical(1, 1, OrientationRightSideUp, physical)
+	logical[0].Hue = 3
+	assert.Equal(t, uint16(3), physical[0].Hue)
+}
+
+func TestExplicitMatrixColorTransformsCropAndPad(t *testing.T) {
+	input := []packets.LightHsbk{{Hue: 1}, {Hue: 2}, {Hue: 3}, {Hue: 4}, {Hue: 5}}
+
+	physical := LogicalMatrixColorsToPhysical(2, 2, OrientationRightSideUp, input)
+	assert.Equal(t, []packets.LightHsbk{{Hue: 1}, {Hue: 2}, {Hue: 3}, {Hue: 4}}, physical)
+
+	logical := PhysicalMatrixColorsToLogical(2, 3, OrientationRightSideUp, input[:2])
+	assert.Equal(t, []packets.LightHsbk{{Hue: 1}, {Hue: 2}, {}, {}, {}, {}}, logical)
+}
+
+func orientationName(orientation Orientation) string {
+	switch orientation {
+	case OrientationRightSideUp:
+		return "right_side_up"
+	case OrientationUpsideDown:
+		return "upside_down"
+	case OrientationFaceUp:
+		return "face_up"
+	case OrientationFaceDown:
+		return "face_down"
+	case OrientationLeft:
+		return "left"
+	case OrientationRight:
+		return "right"
+	default:
+		return "unknown"
+	}
+}
+
 func TestRotateMatrix90(t *testing.T) {
 	tests := map[string]struct {
 		index, w, h int

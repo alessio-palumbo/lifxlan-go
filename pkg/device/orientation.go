@@ -101,6 +101,62 @@ func ReorientMatrix(w, h int, o Orientation, colors []packets.LightHsbk) []packe
 	return RotateMatrix(rotationMapper(w, h, o), colors)
 }
 
+// LogicalMatrixColorsToPhysical maps logical/display matrix colors into the
+// physical packet order expected by a matrix with orientation o.
+//
+// The returned slice has exactly w*h elements. For orientations that do not
+// rotate, an already correctly sized input is returned unchanged and therefore
+// aliases colors, matching ReorientMatrix. Otherwise the result is newly
+// allocated. Extra input colors are cropped and missing colors are padded with
+// zero-value HSBK colors.
+func LogicalMatrixColorsToPhysical(w, h int, o Orientation, colors []packets.LightHsbk) []packets.LightHsbk {
+	size := matrixColorCount(w, h)
+	if !rotatesMatrix(o) && len(colors) == size {
+		return colors
+	}
+	logical := make([]packets.LightHsbk, size)
+	copy(logical, colors)
+	if !rotatesMatrix(o) {
+		return logical
+	}
+
+	physical := make([]packets.LightHsbk, size)
+	rotate := rotationMapper(w, h, o)
+	for logicalIndex, color := range logical {
+		physical[rotate(logicalIndex)] = color
+	}
+	return physical
+}
+
+// PhysicalMatrixColorsToLogical maps physical packet-order matrix colors back
+// into logical/display order for a matrix with orientation o.
+//
+// The returned slice has exactly w*h elements. For orientations that do not
+// rotate, an already correctly sized input is returned unchanged and therefore
+// aliases colors. Otherwise the result is newly allocated. Extra input colors
+// are cropped and missing colors are padded with zero-value HSBK colors. This is the inverse of
+// LogicalMatrixColorsToPhysical for a complete w*h color set.
+func PhysicalMatrixColorsToLogical(w, h int, o Orientation, colors []packets.LightHsbk) []packets.LightHsbk {
+	size := matrixColorCount(w, h)
+	if !rotatesMatrix(o) && len(colors) == size {
+		return colors
+	}
+	logical := make([]packets.LightHsbk, size)
+	if !rotatesMatrix(o) {
+		copy(logical, colors)
+		return logical
+	}
+
+	rotate := rotationMapper(w, h, o)
+	for logicalIndex := range logical {
+		physicalIndex := rotate(logicalIndex)
+		if physicalIndex < len(colors) {
+			logical[logicalIndex] = colors[physicalIndex]
+		}
+	}
+	return logical
+}
+
 // RotateMatrix returns a new []packets.LightHsbk processed by the rotate function given.
 func RotateMatrix(rotate func(i int) int, colors []packets.LightHsbk) []packets.LightHsbk {
 	out := make([]packets.LightHsbk, len(colors))
@@ -151,4 +207,15 @@ func rotationMapper(w, h int, o Orientation) func(int) int {
 		return RotateMatrix270(w, h)
 	}
 	return func(i int) int { return i }
+}
+
+func rotatesMatrix(o Orientation) bool {
+	return o == OrientationUpsideDown || o == OrientationLeft || o == OrientationRight
+}
+
+func matrixColorCount(w, h int) int {
+	if w <= 0 || h <= 0 {
+		return 0
+	}
+	return w * h
 }

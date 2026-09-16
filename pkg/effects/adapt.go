@@ -15,6 +15,10 @@ var (
 	ErrInvalidFrame = errors.New("invalid frame")
 	// ErrInvalidDeviceState is returned when cached device state cannot form a frame.
 	ErrInvalidDeviceState = errors.New("invalid device state")
+	// ErrInvalidPhysicalState is returned when physical color state does not match its surface.
+	ErrInvalidPhysicalState = errors.New("invalid physical color state")
+	// ErrInvalidPhysicalUpdate is returned for invalid physical update coordinates.
+	ErrInvalidPhysicalUpdate = errors.New("invalid physical color update")
 )
 
 // ReductionStrategy defines how many logical colors collapse into one color.
@@ -126,21 +130,11 @@ func adaptMatrixFrame(frame Frame, surface device.Surface) []DeviceFrame {
 		sendWidth := max(chain.SendWidth, 1)
 		sendHeight := matrixSendHeight(chain, sendWidth)
 		colors := blankColors(sendWidth, sendHeight)
-		sendIndex := 0
-
-		for rowIndex, row := range chain.Rows {
-			for col := 0; col < row.Cols; col++ {
-				if sendIndex >= len(colors) {
-					break
-				}
-				if !hiddenCol(row.HiddenCols, col) {
-					x := chain.Bounds.X + row.Offset + col
-					y := chain.Bounds.Y + rowIndex
-					colors[sendIndex] = frameColorAt(frame, x, y)
-				}
-				sendIndex++
+		forEachMatrixCell(chain, len(colors), func(sendIndex, x, y int, hidden bool) {
+			if !hidden {
+				colors[sendIndex] = frameColorAt(frame, x, y)
 			}
-		}
+		})
 
 		frames = append(frames, DeviceFrame{
 			ChainIndex:  chain.Index,
@@ -190,6 +184,24 @@ func hiddenCol(hidden []int, col int) bool {
 		}
 	}
 	return false
+}
+
+func forEachMatrixCell(chain device.MatrixChain, physicalSize int, visit func(physicalIndex, logicalX, logicalY int, hidden bool)) {
+	physicalIndex := 0
+	for rowIndex, row := range chain.Rows {
+		for col := 0; col < row.Cols; col++ {
+			if physicalIndex >= physicalSize {
+				return
+			}
+			visit(
+				physicalIndex,
+				chain.Bounds.X+row.Offset+col,
+				chain.Bounds.Y+rowIndex,
+				hiddenCol(row.HiddenCols, col),
+			)
+			physicalIndex++
+		}
+	}
 }
 
 func frameColorAt(frame Frame, x, y int) Color {

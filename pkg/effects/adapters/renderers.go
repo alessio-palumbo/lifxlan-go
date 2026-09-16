@@ -238,7 +238,7 @@ func (r *MatrixRenderer) RenderFrame(ctx context.Context, frame effects.Frame) e
 		if r.orientation != nil {
 			orientation = *r.orientation
 		}
-		colors = device.ReorientMatrix(deviceFrame.SendWidth, deviceFrame.Height, orientation, colors)
+		colors = device.LogicalMatrixColorsToPhysical(deviceFrame.SendWidth, deviceFrame.Height, orientation, colors)
 		startIndex := deviceFrame.ChainIndex
 		length := 1
 		if r.surface == nil {

@@ -1,4 +1,5 @@
-// Package effects defines deterministic, device-neutral lighting effect types.
+// Package effects defines deterministic, device-neutral lighting effect types
+// and adapters between logical frames and physical device color layouts.
 package effects
 
 import (
