@@ -295,6 +295,95 @@ func TestRestoreStateSnapshotRepeatsAttempts(t *testing.T) {
 	}
 }
 
+func TestRestoreStateSnapshotRunsAttemptsInDeviceRounds(t *testing.T) {
+	mockClient := newMockClient()
+	serial0 := snapshotSerial(1)
+	serial1 := snapshotSerial(2)
+	ctrl := newSnapshotController(mockClient,
+		device.Device{Serial: serial0, Address: snapshotAddr(1)},
+		device.Device{Serial: serial1, Address: snapshotAddr(2)},
+	)
+	snapshot := device.StateSnapshot{Devices: []device.DeviceStateSnapshot{
+		{Serial: serial0, PoweredOn: true, Color: device.Color{Kelvin: 3500}, LightType: device.LightTypeSingleZone},
+		{Serial: serial1, PoweredOn: true, Color: device.Color{Kelvin: 3500}, LightType: device.LightTypeSingleZone},
+	}}
+
+	if err := ctrl.RestoreStateSnapshot(context.Background(), snapshot, RestoreOptions{
+		Attempts:   2,
+		RetryDelay: time.Millisecond,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []device.Serial{serial0, serial0, serial1, serial1, serial0, serial0, serial1, serial1}
+	for i, wantSerial := range want {
+		msg := nextSent(t, mockClient)
+		if got := device.Serial(msg.Target()); got != wantSerial {
+			t.Fatalf("message %d target = %s, want %s", i, got, wantSerial)
+		}
+	}
+}
+
+func TestRestoreStateSnapshotCollectsDeviceErrors(t *testing.T) {
+	mockClient := newMockClient()
+	serial0 := snapshotSerial(1)
+	serial1 := snapshotSerial(2)
+	ctrl := newSnapshotController(mockClient,
+		device.Device{Serial: serial0, Address: snapshotAddr(1)},
+		device.Device{Serial: serial1, Address: snapshotAddr(2)},
+	)
+	err0 := errors.New("first device failed")
+	err1 := errors.New("second device failed")
+	sender := &snapshotFailSender{errs: map[device.Serial]error{
+		serial0: err0,
+		serial1: err1,
+	}}
+	ctrl.sessions[serial0].sender = sender
+	ctrl.sessions[serial1].sender = sender
+
+	err := ctrl.RestoreStateSnapshot(context.Background(), device.StateSnapshot{
+		Devices: []device.DeviceStateSnapshot{
+			{Serial: serial0, PoweredOn: true, LightType: device.LightTypeSingleZone},
+			{Serial: serial1, PoweredOn: true, LightType: device.LightTypeSingleZone},
+		},
+	}, RestoreOptions{})
+	if !errors.Is(err, err0) || !errors.Is(err, err1) {
+		t.Fatalf("error = %v, want both device errors", err)
+	}
+}
+
+func TestRestoreStateSnapshotCancellationStopsBetweenRounds(t *testing.T) {
+	mockClient := newMockClient()
+	serial0 := snapshotSerial(1)
+	serial1 := snapshotSerial(2)
+	ctrl := newSnapshotController(mockClient,
+		device.Device{Serial: serial0, Address: snapshotAddr(1)},
+		device.Device{Serial: serial1, Address: snapshotAddr(2)},
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- ctrl.RestoreStateSnapshot(ctx, device.StateSnapshot{
+			Devices: []device.DeviceStateSnapshot{
+				{Serial: serial0, PoweredOn: true, LightType: device.LightTypeSingleZone},
+				{Serial: serial1, PoweredOn: true, LightType: device.LightTypeSingleZone},
+			},
+		}, RestoreOptions{Attempts: 2, RetryDelay: time.Second})
+	}()
+
+	for range 4 {
+		nextSent(t, mockClient)
+	}
+	cancel()
+
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	if got := sentCount(mockClient); got != 0 {
+		t.Fatalf("messages sent after first round = %d, want 0", got)
+	}
+}
+
 func TestRestoreStateSnapshotHonorsContextCancellation(t *testing.T) {
 	mockClient := newMockClient()
 	serial := snapshotSerial(1)
@@ -336,6 +425,14 @@ func snapshotSerial(value byte) device.Serial {
 
 func snapshotAddr(value byte) *net.UDPAddr {
 	return &net.UDPAddr{IP: net.IPv4(192, 168, 0, value)}
+}
+
+type snapshotFailSender struct {
+	errs map[device.Serial]error
+}
+
+func (s *snapshotFailSender) Send(_ *net.UDPAddr, msg *protocol.Message) error {
+	return s.errs[device.Serial(msg.Target())]
 }
 
 func assertSentPayload(t *testing.T, mockClient *mockClient, payloadType uint16) {

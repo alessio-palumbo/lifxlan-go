@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,10 +33,11 @@ type SnapshotOptions struct {
 type RestoreOptions struct {
 	// Duration is the transition duration for color and light power restore.
 	Duration time.Duration
-	// Attempts is how many times each snapshot device is restored. Zero uses one
-	// attempt.
+	// Attempts is how many unconditional restore rounds are sent to every
+	// snapshot device. Rounds do not wait for acknowledgements or verify applied
+	// state. Zero uses one attempt.
 	Attempts int
-	// RetryDelay is the delay between restore attempts. Zero uses the default.
+	// RetryDelay is the delay between restore rounds. Zero uses the default.
 	RetryDelay time.Duration
 }
 
@@ -79,19 +81,44 @@ func (c *Controller) CaptureStateSnapshot(ctx context.Context, serials []device.
 	}
 }
 
-// RestoreStateSnapshot restores color and power from snapshot.
+// RestoreStateSnapshot restores color and power from snapshot. Attempts run in
+// rounds across all devices, and send failures are joined after every device
+// has had an opportunity to restore.
 func (c *Controller) RestoreStateSnapshot(ctx context.Context, snapshot device.StateSnapshot, opts RestoreOptions) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if len(snapshot.Devices) == 0 {
+		return nil
+	}
 	opts = normalizeRestoreOptions(opts)
 
-	for _, state := range snapshot.Devices {
-		if err := c.restoreDeviceState(ctx, state, opts); err != nil {
-			return err
+	var restoreErrs []error
+	for attempt := range opts.Attempts {
+		for _, state := range snapshot.Devices {
+			if err := ctx.Err(); err != nil {
+				return errors.Join(append(restoreErrs, err)...)
+			}
+			if err := c.restoreDeviceStateOnce(state, opts.Duration); err != nil {
+				restoreErrs = append(restoreErrs, fmt.Errorf(
+					"restore device %s (attempt %d/%d): %w",
+					state.Serial, attempt+1, opts.Attempts, err,
+				))
+			}
+		}
+
+		if attempt == opts.Attempts-1 {
+			break
+		}
+		timer := time.NewTimer(opts.RetryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return errors.Join(append(restoreErrs, ctx.Err())...)
+		case <-timer.C:
 		}
 	}
-	return nil
+	return errors.Join(restoreErrs...)
 }
 
 func normalizeSnapshotOptions(opts SnapshotOptions) SnapshotOptions {
@@ -112,28 +139,6 @@ func normalizeRestoreOptions(opts RestoreOptions) RestoreOptions {
 		opts.RetryDelay = defaultRestoreRetryDelay
 	}
 	return opts
-}
-
-func (c *Controller) restoreDeviceState(ctx context.Context, state device.DeviceStateSnapshot, opts RestoreOptions) error {
-	for attempt := 0; attempt < opts.Attempts; attempt++ {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if err := c.restoreDeviceStateOnce(state, opts.Duration); err != nil {
-			return err
-		}
-		if attempt == opts.Attempts-1 {
-			break
-		}
-		timer := time.NewTimer(opts.RetryDelay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
-	return nil
 }
 
 func (c *Controller) restoreDeviceStateOnce(state device.DeviceStateSnapshot, duration time.Duration) error {
