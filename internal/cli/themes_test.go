@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,5 +146,16 @@ func TestThemeHybridMatrixPacketsAndSendFailure(t *testing.T) {
 	}
 	if _, ok := f.sentMessages[0].Payload.(*packets.TileSet64); !ok {
 		t.Fatalf("unexpected payload %T", f.sentMessages[0].Payload)
+	}
+}
+
+func TestThemeExcessiveGeometryPreventsControlWrites(t *testing.T) {
+	d := themeLight()
+	d.LightType = device.LightTypeMatrix
+	d.MatrixProperties = device.MatrixProperties{Width: math.MaxInt, Height: math.MaxInt, ChainLength: math.MaxInt}
+	f := &fakeBackend{devices: []device.Device{d}}
+	err := run(context.Background(), []string{"themes", "apply", "--target", "Desk", "--discover-for", "1ns", themeFile(t, themeJSON)}, io.Discard, io.Discard, factoryFor(f))
+	if err == nil || f.sends != 0 || f.restores != 0 {
+		t.Fatalf("err=%v fake=%+v", err, f)
 	}
 }

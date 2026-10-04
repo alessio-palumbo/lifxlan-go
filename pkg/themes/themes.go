@@ -48,6 +48,32 @@ type Application struct {
 	Frame  effects.Frame
 }
 
+// BrightnessPolicy selects the source of planned brightness values.
+type BrightnessPolicy string
+
+const (
+	// PaletteBrightness uses palette values, including intentional zero brightness.
+	PaletteBrightness BrightnessPolicy = "palette"
+	// PreserveBrightness retains each initial logical cell's brightness.
+	PreserveBrightness BrightnessPolicy = "preserve"
+	// MaxFrameCells bounds each target's logical and physical geometry.
+	MaxFrameCells = 65_536
+	// MaxPlanCells bounds the total logical cells returned by one plan.
+	MaxPlanCells = 1_048_576
+	// MaxPlanTargets bounds device metadata copies made during planning.
+	MaxPlanTargets = 4_096
+)
+
+// PlanOptions is runtime planning input, not part of a persisted Theme.
+type PlanOptions struct {
+	// Empty means PaletteBrightness.
+	Brightness BrightnessPolicy
+	// PreserveBrightness requires one complete observed logical frame per target,
+	// generated using the same device metadata. The planner cannot verify receipt
+	// completeness or freshness. InitialFrames is invalid in palette mode.
+	InitialFrames map[device.Serial]effects.Frame
+}
+
 // Validate checks a theme before discovery or network writes.
 func (t Theme) Validate() error {
 	if strings.TrimSpace(t.Name) == "" {
@@ -80,6 +106,23 @@ func (t Theme) Validate() error {
 // It trusts the caller's geometry; controller consumers should obtain complete
 // observed state before planning. Plan never changes power or sends messages.
 func (t Theme) Plan(devices []device.Device, duration time.Duration) ([]Application, error) {
+	return t.PlanWithOptions(devices, duration, PlanOptions{})
+}
+
+// PlanWithOptions optionally preserves each logical cell's original brightness.
+// It never queries devices, changes power, or stops effects. Initial frames are
+// not resampled; their dimensions and color counts must match exactly. Only
+// their brightness is used, and must be finite and within 0..100.
+func (t Theme) PlanWithOptions(devices []device.Device, duration time.Duration, opts PlanOptions) ([]Application, error) {
+	switch opts.Brightness {
+	case "", PaletteBrightness:
+		if opts.InitialFrames != nil {
+			return nil, fmt.Errorf("initial frames require preserve brightness mode")
+		}
+	case PreserveBrightness:
+	default:
+		return nil, fmt.Errorf("unknown brightness policy %q", opts.Brightness)
+	}
 	if err := t.Validate(); err != nil {
 		return nil, err
 	}
@@ -89,11 +132,13 @@ func (t Theme) Plan(devices []device.Device, duration time.Duration) ([]Applicat
 	if len(devices) == 0 {
 		return nil, fmt.Errorf("theme requires at least one light")
 	}
+	if len(devices) > MaxPlanTargets {
+		return nil, fmt.Errorf("too many theme targets: limit %d", MaxPlanTargets)
+	}
 	sorted := slices.Clone(devices)
 	slices.SortFunc(sorted, func(a, b device.Device) int { return strings.Compare(a.Serial.String(), b.Serial.String()) })
-	colors := t.colors()
-	plan := make([]Application, 0, len(sorted))
-	singleIndex := 0
+	capabilities := make([]effects.Capabilities, len(sorted))
+	totalCells := 0
 	var previous device.Serial
 	for i, d := range sorted {
 		if d.Serial == (device.Serial{}) {
@@ -114,13 +159,42 @@ func (t Theme) Plan(devices []device.Device, duration time.Duration) ([]Applicat
 			return nil, fmt.Errorf("duplicate theme target %s", d.Serial)
 		}
 		previous = d.Serial
+		if err := validateRawGeometry(d); err != nil {
+			return nil, fmt.Errorf("%s: %w", d.Serial, err)
+		}
 		caps := effects.CapabilitiesFromDevice(d)
-		if caps.Width <= 0 || caps.Height <= 0 || caps.Width > math.MaxInt/caps.Height {
+		if caps.Width <= 0 || caps.Height <= 0 || caps.Width > MaxFrameCells/caps.Height {
 			return nil, fmt.Errorf("%s: surface geometry is missing or invalid", d.Serial)
 		}
-		if d.LightType == device.LightTypeMatrix && (d.MatrixProperties.Width <= 0 || d.MatrixProperties.Height <= 0 || d.MatrixProperties.ChainLength <= 0) {
-			return nil, fmt.Errorf("%s: matrix geometry is missing", d.Serial)
+		cells := caps.Width * caps.Height
+		if cells > MaxPlanCells-totalCells {
+			return nil, fmt.Errorf("theme plan exceeds %d logical cells", MaxPlanCells)
 		}
+		totalCells += cells
+		capabilities[i] = caps
+		if opts.Brightness == PreserveBrightness {
+			initial, ok := opts.InitialFrames[d.Serial]
+			if !ok {
+				return nil, fmt.Errorf("%s: missing initial frame for brightness preservation", d.Serial)
+			}
+			if initial.Width != caps.Width || initial.Height != caps.Height || len(initial.Colors) != cells {
+				return nil, fmt.Errorf("%s: initial frame must match %dx%d surface exactly", d.Serial, caps.Width, caps.Height)
+			}
+			for j, c := range initial.Colors {
+				if !inRange(c.Brightness, 0, 100) {
+					return nil, fmt.Errorf("%s: invalid initial brightness at cell %d", d.Serial, j)
+				}
+			}
+		}
+	}
+	if opts.Brightness == PreserveBrightness && len(opts.InitialFrames) != len(sorted) {
+		return nil, fmt.Errorf("initial frames must contain only selected targets")
+	}
+	colors := t.colors()
+	plan := make([]Application, 0, len(sorted))
+	singleIndex := 0
+	for i, d := range sorted {
+		caps := capabilities[i]
 		assigned := i
 		if d.LightType == device.LightTypeSingleZone {
 			assigned = singleIndex
@@ -148,7 +222,11 @@ func (t Theme) Plan(devices []device.Device, duration time.Duration) ([]Applicat
 				}
 			}
 		}
+		initial := opts.InitialFrames[d.Serial]
 		for j, c := range frame.Colors {
+			if opts.Brightness == PreserveBrightness {
+				c.Brightness = initial.Colors[j].Brightness
+			}
 			if !d.ColorProperties.HasColor {
 				c.Saturation = 0
 			}
@@ -161,6 +239,34 @@ func (t Theme) Plan(devices []device.Device, duration time.Duration) ([]Applicat
 		plan = append(plan, Application{Serial: d.Serial, Frame: frame})
 	}
 	return plan, nil
+}
+
+// Bound inputs before CapabilitiesFromDevice allocates matrix chains and rows.
+func validateRawGeometry(d device.Device) error {
+	switch d.LightType {
+	case device.LightTypeMultiZone:
+		if len(d.MultizoneProperties.Zones) == 0 || len(d.MultizoneProperties.Zones) > MaxFrameCells {
+			return fmt.Errorf("multizone geometry must contain 1..%d zones", MaxFrameCells)
+		}
+	case device.LightTypeMatrix:
+		p := d.MatrixProperties
+		if p.Width <= 0 || p.Height <= 0 || p.ChainLength <= 0 {
+			return fmt.Errorf("matrix geometry is missing")
+		}
+		chains := max(p.ChainLength, len(p.ChainZones), len(p.ChainOrientations))
+		if chains > MaxFrameCells || p.Width > MaxFrameCells/p.Height ||
+			p.Width*p.Height > MaxFrameCells/chains || p.NZones < 0 || p.NZones > MaxFrameCells/chains {
+			return fmt.Errorf("matrix geometry exceeds %d physical cells", MaxFrameCells)
+		}
+		physicalCells := 0
+		for _, colors := range p.ChainZones {
+			if len(colors) > MaxFrameCells-physicalCells {
+				return fmt.Errorf("matrix buffers exceed %d physical cells", MaxFrameCells)
+			}
+			physicalCells += len(colors)
+		}
+	}
+	return nil
 }
 
 func (t Theme) colors() []effects.Color {
