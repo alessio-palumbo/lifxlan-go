@@ -10,7 +10,7 @@ import (
 
 func run(ctx context.Context, args []string, out, diagnostic io.Writer, create factory) error {
 	target := func() ucli.Flag {
-		return &ucli.StringFlag{Name: "target", Usage: "Exact device label or 12-digit serial", Required: true}
+		return &ucli.StringFlag{Name: "target", Usage: "Selector: serial, label, group, location, all; comma-separated (inspect/ping/effects require one match)", Required: true}
 	}
 	leaf := func(name, usage, dispatchName string, flags ...ucli.Flag) *ucli.Command {
 		command := &ucli.Command{Name: name, Usage: usage, Flags: flags, DisableSliceFlagSeparator: true, Action: func(ctx context.Context, cmd *ucli.Command) error {
@@ -22,6 +22,9 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 		if dispatchName == "command" {
 			command.ArgsUsage = "\"TEXT\""
 		}
+		if dispatchName == "themes apply" {
+			command.ArgsUsage = "THEME.json"
+		}
 		return command
 	}
 	devices := leaf("devices", "Device inventory and diagnostics (defaults to list)", "devices",
@@ -32,7 +35,7 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 		leaf("list", "List discovered devices; optionally refresh the inventory", "devices"),
 		leaf("inspect", "Inspect cached device state and estimated uptime", "inspect", target()),
 		leaf("ping", "Collect sequential echo samples and latency statistics", "ping", target(), &ucli.IntFlag{Name: "count", Value: 5, Usage: "Number of samples"}),
-		leaf("stream", "Stream device events, optionally for one device", "stream", &ucli.StringFlag{Name: "target", Usage: "Optional exact label or 12-digit serial; omit for all devices"}),
+		leaf("stream", "Stream device events, optionally for selected devices", "stream", &ucli.StringFlag{Name: "target", Usage: "Optional comma-separated selectors; omit or use all for every device"}),
 	}
 	app := &ucli.Command{
 		Name: "lifxlan", Usage: "Diagnose and control LIFX devices directly over LAN",
@@ -47,6 +50,13 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 		},
 		Commands: []*ucli.Command{
 			devices,
+			{Name: "themes", Usage: "Apply static palettes with deterministic layouts", Commands: []*ucli.Command{
+				leaf("apply", "Preview or apply a theme; power is preserved", "themes apply",
+					&ucli.StringSliceFlag{Name: "target", Usage: "Comma-separated serial/label/group/location/all selectors; may repeat; only lights are selected"},
+					&ucli.StringSliceFlag{Name: "filter", Usage: "Select lights with list-style key=value filters; do not combine with --target"},
+					&ucli.BoolFlag{Name: "dry-run", Usage: "Print resolved color packet plan without control sends"},
+					&ucli.DurationFlag{Name: "duration", Value: time.Second, Usage: "Color transition duration; power is unchanged"}),
+			}},
 			leaf("command", "Compile and send one quoted natural-language command", "command", &ucli.BoolFlag{Name: "dry-run", Usage: "Preview targets and packets without control sends (discovery still uses LAN)"}),
 			leaf("snapshot", "Capture complete observed state as JSON", "snapshot", target(), &ucli.BoolFlag{Name: "fresh", Usage: "Require observations after capture starts"}),
 			{Name: "effects", Usage: "List or run registered lighting effects", Commands: []*ucli.Command{

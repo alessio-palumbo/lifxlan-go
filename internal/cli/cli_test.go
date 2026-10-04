@@ -32,6 +32,8 @@ type fakeBackend struct {
 	onGetDevices                    func() []device.Device
 	events                          []controller.DeviceEvent
 	subscriptions                   int
+	sentMessages                    []*protocol.Message
+	capturedSerials                 []device.Serial
 }
 
 func (f *fakeBackend) Close() error { f.closed = true; return nil }
@@ -41,8 +43,9 @@ func (f *fakeBackend) GetDevices() []device.Device {
 	}
 	return f.devices
 }
-func (f *fakeBackend) Send(device.Serial, *protocol.Message) error {
+func (f *fakeBackend) Send(_ device.Serial, msg *protocol.Message) error {
 	f.sends++
+	f.sentMessages = append(f.sentMessages, msg)
 	if f.onSend != nil {
 		f.onSend()
 	}
@@ -67,8 +70,18 @@ func (f *fakeBackend) SubscribeDevices(context.Context, ...controller.Subscripti
 }
 func (f *fakeBackend) CaptureStateSnapshot(_ context.Context, serials []device.Serial, opts controller.SnapshotOptions) (device.StateSnapshot, error) {
 	f.captures++
+	f.capturedSerials = append([]device.Serial(nil), serials...)
 	f.fresh = opts.RequireFresh
-	return device.NewStateSnapshot(f.devices), f.captureErr
+	var selected []device.Device
+	for _, serial := range serials {
+		for _, d := range f.devices {
+			if serial == d.Serial {
+				selected = append(selected, d)
+				break
+			}
+		}
+	}
+	return device.NewStateSnapshot(selected), f.captureErr
 }
 func (f *fakeBackend) RestoreStateSnapshot(ctx context.Context, _ device.StateSnapshot, _ controller.RestoreOptions) error {
 	f.restores++
@@ -104,7 +117,9 @@ func TestTargetSelection(t *testing.T) {
 	if got, err := selectDevice([]device.Device{d}, "desk"); err != nil || got.Serial != d.Serial {
 		t.Fatalf("got %v, %v", got, err)
 	}
-	if _, err := selectDevice([]device.Device{d, d}, "Desk"); err == nil {
+	duplicate := d
+	duplicate.Serial[5]++
+	if _, err := selectDevice([]device.Device{d, duplicate}, "Desk"); err == nil {
 		t.Fatal("accepted duplicate label")
 	}
 	if _, err := selectDevice([]device.Device{d}, "missing"); err == nil {

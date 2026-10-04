@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/command"
@@ -85,14 +84,14 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 		if cmd.IsSet("interval") && !cmd.Bool("watch") {
 			return errors.New("--interval requires --watch")
 		}
-	} else if cmd.IsSet("watch") || cmd.IsSet("interval") || cmd.IsSet("filter") {
+	} else if name != "themes apply" && (cmd.IsSet("watch") || cmd.IsSet("interval") || cmd.IsSet("filter")) {
 		return errors.New("--watch, --interval, and --filter apply only to devices list")
 	}
 	filters, err := parseFilters(cmd.StringSlice("filter"))
 	if err != nil {
 		return err
 	}
-	if name == "command" || name == "effects run" {
+	if name == "command" || name == "effects run" || name == "themes apply" {
 		if cmd.Args().Len() != 1 {
 			return fmt.Errorf("%s requires exactly one argument; put flags before it", name)
 		}
@@ -126,6 +125,9 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 		return writeJSON(out, defs)
 	}
 	config := effects.Config{}
+	if name == "themes apply" {
+		return applyTheme(ctx, cmd, create, out, diagnostic, filters)
+	}
 	if name == "effects run" {
 		config.ID = effects.EffectID(cmd.Args().Get(0))
 		if configPath != "" {
@@ -189,6 +191,21 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 	if name == "command" {
 		return executeCommand(ctx, c, devices, cmd.Args().Get(0), dry, out, format)
 	}
+	if name == "snapshot" {
+		selected, err := resolveTargets([]string{target}, devices, true)
+		if err != nil {
+			return err
+		}
+		serials := make([]device.Serial, len(selected))
+		for i, d := range selected {
+			serials[i] = d.Serial
+		}
+		snapshot, err := c.CaptureStateSnapshot(ctx, serials, controller.SnapshotOptions{Timeout: timeout, RequireFresh: fresh})
+		if err != nil {
+			return err
+		}
+		return writeJSON(out, snapshot)
+	}
 	d, err := selectDevice(devices, target)
 	if err != nil {
 		return err
@@ -245,15 +262,6 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 			}
 		}
 		return errors.Join(failures...)
-	case "snapshot":
-		if d.Type != device.DeviceTypeLight {
-			return errors.New("snapshot target must be a light")
-		}
-		snapshot, err := c.CaptureStateSnapshot(ctx, []device.Serial{d.Serial}, controller.SnapshotOptions{Timeout: timeout, RequireFresh: fresh})
-		if err != nil {
-			return err
-		}
-		return writeJSON(out, snapshot)
 	case "effects run":
 		if format == "text" {
 			if _, err := fmt.Fprintf(out, "Running %s on %s (%s); power preserved, restore=%t. Ctrl+C to stop.\n", config.ID, safeText(d.Label), d.Serial, restore); err != nil {
@@ -266,23 +274,12 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 }
 
 func selectDevice(devices []device.Device, target string) (device.Device, error) {
-	// A serial takes precedence over labels to keep targeting unambiguous.
-	if serial, err := device.SerialFromHex(target); err == nil {
-		for _, d := range devices {
-			if d.Serial == serial {
-				return d, nil
-			}
-		}
-		return device.Device{}, fmt.Errorf("serial %s not discovered; try a longer --discover-for", target)
-	}
-	var matches []device.Device
-	for _, d := range devices {
-		if strings.EqualFold(d.Label, target) {
-			matches = append(matches, d)
-		}
+	matches, err := resolveTargets([]string{target}, devices, false)
+	if err != nil {
+		return device.Device{}, err
 	}
 	if len(matches) != 1 {
-		return device.Device{}, fmt.Errorf("target %q matched %d devices; use a serial or a longer discovery window", target, len(matches))
+		return device.Device{}, fmt.Errorf("this command requires one device; target %q matched %d; use serial: or label: to narrow it", target, len(matches))
 	}
 	return matches[0], nil
 }

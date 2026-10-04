@@ -216,15 +216,13 @@ func TestStreamLabelsAndAmbiguity(t *testing.T) {
 	for _, duplicate := range []bool{false, true} {
 		f := &fakeBackend{devices: []device.Device{d}, events: []controller.DeviceEvent{{Type: controller.DeviceEventAdded, Device: d}}}
 		if duplicate {
-			f.devices = append(f.devices, d)
+			other := d
+			other.Serial[5]++
+			f.devices = append(f.devices, other)
 		}
 		var out bytes.Buffer
 		err := run(context.Background(), []string{"devices", "stream", "--target", "desk", "--discover-for", "1ns"}, &out, io.Discard, factoryFor(f))
-		if duplicate {
-			if err == nil || f.subscriptions != 0 {
-				t.Fatal("ambiguous label subscribed")
-			}
-		} else if err != nil || !strings.Contains(out.String(), "Desk") {
+		if err != nil || !strings.Contains(out.String(), "Desk") || f.subscriptions != 1 {
 			t.Fatalf("err=%v output=%s", err, out.String())
 		}
 	}

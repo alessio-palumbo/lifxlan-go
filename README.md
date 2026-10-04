@@ -61,6 +61,10 @@ restoration on exit. See the [CLI guide](docs/cli.md) for examples and safety
 behaviour. The `color_cycle` and `breathe` presets work on single-zone bulbs
 as well as multizone and matrix lights through the existing effect runner.
 
+Static palettes can be previewed and applied with `lifxlan themes apply`, using
+the new deterministic `pkg/themes` planner. Themes preserve power and support
+single-zone, multizone, and matrix lights; see the [theme guide](docs/themes.md).
+
 ```go
 import (
 	"fmt"

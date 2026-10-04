@@ -1,0 +1,11 @@
+{
+  "name": "Evening",
+  "palette": {
+    "base": [
+      {"hue": 30, "saturation": 80, "brightness": 40, "kelvin": 3500},
+      {"hue": 220, "saturation": 80, "brightness": 30, "kelvin": 3500}
+    ]
+  },
+  "layout": "gradient",
+  "axis": "horizontal"
+}

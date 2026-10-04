@@ -25,15 +25,21 @@ lifxlan snapshot --target Desk --fresh
 lifxlan effects list
 lifxlan effects run --target Desk --duration 10s breathe
 lifxlan effects run --target Desk color_cycle
+lifxlan themes apply --target Desk --dry-run examples/themes/evening.json
 ```
 
 Shared flags (`--output`, `--discover-for`, `--timeout`, `--verbose`) can go before
 the subcommand or alongside its flags. Keep flags before positional arguments.
-Target selection is an exact,
-case-insensitive label or a 12-digit hexadecimal serial. Duplicate labels are
-rejected; use a serial to disambiguate. Inspect, ping, snapshot, and effect
-commands require an explicit target. Natural-language commands use the existing
-parser's selectors, including groups and locations; always preview unfamiliar
+`--target` uses the library's comma-separated selectors: a 12-digit hexadecimal
+serial, an exact case-insensitive label, group, location, or `all`. Bare names
+match across those fields; use `serial:`, `label:`, `group:`, or `location:` to
+disambiguate (group/location IDs also support `group_id:` and `location_id:`).
+Overlapping matches are deduplicated. Themes and snapshots accept multiple
+light-capable devices; streams also include switches. Inspect, ping, and effect
+runs still require exactly one match. These commands require an explicit target,
+except streams, which default to all devices. Unknown selectors fail instead of
+silently selecting only part of the request. Natural-language commands use the
+existing parser's selectors; always preview unfamiliar
 commands with `--dry-run` because the parser is deliberately forgiving.
 
 `devices` groups `list`, `inspect`, `ping`, and `stream`. Bare `devices` remains
@@ -56,7 +62,7 @@ every watched refresh, so devices appear when matching metadata arrives. They
 do not alter discovery, polling, or device state.
 
 Serial filters require 12 hexadecimal digits and ignore case. Label filters are
-exact and case-insensitive, but unlike `--target` they may match duplicate labels.
+exact and case-insensitive and may match duplicate labels, as can `--target`.
 Repeated serial or label values select any matching value, still ANDed with other
 keys. A watched label filter is reevaluated when a label arrives or changes.
 
@@ -68,11 +74,13 @@ lifxlan devices list --watch --filter serial=d073d554ecf6
 ```
 
 `devices stream` subscribes immediately and emits all device events by default.
-With `--target SERIAL`, filtering starts immediately, including for a device
-that is not yet discovered. With `--target LABEL`, the command waits the
-`--discover-for` window, resolves the label uniquely, and subscribes with the
-selection bound to that serial (later renames do not change it). Missing or
-ambiguous labels fail. Subscription `snapshot_complete` and `resync_required`
+With `--target all` or a serial-only selection (including comma-separated
+serials and `serial:` prefixes), filtering starts immediately, including for
+devices not yet discovered. Name/group/location selectors wait the
+`--discover-for` window and bind the matching devices to their serials. Later
+renames or group membership changes do not change that selection. Duplicate
+labels can select multiple devices; missing name selectors fail. Subscription
+`snapshot_complete` and `resync_required`
 control events remain visible even in targeted streams; they do not identify a
 device and indicate subscription state, not color-state completeness. Selection
 is client-side: the controller's existing subscription model is unchanged.
@@ -203,7 +211,8 @@ effect argument:
 lifxlan effects run --target Desk --config breathe.json --duration 20s breathe
 ```
 
-Theme application, image palette extraction, an interactive shell/TUI, packet
+Theme application is available through `themes apply`; see the [theme guide](themes.md).
+Image palette extraction, an interactive shell/TUI, packet
 tracing, and snapshot-file restore are not included in this first CLI milestone.
 `devices stream` reports existing device events, including resync-required notifications;
 it is not a stream of every incoming packet or unchanged state response.

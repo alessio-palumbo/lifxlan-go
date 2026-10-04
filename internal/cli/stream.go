@@ -3,30 +3,60 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/controller"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 )
 
-// Serial selection is immediate. Labels resolve once after the bounded discovery
-// window, then remain bound to that serial even if the device is renamed.
+// Serial-only selectors and all are immediate. Name selectors resolve once after
+// discovery, then remain bound to those serials even if devices are renamed.
 func streamDevices(ctx context.Context, c backend, out io.Writer, format, target string, discovery time.Duration) error {
-	var selected *device.Serial
+	var selected map[device.Serial]bool
 	if target != "" {
-		serial, err := device.SerialFromHex(target)
-		if err != nil {
+		tokens := device.SplitSelectors(target)
+		if len(tokens) == 0 {
+			return fmt.Errorf("target selector is empty")
+		}
+		if _, err := device.ResolveSelectorList(tokens, nil); err != nil {
+			return err
+		}
+		immediate := true
+		all := false
+		selected = make(map[device.Serial]bool)
+		for _, token := range tokens {
+			normalized := strings.ToLower(strings.TrimSpace(token))
+			if normalized == device.SelectorAll {
+				all = true
+				continue
+			}
+			value := strings.TrimSpace(strings.TrimPrefix(normalized, "serial:"))
+			serial, err := device.SerialFromHex(value)
+			if err != nil {
+				immediate = false
+				continue
+			}
+			selected[serial] = true
+		}
+		if !immediate {
 			if err := wait(ctx, discovery); err != nil {
 				return err
 			}
-			d, err := selectDevice(c.GetDevices(), target)
+			devices, err := resolveTargets([]string{target}, c.GetDevices(), false)
 			if err != nil {
 				return err
 			}
-			serial = d.Serial
+			selected = make(map[device.Serial]bool)
+			for _, d := range devices {
+				selected[d.Serial] = true
+			}
 		}
-		selected = &serial
+		if all {
+			selected = nil
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -57,8 +87,8 @@ func streamDevices(ctx context.Context, c backend, out io.Writer, format, target
 	}
 }
 
-func matchesStreamTarget(event controller.DeviceEvent, serial *device.Serial) bool {
+func matchesStreamTarget(event controller.DeviceEvent, serials map[device.Serial]bool) bool {
 	// Control events apply to the subscription, not a device; retain them so a
 	// filtered consumer can still detect initial-inventory completion or loss.
-	return serial == nil || event.Type == controller.DeviceEventSnapshotComplete || event.Type == controller.DeviceEventResyncRequired || event.Device.Serial == *serial
+	return serials == nil || event.Type == controller.DeviceEventSnapshotComplete || event.Type == controller.DeviceEventResyncRequired || serials[event.Device.Serial]
 }
