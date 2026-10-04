@@ -3,8 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/effects"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
+	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
 )
 
 type fakeBackend struct {
@@ -24,10 +27,18 @@ type fakeBackend struct {
 	captureErr, restoreErr, sendErr error
 	onSend                          func()
 	closed                          bool
+	pingCalls                       int
+	pingErrors                      []error
+	onGetDevices                    func() []device.Device
 }
 
-func (f *fakeBackend) Close() error                { f.closed = true; return nil }
-func (f *fakeBackend) GetDevices() []device.Device { return f.devices }
+func (f *fakeBackend) Close() error { f.closed = true; return nil }
+func (f *fakeBackend) GetDevices() []device.Device {
+	if f.onGetDevices != nil {
+		return f.onGetDevices()
+	}
+	return f.devices
+}
 func (f *fakeBackend) Send(device.Serial, *protocol.Message) error {
 	f.sends++
 	if f.onSend != nil {
@@ -36,6 +47,11 @@ func (f *fakeBackend) Send(device.Serial, *protocol.Message) error {
 	return f.sendErr
 }
 func (f *fakeBackend) Ping(context.Context, device.Serial) (time.Duration, error) {
+	index := f.pingCalls
+	f.pingCalls++
+	if index < len(f.pingErrors) && f.pingErrors[index] != nil {
+		return 0, f.pingErrors[index]
+	}
 	return time.Millisecond, nil
 }
 func (f *fakeBackend) SubscribeDevices(context.Context, ...controller.SubscriptionOption) <-chan controller.DeviceEvent {
@@ -97,7 +113,7 @@ func TestCommandDryRunAndDispatch(t *testing.T) {
 	for _, dry := range []bool{true, false} {
 		f := &fakeBackend{devices: []device.Device{testLight()}}
 		var out bytes.Buffer
-		args := []string{"command", "--discover-for", "1ns"}
+		args := []string{"command", "--output", "json", "--discover-for", "1ns"}
 		if dry {
 			args = append(args, "--dry-run")
 		}
@@ -125,7 +141,7 @@ type brokenWriter struct{}
 func (brokenWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
 func TestCommandOutputFailurePreventsSend(t *testing.T) {
 	f := &fakeBackend{devices: []device.Device{testLight()}}
-	err := executeCommand(context.Background(), f, f.devices, "Desk blue", false, brokenWriter{})
+	err := executeCommand(context.Background(), f, f.devices, "Desk blue", false, brokenWriter{}, "text")
 	if !errors.Is(err, io.ErrClosedPipe) || f.sends != 0 {
 		t.Fatalf("err=%v sends=%d", err, f.sends)
 	}
@@ -233,10 +249,207 @@ func TestEffectConfigErrorsDoNotOpenController(t *testing.T) {
 func TestDeviceOutputHasCopyableSerial(t *testing.T) {
 	f := &fakeBackend{devices: []device.Device{testLight()}}
 	var out bytes.Buffer
-	if err := run(context.Background(), []string{"devices", "--discover-for", "1ns"}, &out, io.Discard, factoryFor(f)); err != nil {
+	if err := run(context.Background(), []string{"devices", "--output", "json", "--discover-for", "1ns"}, &out, io.Discard, factoryFor(f)); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), `"Serial": "d073d5000001"`) {
 		t.Fatalf("serial is not copyable: %s", out.String())
+	}
+}
+
+func TestHumanOutputDefaults(t *testing.T) {
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"devices", "--discover-for", "1ns"}, "SERIAL"},
+		{[]string{"inspect", "--discover-for", "1ns", "--target", "Desk"}, "Estimated uptime"},
+		{[]string{"ping", "--discover-for", "1ns", "--target", "Desk", "--count", "2"}, "2 sent, 2 received, 0.0% loss"},
+		{[]string{"command", "--discover-for", "1ns", "--dry-run", "Desk blue"}, "Dry-run plan"},
+		{[]string{"effects", "list"}, "Defaults:"},
+	} {
+		f := &fakeBackend{devices: []device.Device{testLight()}}
+		var out bytes.Buffer
+		if err := run(context.Background(), test.args, &out, io.Discard, factoryFor(f)); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), test.want) {
+			t.Fatalf("%v: %s", test.args, out.String())
+		}
+	}
+}
+
+func TestNestedHelpAndInvalidOutputAreOffline(t *testing.T) {
+	for _, args := range [][]string{{"effects", "--help"}, {"effects", "run", "--help"}, {"help", "effects", "run"}, {"devices", "--output", "yaml"}} {
+		var out bytes.Buffer
+		err := run(context.Background(), args, &out, io.Discard, func(bool, io.Writer) (backend, error) { t.Fatal("opened controller"); return nil, nil })
+		if args[0] == "devices" {
+			if err == nil {
+				t.Fatal("accepted invalid output")
+			}
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if args[0] == "effects" && !strings.Contains(out.String(), "USAGE:") {
+			t.Fatal("missing contextual help")
+		}
+	}
+}
+
+func TestInheritedOutputAndSnapshotJSON(t *testing.T) {
+	for _, args := range [][]string{{"--output", "json", "effects", "list"}, {"snapshot", "--discover-for", "1ns", "--target", "Desk"}} {
+		var out bytes.Buffer
+		f := &fakeBackend{devices: []device.Device{testLight()}}
+		if err := run(context.Background(), args, &out, io.Discard, factoryFor(f)); err != nil {
+			t.Fatal(err)
+		}
+		if !json.Valid(out.Bytes()) {
+			t.Fatalf("not clean JSON: %s", out.String())
+		}
+	}
+}
+
+func TestMixedPingLossAndJSONSamples(t *testing.T) {
+	for _, format := range []string{"text", "json"} {
+		failure := errors.New("timeout")
+		f := &fakeBackend{devices: []device.Device{testLight()}, pingErrors: []error{nil, failure, nil}}
+		var out bytes.Buffer
+		err := run(context.Background(), []string{"ping", "--target", "Desk", "--discover-for", "1ns", "--count", "3", "--output", format}, &out, io.Discard, factoryFor(f))
+		if !errors.Is(err, failure) || f.pingCalls != 3 {
+			t.Fatalf("err=%v calls=%d", err, f.pingCalls)
+		}
+		if format == "text" {
+			if !strings.Contains(out.String(), "3 sent, 2 received, 33.3% loss") || !strings.Contains(out.String(), "RTT min/avg/max") {
+				t.Fatal(out.String())
+			}
+		} else {
+			lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+			if len(lines) != 3 {
+				t.Fatal(out.String())
+			}
+			for _, line := range lines {
+				if !json.Valid([]byte(line)) {
+					t.Fatal(line)
+				}
+			}
+		}
+	}
+}
+
+func TestHumanLabelsCannotControlTerminal(t *testing.T) {
+	d := testLight()
+	d.Label = "Desk\x1b[2J\n\t"
+	d.Group = "Office\r\n"
+	var out bytes.Buffer
+	if err := printDevices(&out, []device.Device{d}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "\x1b") || strings.Contains(out.String(), "Desk\n") || strings.Contains(out.String(), "Office\r") {
+		t.Fatal("unsanitised labels")
+	}
+}
+
+func TestHumanInventoryEventsHaveNoFakeDevice(t *testing.T) {
+	for _, eventType := range []controller.DeviceEventType{controller.DeviceEventSnapshotComplete, controller.DeviceEventResyncRequired} {
+		var out bytes.Buffer
+		if err := printEvent(&out, controller.DeviceEvent{Type: eventType, Revision: 7}); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(out.String(), "000000000000") || !strings.Contains(out.String(), eventType.String()) {
+			t.Fatal(out.String())
+		}
+	}
+}
+
+func TestDeviceColumnOrderAndMetadata(t *testing.T) {
+	d := testLight()
+	d.Location = "Home"
+	d.Group = "Office"
+	d.ProductID = 27
+	d.FirmwareVersion = "3.90"
+	d.WifiRSSI = -42
+	d.Address = &net.UDPAddr{IP: net.ParseIP("192.168.1.42"), Port: 56700}
+	d.EstimatedBootedAt = time.Now().Add(-2 * time.Hour)
+	var out bytes.Buffer
+	if err := printDevices(&out, []device.Device{d}); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	want := []string{"SERIAL", "IP", "LABEL", "LOCATION", "GROUP", "TYPE", "ZONES", "PRODUCT_ID", "FIRMWARE", "POWER", "RSSI/SNR", "UPTIME"}
+	got := strings.Fields(lines[0])
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("columns=%v", got)
+	}
+	row := strings.Fields(lines[1])
+	if len(row) != 12 || row[1] != "192.168.1.42" || row[3] != "Home" || row[4] != "Office" || row[6] != "1" || row[7] != "27" || row[8] != "3.90" || row[10] != "-42" || !strings.HasPrefix(row[11], "2h") {
+		t.Fatalf("row=%v", row)
+	}
+	if firmware(testLight()) != "-" || wifiSignal(testLight()) != "-" {
+		t.Fatal("missing metadata displayed as values")
+	}
+	d.WifiRSSI = 35
+	if wifiSignal(d) != "35" {
+		t.Fatal("positive SNR not preserved")
+	}
+}
+
+func TestInventoryTypeCountsAndMissingAddressUptime(t *testing.T) {
+	d := testLight()
+	if ipAddress(d) != "-" || estimatedUptime(d) != "-" {
+		t.Fatal("missing address/uptime not marked")
+	}
+	d.LightType = device.LightTypeMultiZone
+	if kind(d) != "multi_zone" || zones(d) != "?" {
+		t.Fatal(kind(d), zones(d))
+	}
+	d.MultizoneProperties.Zones = make([]packets.LightHsbk, 34)
+	if zones(d) != "34" {
+		t.Fatal(zones(d))
+	}
+	d.LightType = device.LightTypeMatrix
+	if kind(d) != "matrix" || zones(d) != "?" {
+		t.Fatal(kind(d), zones(d))
+	}
+	d.MatrixProperties.Width = 8
+	d.MatrixProperties.Height = 8
+	d.MatrixProperties.ChainLength = 1
+	if zones(d) != "64" {
+		t.Fatal(zones(d))
+	}
+	d.MatrixProperties.ChainLength = 5
+	if zones(d) != "320" {
+		t.Fatal(zones(d))
+	}
+	d.Type = device.DeviceTypeSwitch
+	if kind(d) != d.Type.String() || zones(d) != "-" {
+		t.Fatal("switch has pixel count")
+	}
+}
+
+func TestJSONZoneCountNumericOrNull(t *testing.T) {
+	d := testLight()
+	for _, test := range []struct {
+		product uint32
+		want    string
+	}{{0, `"ZoneCount": null`}, {27, `"ZoneCount": 1`}} {
+		d.ProductID = test.product
+		var out bytes.Buffer
+		if err := writeJSON(&out, viewDevice(d)); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), test.want) {
+			t.Fatal(out.String())
+		}
+	}
+	d.LightType = device.LightTypeMatrix
+	d.MatrixProperties.Width = 8
+	d.MatrixProperties.Height = 8
+	d.MatrixProperties.ChainLength = 5
+	if count := viewDevice(d).ZoneCount; count == nil || *count != 320 {
+		t.Fatal(count)
+	}
+	d.Type = device.DeviceTypeSwitch
+	if viewDevice(d).ZoneCount != nil {
+		t.Fatal("switch has a zone count")
 	}
 }

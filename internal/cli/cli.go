@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,32 +18,8 @@ import (
 	"github.com/alessio-palumbo/lifxlan-go/pkg/effects"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/effects/adapters"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
+	ucli "github.com/urfave/cli/v3"
 )
-
-const help = `lifxlan: direct LAN diagnostics (JSON output)
-
-Usage: lifxlan COMMAND [flags] [arguments]
-  devices                         list discovered devices
-  inspect --target LABEL|SERIAL   inspect one device, including estimated uptime
-  ping --target LABEL|SERIAL       sequential echo samples
-  watch                           stream device events as JSON lines
-  command [--dry-run] "TEXT"       compile and optionally send a natural-language command
-  snapshot --target LABEL|SERIAL   capture complete observed state to stdout
-  effects list                    list effects and configurable parameters (offline)
-  effects run [flags] EFFECT_ID    run an effect on one light
-
-Common flags (before positional arguments):
-  --discover-for 3s   discovery window; inventory is not a state-readiness guarantee
-  --timeout 3s        timeout for each ping or snapshot capture
-  --target VALUE      exact label or 12-digit serial; no implicit all-device target
-  --verbose           controller diagnostic logging to stderr
-Ping: --count 5
-Snapshot: --fresh
-Effects run: --config FILE --step 100ms --duration 0s --restore=true
-  Config is an effects.Config JSON object. Duration zero runs until Ctrl+C.
-  Effects preserve power; restoration uses a fresh snapshot and a separate timeout.
-Dry-run sends no control messages, but discovery still uses LAN traffic.
-`
 
 type backend interface {
 	Close() error
@@ -61,7 +36,12 @@ type factory func(bool, io.Writer) (backend, error)
 // Keep the library's rich device representation but make serials copyable.
 type deviceView struct {
 	device.Device
-	Serial string
+	Serial    string
+	ZoneCount *int
+}
+
+func viewDevice(d device.Device) deviceView {
+	return deviceView{Device: d, Serial: d.Serial.String(), ZoneCount: zoneCount(d)}
 }
 
 type packetView struct {
@@ -86,62 +66,31 @@ func Run(ctx context.Context, args []string, out, diagnostic io.Writer) error {
 	})
 }
 
-func run(ctx context.Context, args []string, out, diagnostic io.Writer, create factory) error {
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		_, err := io.WriteString(out, help)
-		return err
+func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnostic io.Writer, create factory) error {
+	discovery, timeout := cmd.Duration("discover-for"), cmd.Duration("timeout")
+	target, verbose := cmd.String("target"), cmd.Bool("verbose")
+	count, dry, fresh, restore := cmd.Int("count"), cmd.Bool("dry-run"), cmd.Bool("fresh"), cmd.Bool("restore")
+	step, duration, configPath := cmd.Duration("step"), cmd.Duration("duration"), cmd.String("config")
+	format := cmd.String("output")
+	if format != "text" && format != "json" {
+		return errors.New("--output must be text or json")
 	}
-	name := args[0]
-	args = args[1:]
-	if name == "effects" {
-		if len(args) == 0 {
-			return errors.New("expected effects list or effects run")
-		}
-		name += " " + args[0]
-		args = args[1:]
-	}
-	switch name {
-	case "devices", "inspect", "ping", "watch", "command", "snapshot", "effects list", "effects run":
-	default:
-		return fmt.Errorf("unknown command %q; use lifxlan help", name)
-	}
-	f := flag.NewFlagSet(name, flag.ContinueOnError)
-	f.SetOutput(diagnostic)
-	discovery := f.Duration("discover-for", 3*time.Second, "discovery window")
-	timeout := f.Duration("timeout", 3*time.Second, "operation timeout")
-	target := f.String("target", "", "exact label or serial")
-	verbose := f.Bool("verbose", false, "controller logging")
-	var count int
-	var dry, fresh, restore bool
-	var step, duration time.Duration
-	var configPath string
-	switch name {
-	case "ping":
-		f.IntVar(&count, "count", 5, "sequential samples")
-	case "command":
-		f.BoolVar(&dry, "dry-run", false, "print without sending control messages")
-	case "snapshot":
-		f.BoolVar(&fresh, "fresh", false, "require observations after capture starts")
-	case "effects run":
-		f.StringVar(&configPath, "config", "", "effect config JSON file")
-		f.DurationVar(&step, "step", 100*time.Millisecond, "frame interval")
-		f.DurationVar(&duration, "duration", 0, "run duration; zero until interrupted")
-		f.BoolVar(&restore, "restore", true, "restore fresh captured state on exit")
-	}
-	if err := f.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			_, err = io.WriteString(out, help)
-		}
-		return err
-	}
-	if *discovery <= 0 || *timeout <= 0 {
+	if discovery <= 0 || timeout <= 0 {
 		return errors.New("discovery window and timeout must be positive")
 	}
+	if name == "devices" {
+		if cmd.Duration("interval") <= 0 {
+			return errors.New("--interval must be positive")
+		}
+		if cmd.IsSet("interval") && !cmd.Bool("watch") {
+			return errors.New("--interval requires --watch")
+		}
+	}
 	if name == "command" || name == "effects run" {
-		if f.NArg() != 1 {
+		if cmd.Args().Len() != 1 {
 			return fmt.Errorf("%s requires exactly one argument; put flags before it", name)
 		}
-	} else if f.NArg() != 0 {
+	} else if cmd.Args().Len() != 0 {
 		return errors.New("unexpected arguments; put flags before positional arguments")
 	}
 	if name == "ping" && count <= 0 {
@@ -151,11 +100,14 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 		return errors.New("step must be at least 20ms and duration nonnegative")
 	}
 	if name == "inspect" || name == "ping" || name == "snapshot" || name == "effects run" {
-		if *target == "" {
+		if target == "" {
 			return errors.New("an explicit --target label or serial is required")
 		}
 	}
 	if name == "effects list" {
+		if format == "text" {
+			return printEffects(out, effects.Definitions())
+		}
 		var defs []any
 		for _, d := range effects.Definitions() {
 			defs = append(defs, struct {
@@ -169,7 +121,7 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 	}
 	config := effects.Config{}
 	if name == "effects run" {
-		config.ID = effects.EffectID(f.Arg(0))
+		config.ID = effects.EffectID(cmd.Args().Get(0))
 		if configPath != "" {
 			file, err := os.Open(configPath)
 			if err != nil {
@@ -185,7 +137,7 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 			if err := dec.Decode(&extra); err != io.EOF {
 				return errors.New("effect config must contain exactly one JSON object")
 			}
-			if config.ID != effects.EffectID(f.Arg(0)) {
+			if config.ID != effects.EffectID(cmd.Args().Get(0)) {
 				return errors.New("config ID must match the effect argument")
 			}
 		}
@@ -196,7 +148,7 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	c, err := create(*verbose, diagnostic)
+	c, err := create(verbose, diagnostic)
 	if err != nil {
 		return err
 	}
@@ -212,46 +164,63 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 				if !ok {
 					return nil
 				}
-				if err := enc.Encode(event); err != nil {
+				var err error
+				if format == "json" {
+					err = enc.Encode(event)
+				} else {
+					err = printEvent(out, event)
+				}
+				if err != nil {
 					return err
 				}
 			}
 		}
 	}
-	if err := wait(ctx, *discovery); err != nil {
+	if name == "devices" && cmd.Bool("watch") {
+		return watchDevices(ctx, c, out, format, cmd.Duration("interval"), terminalOutput(out))
+	}
+	animate := name == "devices" && format == "text" && !verbose && terminalOutput(out) && terminalOutput(diagnostic)
+	if err := waitForDiscovery(ctx, discovery, diagnostic, animate); err != nil {
 		return err
 	}
 	devices := c.GetDevices()
 	device.SortDevices(devices)
 	if name == "devices" {
+		if format == "text" {
+			return printDevices(out, devices)
+		}
 		views := make([]deviceView, len(devices))
 		for i, d := range devices {
-			views[i] = deviceView{Device: d, Serial: d.Serial.String()}
+			views[i] = viewDevice(d)
 		}
 		return writeJSON(out, views)
 	}
 	if name == "command" {
-		return executeCommand(ctx, c, devices, f.Arg(0), dry, out)
+		return executeCommand(ctx, c, devices, cmd.Args().Get(0), dry, out, format)
 	}
-	d, err := selectDevice(devices, *target)
+	d, err := selectDevice(devices, target)
 	if err != nil {
 		return err
 	}
 	switch name {
 	case "inspect":
+		if format == "text" {
+			return printInspect(out, d)
+		}
 		uptime, known := d.Uptime()
 		return writeJSON(out, struct {
 			Device      deviceView
 			Uptime      string
 			UptimeKnown bool
-		}{deviceView{Device: d, Serial: d.Serial.String()}, uptime.String(), known})
+		}{viewDevice(d), uptime.String(), known})
 	case "ping":
 		var failures []error
+		var samples []time.Duration
 		for i := 0; i < count; i++ {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			probe, cancel := context.WithTimeout(ctx, *timeout)
+			probe, cancel := context.WithTimeout(ctx, timeout)
 			rtt, err := c.Ping(probe, d.Serial)
 			cancel()
 			result := struct {
@@ -265,8 +234,22 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 				failures = append(failures, err)
 			} else {
 				result.RTT = rtt.String()
+				samples = append(samples, rtt)
 			}
-			if err := json.NewEncoder(out).Encode(result); err != nil {
+			var outputErr error
+			if format == "json" {
+				outputErr = json.NewEncoder(out).Encode(result)
+			} else if err != nil {
+				_, outputErr = fmt.Fprintf(out, "%s  sample %d: %v\n", d.Serial, i+1, err)
+			} else {
+				_, outputErr = fmt.Fprintf(out, "%s  sample %d: %s\n", d.Serial, i+1, rtt)
+			}
+			if outputErr != nil {
+				return outputErr
+			}
+		}
+		if format == "text" {
+			if err := printPingSummary(out, count, samples); err != nil {
 				return err
 			}
 		}
@@ -275,13 +258,18 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 		if d.Type != device.DeviceTypeLight {
 			return errors.New("snapshot target must be a light")
 		}
-		snapshot, err := c.CaptureStateSnapshot(ctx, []device.Serial{d.Serial}, controller.SnapshotOptions{Timeout: *timeout, RequireFresh: fresh})
+		snapshot, err := c.CaptureStateSnapshot(ctx, []device.Serial{d.Serial}, controller.SnapshotOptions{Timeout: timeout, RequireFresh: fresh})
 		if err != nil {
 			return err
 		}
 		return writeJSON(out, snapshot)
 	case "effects run":
-		return runEffect(ctx, c, d, config, step, duration, *timeout, restore)
+		if format == "text" {
+			if _, err := fmt.Fprintf(out, "Running %s on %s (%s); power preserved, restore=%t. Ctrl+C to stop.\n", config.ID, safeText(d.Label), d.Serial, restore); err != nil {
+				return err
+			}
+		}
+		return runEffect(ctx, c, d, config, step, duration, timeout, restore)
 	}
 	return nil
 }
@@ -308,7 +296,7 @@ func selectDevice(devices []device.Device, target string) (device.Device, error)
 	return matches[0], nil
 }
 
-func executeCommand(ctx context.Context, c backend, devices []device.Device, text string, dry bool, out io.Writer) error {
+func executeCommand(ctx context.Context, c backend, devices []device.Device, text string, dry bool, out io.Writer, format string) error {
 	commands := command.NewCommandParser(devices).Parse(text)
 	if len(commands) == 0 {
 		return errors.New("command produced no messages or targets")
@@ -323,8 +311,14 @@ func executeCommand(ctx context.Context, c backend, devices []device.Device, tex
 			plan[i].Messages = append(plan[i].Messages, packetView{Type: msg.Type(), Name: fmt.Sprintf("%T", msg.Payload), Payload: msg.Payload})
 		}
 	}
-	if err := writeJSON(out, plan); err != nil {
-		return err
+	var outputErr error
+	if format == "json" {
+		outputErr = writeJSON(out, plan)
+	} else {
+		outputErr = printPlan(out, plan, devices, dry)
+	}
+	if outputErr != nil {
+		return outputErr
 	}
 	if dry {
 		return nil

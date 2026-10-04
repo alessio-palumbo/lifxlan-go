@@ -54,7 +54,8 @@ go get github.com/alessio-palumbo/lifxlan-go
 ## Usage
 
 For direct troubleshooting without building another application, run
-`go run ./cmd/lifxlan help`. The CLI supports device inspection, ping, event
+`go run ./cmd/lifxlan help`. Human-readable output is the default; use
+`--output json` for automation and full diagnostic data. The CLI supports device inspection, ping, event
 streaming, command dry-runs, complete state capture, and live effects with
 restoration on exit. See the [CLI guide](docs/cli.md) for examples and safety
 behaviour. The `color_cycle` and `breathe` presets work on single-zone bulbs
