@@ -165,3 +165,55 @@ capture/restore scenes, or make a multi-device application atomic. Callers
 should compile and validate every target's packets before control writes;
 successful sends do not acknowledge application and partial failures can leave
 a partially applied theme.
+
+### Deterministic application variations
+
+Runtime `PlanOptions` can vary an application without editing or reordering the
+saved theme palette:
+
+```go
+opts := themes.PlanOptions{
+    Variation: 2,
+    Reverse: false,
+    Seed: 42,
+    MatrixLayout: themes.MatrixSpatial,
+}
+plan, err := theme.PlanWithOptions(selected, transition, opts)
+```
+
+- `Variation` is a uint64 palette offset. It wraps across the existing stop order
+  (base, accents, backgrounds). Successive values select successive colours on
+  a single-zone light; groups distribute the offset palette in stable serial
+  order among single-zone targets. Other light types do not consume their slots.
+- `Reverse` reverses the offset palette. On gradients this reverses traversal,
+  including two-colour gradients; it also affects stepped/solid assignments.
+  Palette offset changes the stop ordering, not individual pixel randomness;
+  gradients still interpolate smoothly using the shortest hue path.
+- `MatrixLayout` is empty/`MatrixThemeLayout` by default, retaining the saved
+  layout and axis. `MatrixSpatial` overrides them for matrices only. It samples
+  the palette through a fixed 3×3 scalar field with smooth interpolation,
+  producing coherent two-dimensional colour regions. This is not independent
+  random colour selection per pixel. Strips and single-zone lights retain their
+  usual layouts.
+- `Seed` controls only the spatial field. Zero is a valid deterministic seed,
+  not a request for randomness. Seed, full variation value, and device serial
+  determine the field, independently of target input order and unrelated
+  targets. Palette ordering wraps; spatial patterns do not necessarily repeat
+  after one palette cycle.
+
+The spatial field spans the existing logical device surface across matrix
+chains; it does not restart per tile or model physical room placement. Existing
+surface metadata, irregular row offsets, hidden-cell blanking, orientation and
+packet adapters retain their responsibilities. A one-colour palette remains
+uniform; degenerate dimensions remain valid.
+
+Zero variation options retain existing output. Brightness preservation composes
+with every variation: the planner replaces brightness from the corresponding
+initial cells after generating the varied colours, retaining black cells and
+relative brightness. White-only adaptation and Kelvin clamping still apply.
+
+No counter, hidden randomness, network calls or mutable package state is introduced.
+The caller supplies variation/seed values and uses the same options, targets,
+metadata and initial frames for preview and application. Changing target
+membership can still change serial-based colour assignments. These options are
+currently library-only; CLI defaults and theme file definitions are unchanged.

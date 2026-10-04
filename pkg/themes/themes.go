@@ -66,6 +66,14 @@ const (
 
 // PlanOptions is runtime planning input, not part of a persisted Theme.
 type PlanOptions struct {
+	// Variation advances the palette start by this many colors, wrapping.
+	Variation uint64
+	// Reverse reverses the palette after applying the variation offset.
+	Reverse bool
+	// Seed controls only the optional spatial matrix field; zero is deterministic.
+	Seed uint64
+	// Empty or MatrixThemeLayout retains the Theme's layout and axis.
+	MatrixLayout MatrixLayout
 	// Empty means PaletteBrightness.
 	Brightness BrightnessPolicy
 	// PreserveBrightness requires one complete observed logical frame per target,
@@ -109,11 +117,17 @@ func (t Theme) Plan(devices []device.Device, duration time.Duration) ([]Applicat
 	return t.PlanWithOptions(devices, duration, PlanOptions{})
 }
 
-// PlanWithOptions optionally preserves each logical cell's original brightness.
+// PlanWithOptions applies deterministic runtime variations and optionally
+// preserves each logical cell's original brightness.
 // It never queries devices, changes power, or stops effects. Initial frames are
 // not resampled; their dimensions and color counts must match exactly. Only
 // their brightness is used, and must be finite and within 0..100.
 func (t Theme) PlanWithOptions(devices []device.Device, duration time.Duration, opts PlanOptions) ([]Application, error) {
+	switch opts.MatrixLayout {
+	case "", MatrixThemeLayout, MatrixSpatial:
+	default:
+		return nil, fmt.Errorf("unknown matrix layout %q", opts.MatrixLayout)
+	}
 	switch opts.Brightness {
 	case "", PaletteBrightness:
 		if opts.InitialFrames != nil {
@@ -190,7 +204,7 @@ func (t Theme) PlanWithOptions(devices []device.Device, duration time.Duration, 
 	if opts.Brightness == PreserveBrightness && len(opts.InitialFrames) != len(sorted) {
 		return nil, fmt.Errorf("initial frames must contain only selected targets")
 	}
-	colors := t.colors()
+	colors := variationColors(t.colors(), opts.Variation, opts.Reverse)
 	plan := make([]Application, 0, len(sorted))
 	singleIndex := 0
 	for i, d := range sorted {
@@ -201,7 +215,9 @@ func (t Theme) PlanWithOptions(devices []device.Device, duration time.Duration, 
 			singleIndex++
 		}
 		frame := effects.NewFrame(caps.Width, caps.Height, duration, colors[assigned%len(colors)])
-		if d.LightType != device.LightTypeSingleZone && t.Layout != Solid {
+		if d.LightType == device.LightTypeMatrix && opts.MatrixLayout == MatrixSpatial {
+			fillSpatialFrame(&frame, colors, d.Serial, opts.Seed, opts.Variation)
+		} else if d.LightType != device.LightTypeSingleZone && t.Layout != Solid {
 			span := caps.Width
 			if t.Axis == Vertical {
 				span = caps.Height
