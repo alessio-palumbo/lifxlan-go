@@ -105,13 +105,17 @@ func (b *Breathe) Next(dt time.Duration) (Frame, bool) {
 
 // FrameAtPhase samples a pulse, starting at minimum brightness.
 func (b *Breathe) FrameAtPhase(phase float64, duration time.Duration) Frame {
-	factor := (1 - math.Cos(2*math.Pi*temporalPhase(phase))) / 2
+	factor := breatheEnvelope(phase)
 	color := WithBrightness(b.cfg.Color, b.cfg.MinBrightness+(b.cfg.MaxBrightness-b.cfg.MinBrightness)*factor)
 	return fillFrame(b.cfg.Capabilities, color, duration)
 }
 
 // Reset returns to minimum brightness.
 func (b *Breathe) Reset() { b.elapsed = 0 }
+
+func breatheEnvelope(phase float64) float64 {
+	return (1 - math.Cos(2*math.Pi*temporalPhase(phase))) / 2
+}
 
 func temporalPhase(phase float64) float64 {
 	if math.IsNaN(phase) || math.IsInf(phase, 0) {

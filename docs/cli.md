@@ -177,6 +177,11 @@ Both fill the whole logical surface uniformly, so they also support strips and
 matrices. Both are deterministic and implement `PhaseEffect` for offline
 sampling. Registry configs reject invalid timing and brightness bounds.
 
+Library clients can use `effects.NewPatternBreathe` to pulse an initial pattern
+without replacing its colours. This direct constructor is not exposed as a CLI
+preset; see the [pattern Breathe guide](pattern-breathe.md). The CLI's existing
+uniform `breathe` semantics are unchanged.
+
 An effect command captures fresh, complete state before starting and uses the
 updated capabilities to construct its renderer. Capture failure aborts the
 command without changing colors. The effect does not turn a light on; a powered-

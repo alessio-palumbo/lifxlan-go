@@ -60,6 +60,8 @@ streaming, command dry-runs, complete state capture, and live effects with
 restoration on exit. See the [CLI guide](docs/cli.md) for examples and safety
 behaviour. The `color_cycle` and `breathe` presets work on single-zone bulbs
 as well as multizone and matrix lights through the existing effect runner.
+Library clients can also preserve existing zone/pixel colours with the direct
+`effects.NewPatternBreathe` constructor; see the [pattern Breathe guide](docs/pattern-breathe.md).
 
 Static palettes can be previewed and applied with `lifxlan themes apply`, using
 the new deterministic `pkg/themes` planner. Themes preserve power and support

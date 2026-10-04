@@ -14,6 +14,31 @@ type examplePulse struct {
 	brightness float64
 }
 
+func ExampleNewPatternBreathe() {
+	initial := Frame{Width: 2, Height: 1, Colors: []Color{
+		{Hue: 30, Saturation: 80, Brightness: 80, Kelvin: 3500},
+		{Hue: 220, Saturation: 60, Brightness: 40, Kelvin: 5000},
+	}}
+	effect, err := NewPatternBreathe(PatternBreatheConfig{
+		InitialFrame:  initial,
+		Period:        4 * time.Second,
+		MinMultiplier: 0.1,
+		MaxMultiplier: 1,
+	})
+	if err != nil {
+		panic(err)
+	}
+	minimum := effect.FrameAtPhase(0, 100*time.Millisecond)
+	maximum := effect.FrameAtPhase(0.5, 100*time.Millisecond)
+	fmt.Println(minimum.Colors[0].Brightness, minimum.Colors[1].Brightness)
+	fmt.Println(maximum.Colors[0].Brightness, maximum.Colors[1].Brightness)
+	fmt.Println(initial.Colors[0].Brightness, initial.Colors[1].Brightness)
+	// Output:
+	// 8 4
+	// 80 40
+	// 80 40
+}
+
 func (e *examplePulse) Next(dt time.Duration) (Frame, bool) {
 	frame := NewFrame(max(e.caps.Width, 1), max(e.caps.Height, 1), dt, BlankColor())
 	color := WithBrightness(e.color, e.brightness)
