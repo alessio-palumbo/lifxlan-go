@@ -434,6 +434,14 @@ func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) (updated b
 		d.MatrixProperties.ChainOrientations[i] = NearestOrientation(d.ProductID, a.X, a.Y, a.Z)
 	}
 
+	// A geometry change invalidates the old buffers, even if chain length is
+	// unchanged. Reusing them could preserve incomplete or incorrectly sized state.
+	for _, colors := range d.MatrixProperties.ChainZones {
+		if len(colors) != d.MatrixProperties.NZones {
+			d.MatrixProperties.ChainZones = nil
+			break
+		}
+	}
 	cl := len(d.MatrixProperties.ChainZones)
 	switch {
 	case cl == 0:
@@ -454,11 +462,15 @@ func (d *Device) SetMatrixProperties(p *packets.TileStateDeviceChain) (updated b
 
 // SetMatrixState sets the colors of the matrix at the given index.
 func (d *Device) SetMatrixState(p *packets.TileState64) (updated bool) {
+	if p.Rect.FbIndex != 0 || p.Rect.X != 0 ||
+		p.Rect.Width != 0 && int(p.Rect.Width) != d.MatrixProperties.Width {
+		return
+	}
 	if int(p.TileIndex) > len(d.MatrixProperties.ChainZones)-1 {
 		return
 	}
-	zoneIndex := p.Rect.Y * uint8(d.MatrixProperties.Width)
-	if int(zoneIndex) >= len(d.MatrixProperties.ChainZones[p.TileIndex]) {
+	zoneIndex := int(p.Rect.Y) * d.MatrixProperties.Width
+	if zoneIndex >= len(d.MatrixProperties.ChainZones[p.TileIndex]) {
 		return
 	}
 
@@ -480,7 +492,7 @@ func (d *Device) SetMatrixState(p *packets.TileState64) (updated bool) {
 }
 
 func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZone) (updated bool) {
-	if p.Count == 0 {
+	if p.Count == 0 || int(p.ColorsCount) > len(p.Colors) {
 		return
 	}
 	if d.ProductID != 0 && !d.RegistryKnown && d.LightType != LightTypeMultiZone {
@@ -499,7 +511,7 @@ func (d *Device) SetMultizoneProperties(p *packets.MultiZoneExtendedStateMultiZo
 	}
 
 	destination := d.MultizoneProperties.Zones[startIndex:]
-	colors := p.Colors[:min(len(destination), len(p.Colors))]
+	colors := p.Colors[:min(len(destination), len(p.Colors), int(p.ColorsCount))]
 	if slices.Equal(destination[:len(colors)], colors) {
 		return updated
 	}

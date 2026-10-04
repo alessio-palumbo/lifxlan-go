@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
@@ -27,6 +28,11 @@ type SnapshotOptions struct {
 	// PollInterval is how often missing restorable state is requested. Zero uses
 	// the default poll interval.
 	PollInterval time.Duration
+	// RequireFresh waits for light state and all zone/pixel ranges to be observed
+	// after capture starts. By default, complete previously observed state is
+	// accepted. Observations are not correlated to individual requests and do
+	// not form an atomic snapshot across packets or devices.
+	RequireFresh bool
 }
 
 // RestoreOptions configures state snapshot restore.
@@ -41,7 +47,9 @@ type RestoreOptions struct {
 	RetryDelay time.Duration
 }
 
-// CaptureStateSnapshot requests and captures restorable cached state for serials.
+// CaptureStateSnapshot requests and captures complete observed light state for
+// serials. It never treats allocated zone buffers as received state. Powered-off
+// matrices require the same pixel coverage as powered-on matrices.
 //
 // Target selection is intentionally left to callers. Use device selector helpers,
 // Controller.GetDevices, or application-specific state to choose serials.
@@ -55,28 +63,40 @@ func (c *Controller) CaptureStateSnapshot(ctx context.Context, serials []device.
 
 	opts = normalizeSnapshotOptions(opts)
 	selected := uniqueSerials(serials)
-	selectedSet := serialSet(selected)
 	deadline := time.NewTimer(opts.Timeout)
 	defer deadline.Stop()
+	checks := time.NewTicker(min(opts.PollInterval, 10*time.Millisecond))
+	defer checks.Stop()
+	baselines := make(map[device.Serial]snapshotBaseline, len(selected))
+	var nextRequest time.Time
 
 	for {
-		devices := c.devicesForSnapshot(selected, selectedSet)
-		if err := c.requestRestorableState(devices); err != nil {
+		if err := ctx.Err(); err != nil {
 			return device.StateSnapshot{}, err
 		}
-		if snapshotReady(selected, devices) {
-			return device.NewStateSnapshot(devices), nil
+		requestDue := !time.Now().Before(nextRequest)
+		snapshot, missing, requests := c.snapshotProgress(selected, baselines, opts.RequireFresh, requestDue)
+		for _, request := range requests {
+			if err := ctx.Err(); err != nil {
+				return device.StateSnapshot{}, err
+			}
+			if err := request.session.send(request.messages...); err != nil {
+				return device.StateSnapshot{}, fmt.Errorf("request restorable state from %s: %w", request.serial, err)
+			}
+		}
+		if len(missing) == 0 {
+			return snapshot, nil
+		}
+		if requestDue {
+			nextRequest = time.Now().Add(opts.PollInterval)
 		}
 
-		poll := time.NewTimer(opts.PollInterval)
 		select {
 		case <-ctx.Done():
-			poll.Stop()
 			return device.StateSnapshot{}, ctx.Err()
 		case <-deadline.C:
-			poll.Stop()
-			return device.StateSnapshot{}, fmt.Errorf("timed out capturing restorable state")
-		case <-poll.C:
+			return device.StateSnapshot{}, fmt.Errorf("timed out capturing restorable state: %s", strings.Join(missing, "; "))
+		case <-checks.C:
 		}
 	}
 }
@@ -232,51 +252,68 @@ func uniqueSerials(serials []device.Serial) []device.Serial {
 	return out
 }
 
-func serialSet(serials []device.Serial) map[device.Serial]bool {
-	selected := make(map[device.Serial]bool, len(serials))
-	for _, serial := range serials {
-		selected[serial] = true
-	}
-	return selected
+type snapshotBaseline struct {
+	session *deviceSession
+	stamp   uint64
 }
 
-func (c *Controller) devicesForSnapshot(selected []device.Serial, selectedSet map[device.Serial]bool) []device.Device {
-	devices := c.GetDevices()
-	bySerial := make(map[device.Serial]device.Device, len(selectedSet))
-	for _, d := range devices {
-		if selectedSet[d.Serial] {
-			bySerial[d.Serial] = d
-		}
-	}
+type snapshotRequest struct {
+	serial   device.Serial
+	session  *deviceSession
+	messages []*protocol.Message
+}
 
-	out := make([]device.Device, 0, len(selected))
+// snapshotProgress checks receipt metadata and copies colors under the same
+// session lock. Session identity scopes freshness baselines to reconnects.
+func (c *Controller) snapshotProgress(selected []device.Serial, baselines map[device.Serial]snapshotBaseline, fresh, requestDue bool) (device.StateSnapshot, []string, []snapshotRequest) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var missing []string
+	var requests []snapshotRequest
 	for _, serial := range selected {
-		if d, ok := bySerial[serial]; ok {
-			out = append(out, d)
+		session, ok := c.sessions[serial]
+		if !ok {
+			missing = append(missing, fmt.Sprintf("%s: device unavailable", serial))
+			continue
 		}
-	}
-	return out
-}
-
-func (c *Controller) requestRestorableState(devices []device.Device) error {
-	for _, d := range devices {
-		for _, msg := range device.RestorableStateMessages(d) {
-			if err := c.Send(d.Serial, msg); err != nil {
-				return fmt.Errorf("request restorable state from %s: %w", d.Serial, err)
+		session.mu.RLock()
+		baseline, known := baselines[serial]
+		first := !known || baseline.session != session
+		if first {
+			baseline = snapshotBaseline{session: session}
+			if fresh {
+				baseline.stamp = session.observations.generation
 			}
+			baselines[serial] = baseline
 		}
-	}
-	return nil
-}
-
-func snapshotReady(selected []device.Serial, devices []device.Device) bool {
-	if len(devices) != len(selected) {
-		return false
-	}
-	for _, d := range devices {
-		if !device.RestorableStateReady(d) {
-			return false
+		reason := session.observations.missing(session.device, baseline.stamp)
+		if reason != "" {
+			missing = append(missing, fmt.Sprintf("%s: %s", serial, reason))
 		}
+		if first || requestDue && reason != "" {
+			msgs := device.RestorableStateMessages(*session.device)
+			if !session.observations.product {
+				msgs = append(msgs, protocol.NewMessage(&packets.DeviceGetVersion{}))
+			}
+			requests = append(requests, snapshotRequest{serial: serial, session: session, messages: msgs})
+		}
+		session.mu.RUnlock()
 	}
-	return true
+	if len(missing) != 0 {
+		return device.StateSnapshot{}, missing, requests
+	}
+	// Avoid repeatedly cloning ready devices while another target is pending.
+	// Recheck under the lock used for copying in case geometry changed meanwhile.
+	snapshot := device.StateSnapshot{Devices: make([]device.DeviceStateSnapshot, 0, len(selected))}
+	for _, serial := range selected {
+		session := c.sessions[serial]
+		session.mu.RLock()
+		if reason := session.observations.missing(session.device, baselines[serial].stamp); reason != "" {
+			session.mu.RUnlock()
+			return device.StateSnapshot{}, []string{fmt.Sprintf("%s: %s", serial, reason)}, requests
+		}
+		snapshot.Devices = append(snapshot.Devices, device.NewDeviceStateSnapshot(*session.device))
+		session.mu.RUnlock()
+	}
+	return snapshot, missing, requests
 }

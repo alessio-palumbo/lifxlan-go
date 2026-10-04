@@ -42,6 +42,9 @@ type deviceSession struct {
 	// mu protects read/write access of DeviceState
 	mu     sync.RWMutex
 	device *device.Device
+	// observations records receipt independently of value-change events.
+	// It is protected by mu alongside device state.
+	observations snapshotObservations
 
 	// sendMu keeps messages in a multi-message operation contiguous with one
 	// another, including when state polling and callers send concurrently.
@@ -350,6 +353,7 @@ func (s *deviceSession) recvloop() {
 					"payload", msg.Payload.PayloadType(),
 				)
 			}
+			s.observations.observe(s.device, msg.Payload)
 			s.device.LastSeenAt = time.Now()
 			s.mu.Unlock()
 			if changes != 0 && s.onUpdate != nil {

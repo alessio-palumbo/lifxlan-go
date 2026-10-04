@@ -21,7 +21,9 @@ type DeviceStateSnapshot struct {
 	MatrixWidth  int
 }
 
-// NewStateSnapshot returns a snapshot of restorable state from devices.
+// NewStateSnapshot copies caller-provided device values. It does not validate
+// whether those values were received from devices. Controller.CaptureStateSnapshot
+// performs observation validation for controller-managed devices.
 func NewStateSnapshot(devices []Device) StateSnapshot {
 	snapshot := StateSnapshot{Devices: make([]DeviceStateSnapshot, 0, len(devices))}
 	for _, d := range devices {
@@ -30,7 +32,8 @@ func NewStateSnapshot(devices []Device) StateSnapshot {
 	return snapshot
 }
 
-// NewDeviceStateSnapshot returns a snapshot of restorable state from d.
+// NewDeviceStateSnapshot copies restorable values from d without validating
+// observation completeness.
 func NewDeviceStateSnapshot(d Device) DeviceStateSnapshot {
 	return DeviceStateSnapshot{
 		Serial:       d.Serial,
@@ -56,16 +59,18 @@ func RestorableStateMessages(d Device) []*protocol.Message {
 	return d.HighFreqStateMessages()
 }
 
-// RestorableStateReady reports whether d has enough cached state to restore.
+// RestorableStateReady checks the shape of caller-provided state. It cannot
+// distinguish allocated buffers from received state; controller capture uses
+// additional private receipt metadata.
 func RestorableStateReady(d Device) bool {
-	if d.LightType == LightTypeMatrix && d.PoweredOn {
+	if d.LightType == LightTypeMatrix {
 		return MatrixChainStateReady(d)
 	}
 	return true
 }
 
-// MatrixChainStateReady reports whether d has cached colors for every known
-// matrix chain.
+// MatrixChainStateReady checks whether buffers exist for every known matrix
+// chain. Buffer presence alone does not establish observation completeness.
 func MatrixChainStateReady(d Device) bool {
 	length := matrixSnapshotChainLength(d)
 	if length < 1 || len(d.MatrixProperties.ChainZones) < length {

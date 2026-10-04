@@ -26,6 +26,7 @@ func TestCaptureStateSnapshotCapturesReadyDevices(t *testing.T) {
 			Zones: []packets.LightHsbk{zoneColor},
 		},
 	})
+	seedSnapshotObservations(ctrl.sessions[serial])
 
 	snapshot, err := ctrl.CaptureStateSnapshot(context.Background(), []device.Serial{serial}, SnapshotOptions{
 		Timeout:      50 * time.Millisecond,
@@ -57,6 +58,8 @@ func TestCaptureStateSnapshotPreservesSerialOrderAndDeDuplicates(t *testing.T) {
 		device.Device{Serial: serial0, Address: snapshotAddr(1), Label: "A", Color: device.Color{Hue: 10}},
 		device.Device{Serial: serial1, Address: snapshotAddr(2), Label: "B", Color: device.Color{Hue: 20}},
 	)
+	seedSnapshotObservations(ctrl.sessions[serial0])
+	seedSnapshotObservations(ctrl.sessions[serial1])
 
 	snapshot, err := ctrl.CaptureStateSnapshot(context.Background(), []device.Serial{serial1, serial0, serial1}, SnapshotOptions{
 		Timeout:      50 * time.Millisecond,
@@ -89,6 +92,7 @@ func TestCaptureStateSnapshotWaitsForPoweredOnMatrixState(t *testing.T) {
 			StatePackets: 1,
 		},
 	})
+	seedSnapshotObservations(ctrl.sessions[serial])
 
 	done := make(chan error, 1)
 	go func() {
@@ -105,7 +109,10 @@ func TestCaptureStateSnapshotWaitsForPoweredOnMatrixState(t *testing.T) {
 	assertSentPayload(t, mockClient, uint16(packets.PayloadTypeTileGet64))
 	session := ctrl.sessions[serial]
 	session.mu.Lock()
-	session.device.MatrixProperties.ChainZones = [][]packets.LightHsbk{{{Hue: 1, Saturation: 2, Brightness: 3, Kelvin: 3500}}}
+	session.device.MatrixProperties.ChainZones = [][]packets.LightHsbk{make([]packets.LightHsbk, 64)}
+	p := &packets.TileState64{Rect: packets.TileBufferRect{Width: 8}, Colors: [64]packets.LightHsbk{{Hue: 1, Saturation: 2, Brightness: 3, Kelvin: 3500}}}
+	session.device.SetMatrixState(p)
+	session.observations.observe(session.device, p)
 	session.mu.Unlock()
 
 	select {
@@ -127,6 +134,7 @@ func TestCaptureStateSnapshotRequestsMatrixChainBeforePixels(t *testing.T) {
 		PoweredOn: true,
 		LightType: device.LightTypeMatrix,
 	})
+	seedSnapshotObservations(ctrl.sessions[serial])
 
 	_, err := ctrl.CaptureStateSnapshot(context.Background(), []device.Serial{serial}, SnapshotOptions{
 		Timeout:      2 * time.Millisecond,
@@ -417,6 +425,21 @@ func newSnapshotController(mockClient *mockClient, devices ...device.Device) *Co
 		ctrl.sessions[d.Serial] = session
 	}
 	return ctrl
+}
+
+// Seed receipts explicitly for tests that exercise already observed cache state.
+func seedSnapshotObservations(session *deviceSession) {
+	session.observations.observe(session.device, &packets.DeviceStateVersion{Product: 1})
+	session.observations.observe(session.device, &packets.LightState{})
+	switch session.device.LightType {
+	case device.LightTypeMultiZone:
+		session.observations.observe(session.device, &packets.MultiZoneExtendedStateMultiZone{
+			Count:       uint16(len(session.device.MultizoneProperties.Zones)),
+			ColorsCount: uint8(len(session.device.MultizoneProperties.Zones)),
+		})
+	case device.LightTypeMatrix:
+		session.observations.observe(session.device, &packets.TileStateDeviceChain{TileDevicesCount: 1})
+	}
 }
 
 func snapshotSerial(value byte) device.Serial {

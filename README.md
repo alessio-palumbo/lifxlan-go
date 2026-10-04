@@ -301,6 +301,19 @@ Snapshot capture requests the state needed for each light type: power and color
 for single-zone lights, zone colors for multizone lights, and matrix chain colors
 for matrix lights. Restore replays the matching protocol messages later.
 
+Capture requires observed product information, light state, and complete zone
+or pixel coverage. Allocated buffers are not evidence of received state, and
+valid black colors are preserved. Matrix pixels are required whether power is
+on or off. Complete previously observed cache state is accepted by default.
+Set `SnapshotOptions.RequireFresh` to wait for new light and zone/pixel
+observations after capture starts. Unchanged responses count as observations
+without emitting value-change subscription events. This is observation freshness,
+not request correlation or an atomic snapshot across packets and devices.
+Capture returns an error with the serial and missing state when it times out.
+
+The `device.NewStateSnapshot` and `device.NewDeviceStateSnapshot` helpers only
+copy caller-provided values; they do not validate observation completeness.
+
 The library handles the LIFX-specific state shape, while applications still own
 policy decisions such as when a snapshot is stale, how long to wait before
 starting an effect, and whether to retry restoration.

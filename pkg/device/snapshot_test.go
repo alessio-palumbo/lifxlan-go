@@ -114,7 +114,7 @@ func TestRestorableStateReadyRequiresPoweredOnMatrixBuffers(t *testing.T) {
 	}
 }
 
-func TestRestorableStateReadyIgnoresPoweredOffMatrixBuffers(t *testing.T) {
+func TestRestorableStateReadyRequiresPoweredOffMatrixBuffers(t *testing.T) {
 	d := Device{
 		Serial:    mustSerial(t, "001122334455"),
 		LightType: LightTypeMatrix,
@@ -122,8 +122,8 @@ func TestRestorableStateReadyIgnoresPoweredOffMatrixBuffers(t *testing.T) {
 	}
 	d.MatrixProperties.ChainLength = 1
 
-	if !RestorableStateReady(d) {
-		t.Fatal("powered-off matrix should not block snapshot readiness")
+	if RestorableStateReady(d) {
+		t.Fatal("powered-off matrix requires chain colors too")
 	}
 }
 
