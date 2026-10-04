@@ -29,7 +29,7 @@ func terminalOutput(out io.Writer) bool {
 }
 
 // Poll only the local cache. This does not change discovery or state polling.
-func watchDevices(ctx context.Context, c backend, out io.Writer, format string, interval time.Duration, inPlace bool) error {
+func watchDevices(ctx context.Context, c backend, out io.Writer, format string, interval time.Duration, inPlace bool, filters listFilters) error {
 	if interval <= 0 {
 		return fmt.Errorf("inventory refresh interval must be positive")
 	}
@@ -40,6 +40,7 @@ func watchDevices(ctx context.Context, c backend, out io.Writer, format string, 
 			return err
 		}
 		devices := c.GetDevices()
+		devices = filters.apply(devices)
 		device.SortDevices(devices)
 		if err := printInventory(out, devices, format, time.Now().UTC(), inPlace); err != nil {
 			return err
@@ -63,7 +64,7 @@ func printInventory(out io.Writer, devices []device.Device, format string, at ti
 	var frame bytes.Buffer
 	fmt.Fprintf(&frame, "%s  devices=%d  Ctrl+C to stop\n", at.Format(time.RFC3339), len(devices))
 	if len(devices) == 0 {
-		fmt.Fprintln(&frame, "Waiting for devices; discovery continues...")
+		fmt.Fprintln(&frame, "Waiting for devices matching this view; discovery continues...")
 	} else {
 		if err := printDevices(&frame, devices); err != nil {
 			return err

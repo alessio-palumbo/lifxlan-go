@@ -30,6 +30,8 @@ type fakeBackend struct {
 	pingCalls                       int
 	pingErrors                      []error
 	onGetDevices                    func() []device.Device
+	events                          []controller.DeviceEvent
+	subscriptions                   int
 }
 
 func (f *fakeBackend) Close() error { f.closed = true; return nil }
@@ -55,7 +57,11 @@ func (f *fakeBackend) Ping(context.Context, device.Serial) (time.Duration, error
 	return time.Millisecond, nil
 }
 func (f *fakeBackend) SubscribeDevices(context.Context, ...controller.SubscriptionOption) <-chan controller.DeviceEvent {
-	ch := make(chan controller.DeviceEvent)
+	f.subscriptions++
+	ch := make(chan controller.DeviceEvent, len(f.events))
+	for _, event := range f.events {
+		ch <- event
+	}
 	close(ch)
 	return ch
 }
@@ -82,7 +88,7 @@ func factoryFor(f *fakeBackend) factory {
 
 func TestOfflineAndInvalidCommandsDoNotOpenController(t *testing.T) {
 	for _, args := range [][]string{
-		{}, {"help"}, {"effects", "list"}, {"ping"}, {"ping", "--target", "Desk", "--count", "0"},
+		{}, {"help"}, {"effects", "list"}, {"devices", "ping"}, {"devices", "ping", "--target", "Desk", "--count", "0"},
 		{"effects", "run", "--target", "Desk", "--step", "1ms", "breathe"},
 		{"effects", "run", "--target", "Desk", "unknown"}, {"devices", "extra"}, {"unknown"},
 	} {
@@ -206,6 +212,9 @@ func TestSnapshotFreshAndInspect(t *testing.T) {
 	for _, name := range []string{"snapshot", "inspect", "ping"} {
 		f := &fakeBackend{devices: []device.Device{testLight()}}
 		args := []string{name, "--discover-for", "1ns", "--target", "Desk"}
+		if name != "snapshot" {
+			args = append([]string{"devices"}, args...)
+		}
 		if name == "snapshot" {
 			args = append(args, "--fresh")
 		}
@@ -263,8 +272,8 @@ func TestHumanOutputDefaults(t *testing.T) {
 		want string
 	}{
 		{[]string{"devices", "--discover-for", "1ns"}, "SERIAL"},
-		{[]string{"inspect", "--discover-for", "1ns", "--target", "Desk"}, "Estimated uptime"},
-		{[]string{"ping", "--discover-for", "1ns", "--target", "Desk", "--count", "2"}, "2 sent, 2 received, 0.0% loss"},
+		{[]string{"devices", "inspect", "--discover-for", "1ns", "--target", "Desk"}, "Estimated uptime"},
+		{[]string{"devices", "ping", "--discover-for", "1ns", "--target", "Desk", "--count", "2"}, "2 sent, 2 received, 0.0% loss"},
 		{[]string{"command", "--discover-for", "1ns", "--dry-run", "Desk blue"}, "Dry-run plan"},
 		{[]string{"effects", "list"}, "Defaults:"},
 	} {
@@ -314,7 +323,7 @@ func TestMixedPingLossAndJSONSamples(t *testing.T) {
 		failure := errors.New("timeout")
 		f := &fakeBackend{devices: []device.Device{testLight()}, pingErrors: []error{nil, failure, nil}}
 		var out bytes.Buffer
-		err := run(context.Background(), []string{"ping", "--target", "Desk", "--discover-for", "1ns", "--count", "3", "--output", format}, &out, io.Discard, factoryFor(f))
+		err := run(context.Background(), []string{"devices", "ping", "--target", "Desk", "--discover-for", "1ns", "--count", "3", "--output", format}, &out, io.Discard, factoryFor(f))
 		if !errors.Is(err, failure) || f.pingCalls != 3 {
 			t.Fatalf("err=%v calls=%d", err, f.pingCalls)
 		}

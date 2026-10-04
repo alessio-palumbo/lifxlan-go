@@ -201,16 +201,7 @@ func paramDefault(value any) string {
 }
 
 func printEvent(out io.Writer, event controller.DeviceEvent) error {
-	if event.Type == controller.DeviceEventSnapshotComplete {
-		_, err := fmt.Fprintf(out, "revision %-6d snapshot_complete  initial inventory received (state may still be incomplete)\n", event.Revision)
-		return err
-	}
-	if event.Type == controller.DeviceEventResyncRequired {
-		_, err := fmt.Fprintf(out, "revision %-6d resync_required    events dropped; use devices for the current inventory\n", event.Revision)
-		return err
-	}
-	_, err := fmt.Fprintf(out, "revision %-6d %-18s %s  %s  power=%s\n", event.Revision, event.Type.String(), event.Device.Serial, safeText(event.Device.Label), power(event.Device))
-	return err
+	return printEventAt(out, event, time.Now().UTC())
 }
 
 func printPlan(out io.Writer, plan []commandView, devices []device.Device, dry bool) error {

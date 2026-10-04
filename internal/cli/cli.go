@@ -85,6 +85,12 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 		if cmd.IsSet("interval") && !cmd.Bool("watch") {
 			return errors.New("--interval requires --watch")
 		}
+	} else if cmd.IsSet("watch") || cmd.IsSet("interval") || cmd.IsSet("filter") {
+		return errors.New("--watch, --interval, and --filter apply only to devices list")
+	}
+	filters, err := parseFilters(cmd.StringSlice("filter"))
+	if err != nil {
+		return err
 	}
 	if name == "command" || name == "effects run" {
 		if cmd.Args().Len() != 1 {
@@ -153,31 +159,11 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 		return err
 	}
 	defer c.Close()
-	if name == "watch" {
-		enc := json.NewEncoder(out)
-		events := c.SubscribeDevices(ctx)
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case event, ok := <-events:
-				if !ok {
-					return nil
-				}
-				var err error
-				if format == "json" {
-					err = enc.Encode(event)
-				} else {
-					err = printEvent(out, event)
-				}
-				if err != nil {
-					return err
-				}
-			}
-		}
+	if name == "stream" {
+		return streamDevices(ctx, c, out, format, target, discovery)
 	}
 	if name == "devices" && cmd.Bool("watch") {
-		return watchDevices(ctx, c, out, format, cmd.Duration("interval"), terminalOutput(out))
+		return watchDevices(ctx, c, out, format, cmd.Duration("interval"), terminalOutput(out), filters)
 	}
 	animate := name == "devices" && format == "text" && !verbose && terminalOutput(out) && terminalOutput(diagnostic)
 	if err := waitForDiscovery(ctx, discovery, diagnostic, animate); err != nil {
@@ -186,7 +172,12 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 	devices := c.GetDevices()
 	device.SortDevices(devices)
 	if name == "devices" {
+		devices = filters.apply(devices)
 		if format == "text" {
+			if len(filters) > 0 && len(devices) == 0 {
+				_, err := fmt.Fprintln(out, "No devices match the filters (metadata may still be pending).")
+				return err
+			}
 			return printDevices(out, devices)
 		}
 		views := make([]deviceView, len(devices))
