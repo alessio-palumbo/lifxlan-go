@@ -109,9 +109,13 @@ rather than dumping every pixel. Device-provided control characters are stripped
 from text output to prevent labels from controlling the terminal.
 
 The inventory columns are serial, IP, label, location, group, type, zones,
-product ID, firmware, power, Wi-Fi RSSI/SNR, and estimated uptime. The separate
-`ZONES` column includes every addressable matrix pixel across the chain: five
-64-zone tiles show `320`. Single-zone lights show `1`, switches `-`, and unknown
+product ID, product name, firmware, power, Wi-Fi RSSI/SNR, and estimated uptime.
+`PRODUCT` uses the registry name when available, omitting its leading `LIFX `;
+unknown names show `-`. JSON retains the full existing `RegistryName`.
+The separate `ZONES` column counts visible matrix cells across the chain,
+excluding hidden emitters and logical padding: candle PID 215 shows `27` rather
+than `30`; five 64-zone tiles still show `320`. Physical packet/buffer sizes are
+unchanged. Single-zone lights show `1`, switches `-`, and unknown
 counts `?`. JSON inventory and inspection include a numeric `ZoneCount`, or
 `null` for unknown/not-applicable counts (never a fabricated zero). Counts describe
 cached geometry/buffer sizes, not received color coverage. Uptime is estimated

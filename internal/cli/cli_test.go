@@ -399,13 +399,13 @@ func TestDeviceColumnOrderAndMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	want := []string{"SERIAL", "IP", "LABEL", "LOCATION", "GROUP", "TYPE", "ZONES", "PRODUCT_ID", "FIRMWARE", "POWER", "RSSI/SNR", "UPTIME"}
+	want := []string{"SERIAL", "IP", "LABEL", "LOCATION", "GROUP", "TYPE", "ZONES", "PRODUCT_ID", "PRODUCT", "FIRMWARE", "POWER", "RSSI/SNR", "UPTIME"}
 	got := strings.Fields(lines[0])
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("columns=%v", got)
 	}
 	row := strings.Fields(lines[1])
-	if len(row) != 12 || row[1] != "192.168.1.42" || row[3] != "Home" || row[4] != "Office" || row[6] != "1" || row[7] != "27" || row[8] != "3.90" || row[10] != "-42" || !strings.HasPrefix(row[11], "2h") {
+	if len(row) != 13 || row[1] != "192.168.1.42" || row[3] != "Home" || row[4] != "Office" || row[6] != "1" || row[7] != "27" || row[8] != "-" || row[9] != "3.90" || row[11] != "-42" || !strings.HasPrefix(row[12], "2h") {
 		t.Fatalf("row=%v", row)
 	}
 	if firmware(testLight()) != "-" || wifiSignal(testLight()) != "-" {

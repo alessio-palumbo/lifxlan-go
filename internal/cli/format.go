@@ -47,7 +47,7 @@ func hasLight(d device.Device) bool {
 	return d.Type == device.DeviceTypeLight || d.Type == device.DeviceTypeHybrid
 }
 
-// zoneCount describes cached geometry, not observed color coverage.
+// zoneCount describes visible cells in cached geometry, not color coverage.
 // nil means either unknown geometry or a non-light device.
 func zoneCount(d device.Device) *int {
 	if !hasLight(d) {
@@ -65,7 +65,18 @@ func zoneCount(d device.Device) *int {
 	case device.LightTypeMatrix:
 		m := d.MatrixProperties
 		if m.Width > 0 && m.Height > 0 && m.ChainLength > 0 {
-			count = m.Width * m.Height * m.ChainLength
+			// Rows exclude logical offsets/padding; HiddenCols describes physical
+			// cells without visible emitters. Do not alter packet/buffer geometry.
+			for _, chain := range device.SurfaceFromDevice(d).Matrix.Chains {
+				for _, row := range chain.Rows {
+					count += row.Cols
+					for _, col := range row.HiddenCols {
+						if col >= 0 && col < row.Cols {
+							count--
+						}
+					}
+				}
+			}
 		}
 	}
 	if count <= 0 {
@@ -109,6 +120,14 @@ func firmware(d device.Device) string {
 	return safeText(d.FirmwareVersion)
 }
 
+func productName(d device.Device) string {
+	name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(d.RegistryName), "LIFX "))
+	if name == "" {
+		return "-"
+	}
+	return safeText(name)
+}
+
 func wifiSignal(d device.Device) string {
 	// The controller also uses zero as its not-yet-observed sentinel.
 	if d.WifiRSSI == 0 {
@@ -123,13 +142,13 @@ func printDevices(out io.Writer, devices []device.Device) error {
 		return err
 	}
 	table := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(table, "SERIAL\tIP\tLABEL\tLOCATION\tGROUP\tTYPE\tZONES\tPRODUCT_ID\tFIRMWARE\tPOWER\tRSSI/SNR\tUPTIME")
+	fmt.Fprintln(table, "SERIAL\tIP\tLABEL\tLOCATION\tGROUP\tTYPE\tZONES\tPRODUCT_ID\tPRODUCT\tFIRMWARE\tPOWER\tRSSI/SNR\tUPTIME")
 	for _, d := range devices {
 		product := "-"
 		if d.ProductID != 0 {
 			product = fmt.Sprint(d.ProductID)
 		}
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", d.Serial, ipAddress(d), safeText(d.Label), safeText(d.Location), safeText(d.Group), kind(d), zones(d), product, firmware(d), power(d), wifiSignal(d), estimatedUptime(d))
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", d.Serial, ipAddress(d), safeText(d.Label), safeText(d.Location), safeText(d.Group), kind(d), zones(d), product, productName(d), firmware(d), power(d), wifiSignal(d), estimatedUptime(d))
 	}
 	return table.Flush()
 }
@@ -138,7 +157,7 @@ func printInspect(out io.Writer, d device.Device) error {
 	table := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	fmt.Fprintf(table, "Device\t%s (%s)\nType\t%s\nProduct\t%d — %s\nGroup\t%s\nLocation\t%s\nPower (cached)\t%s\n", safeText(d.Label), d.Serial, kind(d), d.ProductID, safeText(d.RegistryName), safeText(d.Group), safeText(d.Location), power(d))
 	fmt.Fprintf(table, "Firmware (cached)\t%s\nWi-Fi RSSI/SNR (cached)\t%s\n", firmware(d), wifiSignal(d))
-	fmt.Fprintf(table, "Zones (total, cached)\t%s\n", zones(d))
+	fmt.Fprintf(table, "Zones (visible, cached)\t%s\n", zones(d))
 	fmt.Fprintf(table, "IP\t%s\n", ipAddress(d))
 	if uptime, known := d.Uptime(); known {
 		fmt.Fprintf(table, "Estimated uptime\t%s\nEstimated boot\t%s\n", uptime.Round(time.Second), d.EstimatedBootedAt.Format(time.RFC3339))
