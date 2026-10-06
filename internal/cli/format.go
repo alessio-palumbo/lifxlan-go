@@ -50,36 +50,8 @@ func hasLight(d device.Device) bool {
 // zoneCount describes visible cells in cached geometry, not color coverage.
 // nil means either unknown geometry or a non-light device.
 func zoneCount(d device.Device) *int {
-	if !hasLight(d) {
-		return nil
-	}
-	var count int
-	switch d.LightType {
-	case device.LightTypeSingleZone:
-		if d.ProductID == 0 {
-			return nil
-		}
-		count = 1
-	case device.LightTypeMultiZone:
-		count = len(d.MultizoneProperties.Zones)
-	case device.LightTypeMatrix:
-		m := d.MatrixProperties
-		if m.Width > 0 && m.Height > 0 && m.ChainLength > 0 {
-			// Rows exclude logical offsets/padding; HiddenCols describes physical
-			// cells without visible emitters. Do not alter packet/buffer geometry.
-			for _, chain := range device.SurfaceFromDevice(d).Matrix.Chains {
-				for _, row := range chain.Rows {
-					count += row.Cols
-					for _, col := range row.HiddenCols {
-						if col >= 0 && col < row.Cols {
-							count--
-						}
-					}
-				}
-			}
-		}
-	}
-	if count <= 0 {
+	count, known := device.VisibleZoneCount(d)
+	if !known {
 		return nil
 	}
 	return &count

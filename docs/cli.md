@@ -118,7 +118,9 @@ than `30`; five 64-zone tiles still show `320`. Physical packet/buffer sizes are
 unchanged. Single-zone lights show `1`, switches `-`, and unknown
 counts `?`. JSON inventory and inspection include a numeric `ZoneCount`, or
 `null` for unknown/not-applicable counts (never a fabricated zero). Counts describe
-cached geometry/buffer sizes, not received color coverage. Uptime is estimated
+cached visible geometry, not received color coverage. Library clients can obtain
+the same count with `count, known := device.VisibleZoneCount(d)`; raw device
+buffers and `Surface.Zones` retain their physical/layout meaning. Uptime is estimated
 from the controller's boot-time baseline; missing uptime or IP shows `-`.
 Firmware and signal come from the controller
 cache; `-` indicates an unset value. The library interprets Wi-Fi signal as RSSI

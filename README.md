@@ -67,6 +67,12 @@ Static palettes can be previewed and applied with `lifxlan themes apply`, using
 the new deterministic `pkg/themes` planner. Themes preserve power and support
 single-zone, multizone, and matrix lights; see the [theme guide](docs/themes.md).
 
+For a device's visible zone/pixel count, use `device.VisibleZoneCount(d)`, which
+returns `(count, known)`. It excludes hidden cells and logical padding while
+leaving physical buffers intact. For example, candle PID 215 reports 27 visible
+cells rather than its 30 physical entries. Unknown geometry or non-light devices
+return `(0, false)`; this helper does not establish color-state readiness.
+
 ```go
 import (
 	"fmt"
