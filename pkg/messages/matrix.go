@@ -163,6 +163,12 @@ func SetMatrixSunsetEffect(speed *time.Duration, softOff bool) *protocol.Message
 
 // SetMatrixFrameAnimation returns a slice of messages to preloads animation frames into device hidden frame buffers
 // and a function the returns a message that copies the next frame into the visible buffer.
+// It requires one hidden frame buffer per animation frame. Firmware with only
+// two hidden buffers cannot support longer preloaded animations.
+//
+// Deprecated: Use NewMatrixFrameSequence for caller-timed streaming instead.
+// This avoids reserving a hidden buffer for every frame. Frames
+// larger than 64 colors still use buffer 1 temporarily for multi-packet staging.
 func SetMatrixFrameAnimation(startIndex, length, width int, frames [][]packets.LightHsbk, brightness float64, d time.Duration) ([]*protocol.Message, func() *protocol.Message) {
 	frameCount := len(frames)
 	if frameCount == 0 {

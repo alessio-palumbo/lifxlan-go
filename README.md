@@ -73,6 +73,13 @@ leaving physical buffers intact. For example, candle PID 215 reports 27 visible
 cells rather than its 30 physical entries. Unknown geometry or non-light devices
 return `(0, false)`; this helper does not establish color-state readiness.
 
+`messages.SetMatrixFrameAnimation` is deprecated: it reserves one hidden frame
+buffer per animation frame. Stream physical frames with
+`messages.NewMatrixFrameSequence` at caller-controlled intervals, or use the
+effect runner and device renderers for logical frames. Multi-packet frames still
+use buffer 1 for staging; streaming does not preload the animation into buffers.
+See the [matrix streaming guide](docs/matrix-streaming.md) for iteration and safety.
+
 ```go
 import (
 	"fmt"
