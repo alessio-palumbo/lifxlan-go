@@ -54,6 +54,9 @@ type deviceSession struct {
 	// sendMu keeps messages in a multi-message operation contiguous with one
 	// another, including when state polling and callers send concurrently.
 	sendMu sync.Mutex
+	// partMu protects initialization of the context-aware part-operation gate.
+	partMu   sync.Mutex
+	partGate chan struct{}
 
 	pingMu       sync.Mutex
 	pendingPings map[uint64]chan struct{}

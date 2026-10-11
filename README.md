@@ -73,6 +73,13 @@ leaving physical buffers intact. For example, candle PID 215 reports 27 visible
 cells rather than its 30 physical entries. Unknown geometry or non-light devices
 return `(0, false)`; this helper does not establish color-state readiness.
 
+For optional uplight controls, use `device.LightParts(d)` and the controller's
+`SetLightPartColor` with a logical main/uplight/all selector. See [light parts](docs/light-parts.md).
+Explicit on/off intent uses `SetLightPartPower`; `GetLightPartState` reports
+effective state separately from shared device power and stored brightness.
+Device endpoint migration and explicit host subnet refresh are described in
+[network transitions](docs/network-transitions.md).
+
 `messages.SetMatrixFrameAnimation` is deprecated: it reserves one hidden frame
 buffer per animation frame. Stream physical frames with
 `messages.NewMatrixFrameSequence` at caller-controlled intervals, or use the
