@@ -30,10 +30,15 @@ type deviceSession struct {
 	sender  sender
 	logger  *slog.Logger
 	inbound chan *protocol.Message
-	seq     atomic.Uint32
-	echoID  atomic.Uint64
-	done    chan struct{}
-	cfg     *Config
+	// Network deliveries carry their endpoint generation so queued replies from
+	// a former endpoint cannot make migrated state look newly observed.
+	inboundEpochs   map[*protocol.Message]uint64
+	endpointEpoch   uint64
+	endpointChanged chan struct{}
+	seq             atomic.Uint32
+	echoID          atomic.Uint64
+	done            chan struct{}
+	cfg             *Config
 	// onTimeout is a callback to terminate the session when the livenessTimeout is reached
 	onTimeout func(device.Serial)
 	// onUpdate reports observed state changes after releasing mu.
@@ -59,14 +64,15 @@ type deviceSession struct {
 // a second one to parse devices messages and update Device state.
 func newDeviceSession(addr *net.UDPAddr, serial device.Serial, sender sender, cfg *Config, wgDone func(), onTimeout func(device.Serial), onUpdate func(*deviceSession, DeviceChange), logger *slog.Logger) *deviceSession {
 	ds := &deviceSession{
-		sender:    sender,
-		logger:    logger,
-		device:    device.NewDevice(addr, serial),
-		inbound:   make(chan *protocol.Message, defaultRecvBufferSize),
-		done:      make(chan struct{}),
-		cfg:       cfg,
-		onTimeout: onTimeout,
-		onUpdate:  onUpdate,
+		sender:          sender,
+		logger:          logger,
+		device:          device.NewDevice(addr, serial),
+		inbound:         make(chan *protocol.Message, defaultRecvBufferSize),
+		done:            make(chan struct{}),
+		endpointChanged: make(chan struct{}),
+		cfg:             cfg,
+		onTimeout:       onTimeout,
+		onUpdate:        onUpdate,
 	}
 
 	go ds.recvloop()
@@ -89,12 +95,29 @@ func (s *deviceSession) send(msgs ...*protocol.Message) error {
 func (s *deviceSession) sendWithProgress(msgs ...*protocol.Message) (int, error) {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
+	return s.sendLocked(context.Background(), msgs...)
+}
+
+// sendLocked requires sendMu, keeping the endpoint and packet batch stable.
+func (s *deviceSession) sendLocked(ctx context.Context, msgs ...*protocol.Message) (int, error) {
+	s.mu.RLock()
+	address := cloneEndpoint(s.device.Address)
+	serial := s.device.Serial
+	s.mu.RUnlock()
 
 	for i, msg := range msgs {
-		msg.SetTarget(s.device.Serial)
+		if err := ctx.Err(); err != nil {
+			return i, err
+		}
+		select {
+		case <-s.done:
+			return i, ErrSessionClosed
+		default:
+		}
+		msg.SetTarget(serial)
 		msg.SetSequence(s.nextSeq())
-		if err := s.sender.Send(s.device.Address, msg); err != nil {
-			return i, fmt.Errorf("failed to send message to device %s: %w", s.device.Serial, err)
+		if err := s.sender.Send(address, msg); err != nil {
+			return i, fmt.Errorf("failed to send message to device %s: %w", serial, err)
 		}
 	}
 	return len(msgs), nil
@@ -104,6 +127,9 @@ func (s *deviceSession) ping(ctx context.Context) (time.Duration, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
+	s.mu.RLock()
+	endpointChanged := s.endpointChanged
+	s.mu.RUnlock()
 	select {
 	case <-s.done:
 		return 0, ErrSessionClosed
@@ -145,6 +171,9 @@ func (s *deviceSession) ping(ctx context.Context) (time.Duration, error) {
 	case <-s.done:
 		removePending()
 		return 0, ErrSessionClosed
+	case <-endpointChanged:
+		removePending()
+		return 0, ErrEndpointChanged
 	}
 }
 
@@ -233,6 +262,13 @@ func (s *deviceSession) recvloop() {
 			}
 
 			s.mu.Lock()
+			if epoch, network := s.inboundEpochs[msg]; network {
+				delete(s.inboundEpochs, msg)
+				if epoch != s.endpointEpoch {
+					s.mu.Unlock()
+					continue
+				}
+			}
 			var changes DeviceChange
 			switch p := msg.Payload.(type) {
 			case *packets.DeviceEchoResponse:

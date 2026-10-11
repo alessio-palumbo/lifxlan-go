@@ -13,6 +13,10 @@ import (
 // was waiting for its response.
 var ErrSessionClosed = errors.New("device session closed")
 
+// ErrEndpointChanged indicates that an operation's destination changed while
+// it was in flight. Callers can retry against the current endpoint.
+var ErrEndpointChanged = errors.New("device endpoint changed")
+
 // Ping sends one echo request and returns its round-trip time. It reports the
 // duration of this request only; callers that need latency statistics should
 // take multiple sequential samples. Context cancellation or deadlines stop the

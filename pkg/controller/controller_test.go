@@ -261,7 +261,7 @@ func TestController(t *testing.T) {
 		require.NoError(t, err)
 		defer ctrl.Close()
 
-		payload := &packets.DeviceStateService{Service: enums.DeviceServiceDEVICESERVICEUDP}
+		payload := &packets.DeviceStateService{Service: enums.DeviceServiceDEVICESERVICEUDP, Port: 56700}
 		msg := protocol.NewMessage(payload)
 		msg.SetTarget(serial0)
 

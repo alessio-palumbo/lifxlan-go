@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
@@ -43,6 +44,8 @@ const (
 
 // Client is a UDP client that can be used to send and receive LIFX messages on the LAN.
 type Client struct {
+	broadcastMu        sync.RWMutex
+	broadcastConfig    Config
 	conn               *net.UDPConn
 	source             uint32
 	broadcastAddr      *net.UDPAddr
@@ -103,6 +106,7 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 
 	return &Client{
+		broadcastConfig:    copyConfig(cfg),
 		conn:               conn,
 		source:             source,
 		broadcastAddr:      bAddr,
@@ -131,7 +135,10 @@ func (c *Client) Send(dst *net.UDPAddr, msg *protocol.Message) error {
 // SendBroadcast sends a LIFX protocol message to the broadcast address.
 func (c *Client) SendBroadcast(msg *protocol.Message) error {
 	msg.SetTarget(protocol.TargetBroadcast)
-	return c.Send(c.broadcastAddr, msg)
+	c.broadcastMu.RLock()
+	addr := cloneUDPAddress(c.broadcastAddr)
+	c.broadcastMu.RUnlock()
+	return c.Send(addr, msg)
 }
 
 // Receive listens for incoming UDP packets and decodes them into LIFX protocol messages.
@@ -181,10 +188,67 @@ func (c *Client) SetConnDeadline(t time.Time) error {
 // boolean is false when Config.BroadcastAddr supplied an exact address. The
 // returned value is independent and may be safely modified by the caller.
 func (c *Client) BroadcastInterface() (BroadcastInterface, bool) {
+	c.broadcastMu.RLock()
+	defer c.broadcastMu.RUnlock()
 	if c.broadcastInterface == nil {
 		return BroadcastInterface{}, false
 	}
 	return cloneBroadcastInterface(*c.broadcastInterface), true
+}
+
+// RefreshBroadcastTarget explicitly refreshes IPv4 subnet discovery on the
+// currently selected interface. Configured name/index selections are honoured;
+// automatic selection remains pinned to its originally selected interface.
+// An exact BroadcastAddr is never changed. Failure retains the previous target
+// and does not close the socket; callers may retry after connectivity returns.
+func (c *Client) RefreshBroadcastTarget() error {
+	c.broadcastMu.RLock()
+	fixed := c.broadcastConfig.BroadcastAddr != nil
+	c.broadcastMu.RUnlock()
+	if fixed {
+		return nil
+	}
+	candidates, err := BroadcastInterfaces()
+	if err != nil {
+		return err
+	}
+	return c.refreshBroadcastFromCandidates(candidates)
+}
+
+func (c *Client) refreshBroadcastFromCandidates(candidates []BroadcastInterface) error {
+	c.broadcastMu.Lock()
+	defer c.broadcastMu.Unlock()
+	cfg := copyConfig(&c.broadcastConfig)
+	if cfg.BroadcastAddr != nil {
+		return nil
+	}
+	if cfg.BroadcastInterfaceName == "" && cfg.BroadcastInterfaceIndex == 0 && c.broadcastInterface != nil {
+		cfg.BroadcastInterfaceName = c.broadcastInterface.Name
+	}
+	addr, iface, err := resolveBroadcastTargetFromCandidates(lifxPort, &cfg, candidates)
+	if err != nil {
+		return err
+	}
+	c.broadcastAddr, c.broadcastInterface = addr, iface
+	return nil
+}
+
+func cloneUDPAddress(addr *net.UDPAddr) *net.UDPAddr {
+	if addr == nil {
+		return nil
+	}
+	copy := *addr
+	copy.IP = append(net.IP(nil), addr.IP...)
+	return &copy
+}
+
+func copyConfig(cfg *Config) Config {
+	if cfg == nil {
+		return Config{}
+	}
+	copy := *cfg
+	copy.BroadcastAddr = cloneUDPAddress(cfg.BroadcastAddr)
+	return copy
 }
 
 // BroadcastInterfaces returns broadcast-capable IPv4 interfaces that can be

@@ -253,12 +253,13 @@ func (w WifiRSSI) String() string {
 }
 
 // Device is the representation of a LIFX device on the LAN.
-// Address and Serial are immutable fields while DeviceState
+// Serial is immutable. Address follows service discovery, while other state
 // fields are periodically updated.
 type Device struct {
-	// Immutable
+	// Current discovered endpoint; callers should use independent Device snapshots.
 	Address *net.UDPAddr
-	Serial  Serial
+	// Immutable identity.
+	Serial Serial
 
 	// Mutable
 

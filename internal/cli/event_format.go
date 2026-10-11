@@ -23,6 +23,7 @@ var changeCategories = []struct {
 	{controller.DeviceChangeMultizone, "multizone"}, {controller.DeviceChangeButtons, "buttons"},
 	{controller.DeviceChangeButtonConfig, "button_config"}, {controller.DeviceChangeRelays, "relays"},
 	{controller.DeviceChangeEffect, "effect"}, {controller.DeviceChangeUptime, "uptime"},
+	{controller.DeviceChangeAddress, "address"},
 }
 
 func printEventAt(out io.Writer, event controller.DeviceEvent, at time.Time) error {
@@ -73,6 +74,9 @@ func printEventAt(out io.Writer, event controller.DeviceEvent, at time.Time) err
 
 func eventValues(d device.Device, changes controller.DeviceChange) []string {
 	var values []string
+	if changes.Has(controller.DeviceChangeAddress) {
+		values = append(values, "ip="+ipAddress(d))
+	}
 	if changes.Has(controller.DeviceChangeLabel) {
 		values = append(values, fmt.Sprintf("label=%q", safeText(d.Label)))
 	}

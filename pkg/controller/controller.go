@@ -309,13 +309,22 @@ func (c *Controller) recvloop() {
 		c.mu.RUnlock()
 
 		if state, ok := msg.Payload.(*packets.DeviceStateService); ok {
-			if !hasSession && state.Service == enums.DeviceServiceDEVICESERVICEUDP {
-				c.addSession(addr, serial)
+			if state.Service == enums.DeviceServiceDEVICESERVICEUDP {
+				endpoint, valid := serviceEndpoint(addr, state.Port)
+				if !valid {
+					return
+				}
+				if !hasSession {
+					c.addSession(endpoint, serial)
+				} else if session.updateEndpoint(endpoint) {
+					c.publishDeviceUpdate(session, DeviceChangeAddress)
+					// Refresh cached state without recreating device identity. Sends
+					// are serialized with normal session batches.
+					_ = session.send(append(session.lowFreqStateMessages(), session.highFreqStateMessages()...)...)
+				}
 			}
 		} else if hasSession {
-			select {
-			case session.inbound <- msg:
-			default:
+			if !session.deliverFromEndpoint(msg, addr) {
 				// If the channel is full, we skip the message to avoid blocking.
 				c.logger.Warn(
 					"Channel full, skipping message",
