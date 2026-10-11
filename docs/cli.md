@@ -35,17 +35,73 @@ serial, an exact case-insensitive label, group, location, or `all`. Bare names
 match across those fields; use `serial:`, `label:`, `group:`, or `location:` to
 disambiguate (group/location IDs also support `group_id:` and `location_id:`).
 Overlapping matches are deduplicated. Themes and snapshots accept multiple
-light-capable devices; streams also include switches. Inspect, ping, and effect
+light-capable devices; streams also include switches. Inspect, ping, buffers, parts, color, power, and effect
 runs still require exactly one match. These commands require an explicit target,
 except streams, which default to all devices. Unknown selectors fail instead of
 silently selecting only part of the request. Natural-language commands use the
 existing parser's selectors; always preview unfamiliar
 commands with `--dry-run` because the parser is deliberately forgiving.
 
-`devices` groups `list`, `inspect`, `ping`, and `stream`. Bare `devices` remains
+`devices` groups `list`, `inspect`, `ping`, `buffers`, `parts`, `color`, `power`, and `stream`. Bare `devices` remains
 shorthand for `devices list`, including list flags. The former top-level
 `inspect`, `ping`, and `watch` commands are replaced by the grouped commands;
 event streaming is named `stream` to distinguish it from the list's `--watch`.
+
+## Light parts and uplight testing
+
+`devices parts` lists logical part capabilities and freshly observed state by
+default. Use `--fresh=false` for cached observations; `?` means unknown, not off.
+Stored brightness and shared device power are separate: an off device can retain
+positive brightness. `Emulated` identifies the current brightness-based part
+implementation, not native independent hardware power.
+
+`devices color` and `devices power` require exactly one target. `--part` defaults
+to `all`, or selects `main` / `uplight`. Unspecified HSBK fields are retained;
+`--brightness 0` is a color update and never changes power. Part-specific color
+updates request fresh state to preserve other cells. `devices power` owns the
+on/off policy described in [Light parts](light-parts.md), including brightness
+inheritance and shared power when the last active part is turned off.
+`--fallback-brightness` explicitly supplies activation brightness when no stored
+or active brightness is available; there is no automatic default.
+
+Both writes use `--timeout` to bound the operation (after discovery). Allow more
+time for long transitions or slow devices. Successful completion is not a
+device acknowledgement; run `devices parts` or a fresh snapshot to verify.
+Neither command stops firmware effects or coordinates external writers.
+
+For a ceiling light with an uplight, save a fresh snapshot first, and pause other writers/effects during
+testing. These commands deliberately change the device; the snapshot command
+does not provide a CLI restore operation.
+`Ceiling` below is an example user-assigned label, not a product name; replace
+it with your device's label or serial.
+
+```sh
+lifxlan snapshot --target Ceiling --fresh > ceiling-before.json
+lifxlan devices parts --target Ceiling
+lifxlan devices color --target Ceiling --part main --brightness 40
+lifxlan devices color --target Ceiling --part uplight --brightness 50
+lifxlan devices power --target Ceiling on
+lifxlan devices parts --target Ceiling
+lifxlan devices power --target Ceiling --part uplight off
+lifxlan devices parts --target Ceiling
+lifxlan devices power --target Ceiling --part uplight on
+lifxlan devices parts --target Ceiling
+lifxlan devices power --target Ceiling --part uplight off
+lifxlan devices power --target Ceiling --part main --timeout 8s off
+lifxlan devices parts --target Ceiling
+lifxlan devices power --target Ceiling --part uplight on
+lifxlan devices parts --target Ceiling --output json
+```
+
+Expected: initial main/up brightness approximately 40%/50%; uplight off leaves
+main lit; uplight reactivation inherits approximately 40%, not its historical
+50%. Turning off the last active main powers off the device, retaining the main
+pattern and preparing dormant uplight brightness from its visible-cell mean.
+Turning on only uplight then leaves main dark. Protocol quantization can produce
+small percentage differences. Repeat with the roles reversed, and check that
+ordinary `devices color --part uplight --brightness 0` does not power off the
+device. A completely zeroed main reactivates at uniform inherited brightness;
+its historical per-cell brightness distribution is not restored.
 
 ## Inventory filtering and targeted streams
 
@@ -170,6 +226,11 @@ and report individual failures; any failed sample makes the command exit with an
 error after collecting the remaining samples.
 
 ## Effects and restoration
+
+`devices buffers --target Ceiling` explicitly reads candidate matrix buffers 0–2
+without colour/power writes. Use `--buffer 2` for a subset and `--output json`
+for complete received colours. Missing/mismatched replies are reported rather
+than treated as black. See [frame-buffer inspection](frame-buffers.md).
 
 Custom single-zone effects already fit the library's `Effect` interface and
 `SingleZoneRenderer`. Two registered temporal presets now complement that:

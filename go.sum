@@ -1,9 +1,5 @@
 github.com/alessio-palumbo/lifxprotocol-go v0.4.0 h1:oTweXfIyw5oC7OXdDezuY3lx1uhDju3p/CZRUE2HUYk=
 github.com/alessio-palumbo/lifxprotocol-go v0.4.0/go.mod h1:Wvmw7KNc2ieF6CPM8Of0EdWW0e/w5nlTwK7sLwMDbJ0=
-github.com/alessio-palumbo/lifxregistry-go v0.4.0 h1:Yu7KbNbwEu6RUJQ1Z99+s9RNjxZysdTggEJHWgqGgj4=
-github.com/alessio-palumbo/lifxregistry-go v0.4.0/go.mod h1:42P1qmWK+kzuqJp9cvWjFUgcru+10bZ+w4MSRAQGCZo=
-github.com/alessio-palumbo/lifxregistry-go v0.5.0 h1:aIlPQYvJ5NkzB/gcQOlsRjhed9SJP2s16QTYjyxBT14=
-github.com/alessio-palumbo/lifxregistry-go v0.5.0/go.mod h1:42P1qmWK+kzuqJp9cvWjFUgcru+10bZ+w4MSRAQGCZo=
 github.com/alessio-palumbo/lifxregistry-go v0.5.1 h1:1GxAHJsyqL5FCjzwYpQ9IXuoJwDVaq6Y5V1EKJquFR0=
 github.com/alessio-palumbo/lifxregistry-go v0.5.1/go.mod h1:42P1qmWK+kzuqJp9cvWjFUgcru+10bZ+w4MSRAQGCZo=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=

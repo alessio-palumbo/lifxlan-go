@@ -9,12 +9,16 @@ import (
 )
 
 func run(ctx context.Context, args []string, out, diagnostic io.Writer, create factory) error {
+	return runWithBufferReader(ctx, args, out, diagnostic, create, readMatrixBuffers)
+}
+
+func runWithBufferReader(ctx context.Context, args []string, out, diagnostic io.Writer, create factory, read bufferReader) error {
 	target := func() ucli.Flag {
-		return &ucli.StringFlag{Name: "target", Usage: "Selector: serial, label, group, location, all; comma-separated (inspect/ping/effects require one match)", Required: true}
+		return &ucli.StringFlag{Name: "target", Usage: "Selector: serial, label, group, location, all; comma-separated (device diagnostics/control and effects require one match)", Required: true}
 	}
 	leaf := func(name, usage, dispatchName string, flags ...ucli.Flag) *ucli.Command {
 		command := &ucli.Command{Name: name, Usage: usage, Flags: flags, DisableSliceFlagSeparator: true, Action: func(ctx context.Context, cmd *ucli.Command) error {
-			return dispatch(ctx, dispatchName, cmd, out, diagnostic, create)
+			return dispatch(ctx, dispatchName, cmd, out, diagnostic, create, read)
 		}}
 		if dispatchName == "effects run" {
 			command.ArgsUsage = "EFFECT_ID"
@@ -25,6 +29,9 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 		if dispatchName == "themes apply" {
 			command.ArgsUsage = "THEME.json"
 		}
+		if dispatchName == "part power" {
+			command.ArgsUsage = "on|off"
+		}
 		return command
 	}
 	devices := leaf("devices", "Device inventory and diagnostics (defaults to list)", "devices",
@@ -32,8 +39,21 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 		&ucli.DurationFlag{Name: "interval", Value: time.Second, Usage: "List refresh interval with --watch; no extra LAN requests"},
 		&ucli.StringSliceFlag{Name: "filter", Usage: "List filter key=value; repeat for AND across keys, OR within a key"})
 	devices.Commands = []*ucli.Command{
+		leaf("parts", "Inspect logical light parts and freshly observed brightness", "parts", target(), &ucli.BoolFlag{Name: "fresh", Value: true, Usage: "Refresh state; use --fresh=false for cached observations"}),
+		leaf("color", "Set partial HSBK values for one device or light part; preserve power", "part color", target(),
+			&ucli.StringFlag{Name: "part", Value: "all", Usage: "Light part: all, main, uplight"},
+			&ucli.Float64Flag{Name: "hue", Usage: "Hue in degrees (0..360)"},
+			&ucli.Float64Flag{Name: "saturation", Usage: "Saturation percent (0..100)"},
+			&ucli.Float64Flag{Name: "brightness", Usage: "Brightness percent (0..100); zero does not change power"},
+			&ucli.Float64Flag{Name: "kelvin", Usage: "Color temperature in Kelvin"},
+			&ucli.DurationFlag{Name: "duration", Usage: "Color transition duration"}),
+		leaf("power", "Express on/off intent for one device or light part", "part power", target(),
+			&ucli.StringFlag{Name: "part", Value: "all", Usage: "Light part: all, main, uplight"},
+			&ucli.DurationFlag{Name: "duration", Usage: "Power/color transition duration"},
+			&ucli.Float64Flag{Name: "fallback-brightness", Usage: "Explicit activation fallback percent (>0..100), only if no brightness is available"}),
 		leaf("list", "List discovered devices; optionally refresh the inventory", "devices"),
 		leaf("inspect", "Inspect cached device state and estimated uptime", "inspect", target()),
+		leaf("buffers", "Read matrix frame buffers without changing colors or power", "buffers", target(), &ucli.IntSliceFlag{Name: "buffer", Value: []int{0, 1, 2}, Usage: "Buffer index 0..2; may repeat; defaults to 0, 1, 2"}),
 		leaf("ping", "Collect sequential echo samples and latency statistics", "ping", target(), &ucli.IntFlag{Name: "count", Value: 5, Usage: "Number of samples"}),
 		leaf("stream", "Stream device events, optionally for selected devices", "stream", &ucli.StringFlag{Name: "target", Usage: "Optional comma-separated selectors; omit or use all for every device"}),
 	}
@@ -45,7 +65,7 @@ func run(ctx context.Context, args []string, out, diagnostic io.Writer, create f
 		Flags: []ucli.Flag{
 			&ucli.StringFlag{Name: "output", Value: "text", Usage: "Output format: text or json"},
 			&ucli.DurationFlag{Name: "discover-for", Value: 3 * time.Second, Usage: "Discovery window (not a state-readiness guarantee)"},
-			&ucli.DurationFlag{Name: "timeout", Value: 3 * time.Second, Usage: "Timeout for each ping or snapshot"},
+			&ucli.DurationFlag{Name: "timeout", Value: 3 * time.Second, Usage: "Timeout for each ping, snapshot or matrix buffer read"},
 			&ucli.BoolFlag{Name: "verbose", Usage: "Controller diagnostic logging to stderr"},
 		},
 		Commands: []*ucli.Command{

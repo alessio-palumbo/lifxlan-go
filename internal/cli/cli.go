@@ -65,7 +65,7 @@ func Run(ctx context.Context, args []string, out, diagnostic io.Writer) error {
 	})
 }
 
-func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnostic io.Writer, create factory) error {
+func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnostic io.Writer, create factory, read bufferReader) error {
 	discovery, timeout := cmd.Duration("discover-for"), cmd.Duration("timeout")
 	target, verbose := cmd.String("target"), cmd.Bool("verbose")
 	count, dry, fresh, restore := cmd.Int("count"), cmd.Bool("dry-run"), cmd.Bool("fresh"), cmd.Bool("restore")
@@ -91,6 +91,12 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 	if err != nil {
 		return err
 	}
+	if name == "parts" || name == "part color" || name == "part power" {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return runLightParts(ctx, name, cmd, out, diagnostic, create)
+	}
 	if name == "command" || name == "effects run" || name == "themes apply" {
 		if cmd.Args().Len() != 1 {
 			return fmt.Errorf("%s requires exactly one argument; put flags before it", name)
@@ -101,10 +107,18 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 	if name == "ping" && count <= 0 {
 		return errors.New("count must be positive")
 	}
+	var buffers []int
+	if name == "buffers" {
+		var err error
+		buffers, err = validateBufferIndexes(cmd.IntSlice("buffer"))
+		if err != nil {
+			return err
+		}
+	}
 	if name == "effects run" && (step < 20*time.Millisecond || duration < 0) {
 		return errors.New("step must be at least 20ms and duration nonnegative")
 	}
-	if name == "inspect" || name == "ping" || name == "snapshot" || name == "effects run" {
+	if name == "inspect" || name == "ping" || name == "snapshot" || name == "effects run" || name == "buffers" {
 		if target == "" {
 			return errors.New("an explicit --target label or serial is required")
 		}
@@ -211,6 +225,19 @@ func dispatch(ctx context.Context, name string, cmd *ucli.Command, out, diagnost
 		return err
 	}
 	switch name {
+	case "buffers":
+		report, queryErr := read(ctx, d, buffers, timeout)
+		if report == nil {
+			return queryErr
+		}
+		if format == "json" {
+			if err := writeJSON(out, report); err != nil {
+				return err
+			}
+		} else if err := printMatrixBuffers(out, report); err != nil {
+			return err
+		}
+		return queryErr
 	case "inspect":
 		if format == "text" {
 			return printInspect(out, d)
