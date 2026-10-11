@@ -52,9 +52,9 @@ ACKs or confirmation of application. Cancellation stops between packets, not an
 already-issued datagram. No automatic rollback or retry is attempted.
 
 Existing SetState, messages.SetColor, type-specific physical packet builders,
-themes and effect renderers retain their old semantics. In particular, raw matrix
+legacy theme plans and effect renderers retain their old semantics. In particular, raw matrix
 rendering still blanks hidden slots and is not automatically uplight-preserving.
-Part-aware spatial rendering remains separate work.
+Use `Theme.PlanParts` for composed main/uplight themes; see [themes](themes.md#part-aware-application).
 Callers use logical selection; physical addressing remains an internal backend
 detail so future protocol-defined parts can be supported additively.
 
@@ -131,6 +131,7 @@ buffer-1 staging. The on/off policy has been manually verified on a LIFX Ceiling
 Raw SetMatrixColorsFromSlice and current frame renderers remain physical/full-
 surface operations. They are not automatically main-only or uplight-preserving.
 Do not alternate raw main frames and uplight colour commands expecting them to
-remain independent: a later raw frame can overwrite uplight. Part-aware frame
-composition is required for main themes/images/effects with independent uplight;
-that mapping/preservation belongs in the library, not duplicated in clients.
+remain independent: a later raw frame can overwrite uplight. Use part-aware
+composition for independent uplight. Themes now offer this through
+`Theme.PlanParts`; streaming effect integration remains deferred. The mapping and
+preservation belong in the library, not duplicated in clients.

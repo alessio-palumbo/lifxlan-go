@@ -77,6 +77,9 @@ For optional uplight controls, use `device.LightParts(d)` and the controller's
 `SetLightPartColor` with a logical main/uplight/all selector. See [light parts](docs/light-parts.md).
 Explicit on/off intent uses `SetLightPartPower`; `GetLightPartState` reports
 effective state separately from shared device power and stored brightness.
+For spatial themes, `Theme.PlanParts` composes main and optional uplight colors
+into a single packet plan with part selection and per-cell brightness preservation;
+see [part-aware themes](docs/themes.md#part-aware-application).
 Device endpoint migration and explicit host subnet refresh are described in
 [network transitions](docs/network-transitions.md).
 

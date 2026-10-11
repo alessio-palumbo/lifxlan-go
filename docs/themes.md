@@ -67,9 +67,11 @@ device's known temperature range. Preview shows the resulting values.
 
 ## Safety and timing
 
-After the discovery window, the command waits for complete observed cached state
-before using device geometry. `--timeout` bounds that capture. This is not a
-fresh/atomic scene read, and includes powered-off matrices. Missing state aborts
+After the discovery window, the command waits for complete observed state
+before using device geometry. Uplight devices and `--brightness-policy preserve`
+require fresh observations; other devices can use complete cached state.
+`--timeout` bounds that capture. This is not an atomic scene read, and includes
+powered-off matrices. Missing state aborts
 without color writes. All selected targets and their packet plans are validated
 before the first control send.
 
@@ -159,12 +161,82 @@ safety limits, not claims about protocol/device capacity. All targets are
 validated before output frames are allocated; planning never sends controls.
 `MaxPlanTargets` limits one plan to 4,096 devices before metadata is copied.
 
-This option is currently a library API only. `themes apply` continues to use
-palette brightness. The planner still does not change power, stop effects,
+`themes apply` defaults to palette brightness; `--brightness-policy preserve`
+uses the new part-aware path below. The planner still does not change power, stop effects,
 capture/restore scenes, or make a multi-device application atomic. Callers
 should compile and validate every target's packets before control writes;
 successful sends do not acknowledge application and partial failures can leave
 a partially applied theme.
+
+### Part-aware application
+
+`Theme.PlanParts` is the additive path for themes on main/uplight devices. The
+legacy `Plan`, `PlanWithOptions`, and frame renderers keep their old behaviour.
+Runtime `PartPlanOptions.Part` defaults to `all`: main gets its normal spatial
+layout and uplight receives one palette color. `main` preserves uplight; `uplight`
+preserves main. Ordinary lights support `main` and `all` as equivalent selections;
+explicit uplight selection on an unsupported device is an error, not a fallback.
+
+```go
+// selected must contain complete observed state. CaptureStateSnapshot with
+// RequireFresh is recommended; merge the captured colors with matching geometry.
+plan, err := theme.PlanParts(selected, transition, themes.PartPlanOptions{
+    Part: device.LightPartAll, // also the zero-value default
+    Brightness: themes.PreserveBrightness, // omit to use palette brightness
+    Variation: variation,
+})
+if err != nil { return err }
+// Preview Frame (main), Uplight, and Messages from this plan. For uplight-only
+// selection, Frame is not applied. Send the same composed messages, not Frame
+// through the legacy renderer: that would lose part preservation.
+for _, application := range plan {
+    for _, msg := range application.Messages {
+        if err := ctrl.Send(application.Serial, msg); err != nil { return err }
+    }
+}
+```
+
+The options reuse variation, reversal, seed, matrix layout and brightness-policy
+semantics, but use the supplied devices' observed initial state rather than a
+separate `InitialFrames` map. Uplight assignment uses the varied/reversed palette
+at each device's index in stable serial-sorted target order. Adding/removing
+targets can change the assignment. It is a single coherent palette color, not
+the color at an arbitrary hidden coordinate. White-only adaptation and Kelvin
+clamping apply to both parts.
+
+Part composition requires complete physical buffers even in palette mode: it
+preserves unselected cells and hidden/padding slots exactly. Length checks reject
+missing/incompatible geometry but do not prove receipt; allocated/unobserved
+buffers must not be supplied as observed state. Valid black is never discarded.
+In preservation mode each selected physical cell retains its brightness, not an
+average; single-zone lights retain their reported brightness. Planning owns its
+frames and packets and does not alias input state. Current uplight mappings are
+limited to registry-described single-chain matrices; ordinary matrix chains
+continue through existing adaptation helpers.
+
+`effects.ComposeLightPartFrame` provides the reusable pure composition step for
+current uplight matrices. Optional main/uplight inputs change the selected cells;
+nil leaves a part untouched. This is not an effect runtime: future streaming
+integration must own state refresh, cancellation, restoration and writer
+coordination. No extra read is performed by the pure helper.
+
+The CLI now uses `PlanParts`, defaulting to all available parts. This deliberately
+changes ceiling theme application to include uplight; select `--part main` to
+keep its observed state instead. `Ceiling` is an example user-assigned label:
+
+```sh
+lifxlan themes apply --target Ceiling --dry-run examples/themes/evening.json
+lifxlan themes apply --target Ceiling --part main examples/themes/evening.json
+lifxlan themes apply --target Ceiling --part uplight examples/themes/evening.json
+lifxlan themes apply --target Ceiling --brightness-policy preserve examples/themes/evening.json
+```
+
+Power remains unchanged, even if selected brightness is zero. Firmware effects
+are not stopped. Captured-state preservation is not protection against external
+writers, endpoint changes after planning, or partially applied batches. All
+targets are planned before control writes; sends are not acknowledgements and
+multi-device application is not atomic. Do not automatically reapply a stale
+preservation plan after a network/session transition.
 
 ### Deterministic application variations
 

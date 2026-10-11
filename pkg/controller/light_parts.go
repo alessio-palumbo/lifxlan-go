@@ -9,7 +9,6 @@ import (
 	"github.com/alessio-palumbo/lifxlan-go/pkg/messages"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxprotocol-go/gen/protocol/packets"
-	"github.com/alessio-palumbo/lifxregistry-go/gen/registry"
 )
 
 // SetLightPartColor applies partial HSBK values to all, main, or uplight. Empty part
@@ -131,73 +130,12 @@ func lightPartMessages(d device.Device, part device.LightPart, update LightState
 }
 
 func lightPartMask(d device.Device, part device.LightPart) ([]packets.LightHsbk, error) {
-	p, known := registry.ProductsByPID[int(d.ProductID)]
-	if !known || p.Features.UplightCoords == nil || d.LightType != device.LightTypeMatrix {
+	if !device.HasUplight(d) || d.LightType != device.LightTypeMatrix {
 		return nil, fmt.Errorf("%w: uplight mapping unavailable", ErrUnsupportedCapability)
 	}
-	m := d.MatrixProperties
-	// Current registry uplights belong to single-chain ceilings. Avoid guessing
-	// how future chained/multi-part products will address their uplights.
-	if m.ChainLength != 1 || len(m.ChainZones) != 1 || m.Width <= 0 || m.Height <= 0 || m.Width > 255 || m.Height > 255 || m.Width > effectsFrameLimit/m.Height || len(m.ChainZones[0]) != m.Width*m.Height {
-		return nil, fmt.Errorf("%w: incomplete or unsupported matrix geometry", ErrInvalidState)
-	}
-	if len(m.ChainZones[0]) > 64 && 64%m.Width != 0 {
-		return nil, fmt.Errorf("%w: matrix chunks must align with rows", ErrInvalidState)
-	}
-	surface := device.SurfaceFromDevice(d)
-	if surface.Width <= 0 || surface.Height <= 0 || surface.Width > effectsFrameLimit/surface.Height {
-		return nil, fmt.Errorf("%w: excessive logical surface", ErrInvalidState)
-	}
-	chain := &surface.Matrix.Chains[0]
-	coords := p.Features.UplightCoords
-	if coords.Y < 0 || coords.Y >= len(chain.Rows) || coords.X < 0 || coords.X >= chain.Rows[coords.Y].Cols {
-		return nil, fmt.Errorf("%w: uplight coordinate outside surface", ErrInvalidState)
-	}
-	maskColor := effects.BlankColor()
-	maskColor.Brightness = 0
-	mask := effects.NewFrame(surface.Width, surface.Height, 0, maskColor)
-	for rowIndex, row := range chain.Rows {
-		for col := 0; col < row.Cols; col++ {
-			up := rowIndex == coords.Y && col == coords.X
-			if up {
-				continue
-			}
-			if part == device.LightPartMain {
-				color := maskColor
-				color.Brightness = 100
-				effects.SetFrameColor(&mask, chain.Bounds.X+row.Offset+col, chain.Bounds.Y+rowIndex, color)
-			}
-		}
-	}
-	if part == device.LightPartUplight {
-		// Reveal only the auxiliary emitter in our private mask surface. The
-		// normal main surface/hidden-cell mapping remains unchanged.
-		row := &chain.Rows[coords.Y]
-		var hidden []int
-		for _, col := range row.HiddenCols {
-			if col != coords.X {
-				hidden = append(hidden, col)
-			}
-		}
-		row.HiddenCols = hidden
-		color := maskColor
-		color.Brightness = 100
-		effects.SetFrameColor(&mask, chain.Bounds.X+row.Offset+coords.X, chain.Bounds.Y+coords.Y, color)
-	}
-	frames, err := effects.AdaptFrameToSurface(mask, surface, effects.AdaptOptions{})
+	mask, err := effects.LightPartPhysicalMask(d, part)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrInvalidState, err)
 	}
-	frame := frames[0]
-	logical := make([]packets.LightHsbk, len(frame.Colors))
-	for i, color := range frame.Colors {
-		logical[i] = color.ToDeviceColor()
-	}
-	physicalMask := device.LogicalMatrixColorsToPhysical(frame.SendWidth, frame.Height, frame.Orientation, logical)
-	if len(physicalMask) != len(m.ChainZones[0]) {
-		return nil, fmt.Errorf("%w: mask/state geometry mismatch", ErrInvalidState)
-	}
-	return physicalMask, nil
+	return mask, nil
 }
-
-const effectsFrameLimit = 65_536
