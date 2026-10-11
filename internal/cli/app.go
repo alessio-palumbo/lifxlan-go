@@ -75,6 +75,8 @@ func runWithBufferReader(ctx context.Context, args []string, out, diagnostic io.
 					&ucli.StringSliceFlag{Name: "target", Usage: "Comma-separated serial/label/group/location/all selectors; may repeat; only lights are selected"},
 					&ucli.StringSliceFlag{Name: "filter", Usage: "Select lights with list-style key=value filters; do not combine with --target"},
 					&ucli.BoolFlag{Name: "dry-run", Usage: "Print resolved color packet plan without control sends"},
+					&ucli.StringFlag{Name: "part", Value: "all", Usage: "Apply to all available parts, main, or uplight"},
+					&ucli.StringFlag{Name: "brightness-policy", Value: "palette", Usage: "Brightness source: palette or preserve (per observed cell)"},
 					&ucli.DurationFlag{Name: "duration", Value: time.Second, Usage: "Color transition duration; power is unchanged"}),
 			}},
 			leaf("command", "Compile and send one quoted natural-language command", "command", &ucli.BoolFlag{Name: "dry-run", Usage: "Preview targets and packets without control sends (discovery still uses LAN)"}),

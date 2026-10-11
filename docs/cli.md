@@ -227,6 +227,14 @@ error after collecting the remaining samples.
 
 ## Effects and restoration
 
+`themes apply` defaults to `--part all`, including a deterministic palette color
+for uplight when available. `--part main` preserves uplight; `--part uplight`
+preserves main and errors on devices without uplight. `--brightness-policy preserve`
+keeps each selected cell's observed brightness; the default is `palette`. Uplight
+devices and preservation mode request fresh state before composing the packet
+plan. Preview and sends use the same plan, with no power changes or effect stopping.
+See [part-aware themes](themes.md#part-aware-application).
+
 `devices buffers --target Ceiling` explicitly reads candidate matrix buffers 0–2
 without colour/power writes. Use `--buffer 2` for a subset and `--output json`
 for complete received colours. Missing/mismatched replies are reported rather

@@ -9,7 +9,6 @@ import (
 
 	"github.com/alessio-palumbo/lifxlan-go/pkg/controller"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/device"
-	"github.com/alessio-palumbo/lifxlan-go/pkg/effects/adapters"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/protocol"
 	"github.com/alessio-palumbo/lifxlan-go/pkg/themes"
 	ucli "github.com/urfave/cli/v3"
@@ -22,6 +21,14 @@ func applyTheme(ctx context.Context, cmd *ucli.Command, create factory, out, dia
 	}
 	if cmd.Duration("duration") < 0 {
 		return fmt.Errorf("theme duration must be nonnegative")
+	}
+	part := device.LightPart(cmd.String("part"))
+	if part != device.LightPartAll && part != device.LightPartMain && part != device.LightPartUplight {
+		return fmt.Errorf("--part must be all, main, or uplight")
+	}
+	brightness := themes.BrightnessPolicy(cmd.String("brightness-policy"))
+	if brightness != themes.PaletteBrightness && brightness != themes.PreserveBrightness {
+		return fmt.Errorf("--brightness-policy must be palette or preserve")
 	}
 	file, err := os.Open(cmd.Args().Get(0))
 	if err != nil {
@@ -73,14 +80,23 @@ func applyTheme(ctx context.Context, cmd *ucli.Command, create factory, out, dia
 	for i, d := range selected {
 		serials[i] = d.Serial
 	}
-	// Complete cached observations are sufficient for geometry. Never restore or
-	// change power here; this is a persistent, one-shot color application.
-	if _, err := c.CaptureStateSnapshot(ctx, serials, controller.SnapshotOptions{Timeout: cmd.Duration("timeout")}); err != nil {
+	// Use one coherent snapshot for geometry, brightness and preserved cells.
+	// Part composition and brightness preservation need fresh observations.
+	fresh := brightness == themes.PreserveBrightness
+	for _, d := range selected {
+		fresh = fresh || device.HasUplight(d)
+	}
+	snapshot, err := c.CaptureStateSnapshot(ctx, serials, controller.SnapshotOptions{Timeout: cmd.Duration("timeout"), RequireFresh: fresh})
+	if err != nil {
 		return fmt.Errorf("observe before theme: %w", err)
 	}
 	current := make(map[device.Serial]device.Device)
 	for _, d := range c.GetDevices() {
 		current[d.Serial] = d
+	}
+	states := make(map[device.Serial]device.DeviceStateSnapshot, len(snapshot.Devices))
+	for _, state := range snapshot.Devices {
+		states[state.Serial] = state
 	}
 	for i, d := range selected {
 		updated, ok := current[d.Serial]
@@ -88,25 +104,31 @@ func applyTheme(ctx context.Context, cmd *ucli.Command, create factory, out, dia
 			return fmt.Errorf("%s disappeared before theme planning", d.Serial)
 		}
 		selected[i] = updated
+		state, ok := states[d.Serial]
+		if !ok {
+			return fmt.Errorf("%s missing from observed snapshot", d.Serial)
+		}
+		if state.LightType != updated.LightType || state.LightType == device.LightTypeMatrix && state.MatrixWidth != updated.MatrixProperties.Width {
+			return fmt.Errorf("%s geometry changed after snapshot; retry planning", d.Serial)
+		}
+		selected[i].PoweredOn, selected[i].Color = state.PoweredOn, state.Color
+		selected[i].MultizoneProperties.Zones = state.Zones
+		selected[i].MatrixProperties.ChainZones = state.MatrixChains
+		current[d.Serial] = selected[i]
 	}
-	plan, err := theme.Plan(selected, cmd.Duration("duration"))
+	plan, err := theme.PlanParts(selected, cmd.Duration("duration"), themes.PartPlanOptions{Part: part, Brightness: brightness})
 	if err != nil {
 		return err
 	}
-	// Compile every target's packets before the first control send. Rendering to
-	// this collector uses existing orientation mapping and validates all frames.
+	// Every target is composed and validated before the first control send.
 	var packets []themePacket
 	view := make([]commandView, 0, len(plan))
 	for _, application := range plan {
 		d := current[application.Serial]
 		cmdView := commandView{Targets: []string{d.Serial.String()}}
-		renderer := adapters.NewRendererForDevice(d, func(msg *protocol.Message) error {
+		for _, msg := range application.Messages {
 			packets = append(packets, themePacket{Serial: d.Serial, Message: msg})
 			cmdView.Messages = append(cmdView.Messages, packetView{Type: msg.Type(), Name: fmt.Sprintf("%T", msg.Payload), Payload: msg.Payload})
-			return nil
-		})
-		if err := renderer.RenderFrame(ctx, application.Frame); err != nil {
-			return fmt.Errorf("plan %s: %w", d.Serial, err)
 		}
 		view = append(view, cmdView)
 	}
@@ -115,7 +137,7 @@ func applyTheme(ctx context.Context, cmd *ucli.Command, create factory, out, dia
 			return err
 		}
 	} else {
-		if _, err := fmt.Fprintf(out, "Theme %q; power preserved; colors remain applied after exit.\n", safeText(theme.Name)); err != nil {
+		if _, err := fmt.Fprintf(out, "Theme %q; part=%s; brightness=%s; power preserved; colors remain applied after exit.\n", safeText(theme.Name), part, brightness); err != nil {
 			return err
 		}
 		mode := "Applying"
@@ -127,13 +149,21 @@ func applyTheme(ctx context.Context, cmd *ucli.Command, create factory, out, dia
 			if _, err := fmt.Fprintf(out, "%s: %s (%s), %s, zones=%s, frame=%dx%d, packets=%d, duration=%s\n", mode, safeText(d.Label), d.Serial, kind(d), zones(d), application.Frame.Width, application.Frame.Height, len(view[i].Messages), application.Frame.Duration); err != nil {
 				return err
 			}
+			if application.Uplight != nil {
+				if _, err := fmt.Fprintf(out, "  Uplight: %s\n", eventColor(*application.Uplight)); err != nil {
+					return err
+				}
+			}
 			limit := min(3, len(application.Frame.Colors))
+			if part == device.LightPartUplight {
+				limit = 0
+			}
 			for j := 0; j < limit; j++ {
 				if _, err := fmt.Fprintf(out, "  Color %d: %s\n", j, eventColor(application.Frame.Colors[j])); err != nil {
 					return err
 				}
 			}
-			if len(application.Frame.Colors) > limit {
+			if part != device.LightPartUplight && len(application.Frame.Colors) > limit {
 				if _, err := fmt.Fprintf(out, "  ... %d more logical colors (use --output json for full packets)\n", len(application.Frame.Colors)-limit); err != nil {
 					return err
 				}

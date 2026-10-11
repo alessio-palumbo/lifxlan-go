@@ -159,3 +159,93 @@ func TestThemeExcessiveGeometryPreventsControlWrites(t *testing.T) {
 		t.Fatalf("err=%v fake=%+v", err, f)
 	}
 }
+
+func TestThemePartsCLICompositionAndDryRunMatch(t *testing.T) {
+	path := themeFile(t, themeJSON)
+	for _, part := range []string{"all", "main", "uplight"} {
+		var outputs []string
+		for _, dry := range []bool{true, false} {
+			d := themeLight()
+			d.ProductID, d.LightType = 265, device.LightTypeMatrix
+			d.MatrixProperties = device.MatrixProperties{Width: 8, Height: 8, ChainLength: 1, ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 64)}}
+			for i := range 64 {
+				d.MatrixProperties.ChainZones[0][i] = packets.LightHsbk{Hue: uint16(1000 + i), Brightness: uint16(i * 701), Kelvin: 3500}
+			}
+			f := &fakeBackend{devices: []device.Device{d}}
+			var out bytes.Buffer
+			args := []string{"themes", "apply", "--target", "Desk", "--part", part, "--discover-for", "1ns", "--output", "json"}
+			if dry {
+				args = append(args, "--dry-run")
+			}
+			args = append(args, path)
+			if err := run(context.Background(), args, &out, io.Discard, factoryFor(f)); err != nil {
+				t.Fatal(err)
+			}
+			outputs = append(outputs, out.String())
+			if !f.fresh || f.captures != 1 {
+				t.Fatal("part plan did not request fresh observations")
+			}
+			if dry && f.sends != 0 {
+				t.Fatal("dry run sent control")
+			}
+			if !dry {
+				if f.sends != 1 {
+					t.Fatal("unexpected packet count")
+				}
+				p := f.sentMessages[0].Payload.(*packets.TileSet64)
+				if part == "main" && p.Colors[63] != d.MatrixProperties.ChainZones[0][63] {
+					t.Fatal("main overwrote uplight")
+				}
+				if part == "uplight" && p.Colors[0] != d.MatrixProperties.ChainZones[0][0] {
+					t.Fatal("uplight overwrote main")
+				}
+				if part != "main" && p.Colors[63].Hue != device.ConvertExternalToDeviceValue(30, 360) {
+					t.Fatal("uplight palette was not applied")
+				}
+			}
+		}
+		if outputs[0] != outputs[1] {
+			t.Fatal("preview and live packets differ")
+		}
+	}
+}
+
+func TestThemePartCLIPreserveBrightnessAndDefaultAll(t *testing.T) {
+	d := themeLight()
+	d.ProductID, d.LightType = 265, device.LightTypeMatrix
+	d.MatrixProperties = device.MatrixProperties{Width: 8, Height: 8, ChainLength: 1, ChainZones: [][]packets.LightHsbk{make([]packets.LightHsbk, 64)}}
+	for i := range 64 {
+		d.MatrixProperties.ChainZones[0][i] = packets.LightHsbk{Brightness: uint16(i * 701), Kelvin: 3500}
+	}
+	f := &fakeBackend{devices: []device.Device{d}}
+	if err := run(context.Background(), []string{"themes", "apply", "--target", "Desk", "--discover-for", "1ns", "--brightness-policy", "preserve", themeFile(t, themeJSON)}, io.Discard, io.Discard, factoryFor(f)); err != nil {
+		t.Fatal(err)
+	}
+	p := f.sentMessages[0].Payload.(*packets.TileSet64)
+	for i, c := range p.Colors {
+		if c.Brightness != d.MatrixProperties.ChainZones[0][i].Brightness {
+			t.Fatalf("brightness changed at %d", i)
+		}
+	}
+	if p.Colors[63].Hue != device.ConvertExternalToDeviceValue(30, 360) {
+		t.Fatal("default did not include uplight")
+	}
+}
+
+func TestThemePartCLIInvalidOptionsAndMissingState(t *testing.T) {
+	path := themeFile(t, themeJSON)
+	for _, flags := range [][]string{{"--part", "side"}, {"--brightness-policy", "average"}} {
+		args := append([]string{"themes", "apply", "--target", "Desk"}, flags...)
+		args = append(args, path)
+		if err := run(context.Background(), args, io.Discard, io.Discard, func(bool, io.Writer) (backend, error) { t.Fatal("opened controller"); return nil, nil }); err == nil {
+			t.Fatal("accepted invalid options")
+		}
+	}
+	d := themeLight()
+	d.ProductID, d.LightType = 265, device.LightTypeMatrix
+	d.MatrixProperties = device.MatrixProperties{Width: 8, Height: 8, ChainLength: 1}
+	f := &fakeBackend{devices: []device.Device{d}}
+	if err := run(context.Background(), []string{"themes", "apply", "--target", "Desk", "--discover-for", "1ns", path}, io.Discard, io.Discard, factoryFor(f)); err == nil || f.sends != 0 {
+		t.Fatal("missing observed state wrote controls")
+	}
+}
